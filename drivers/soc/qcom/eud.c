@@ -126,11 +126,13 @@ static int msm_eud_clkref_en(struct eud_chip *chip, bool enable)
 	return 0;
 }
 
-static inline void msm_eud_enable_irqs(struct eud_chip *chip)
+static void msm_eud_enable_irqs(struct eud_chip *chip)
 {
 	/* Enable vbus, chgr & safe mode warning interrupts */
 	writel_relaxed(EUD_INT_VBUS | EUD_INT_CHGR | EUD_INT_SAFE_MODE,
 			chip->eud_reg_base + EUD_REG_INT1_EN_MASK);
+	/* Ensure Register Writes Complete */
+	wmb();
 }
 
 static int msm_eud_hw_is_enabled(struct platform_device *pdev)
