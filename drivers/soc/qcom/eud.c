@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -30,22 +31,23 @@
 #define EUD_ENABLE_CMD 1
 #define EUD_DISABLE_CMD 0
 
-#define EUD_REG_COM_TX_ID	0x0000
-#define EUD_REG_COM_TX_LEN	0x0004
-#define EUD_REG_COM_TX_DAT	0x0008
-#define EUD_REG_COM_RX_ID	0x000C
-#define EUD_REG_COM_RX_LEN	0x0010
-#define EUD_REG_COM_RX_DAT	0x0014
-#define EUD_REG_EUD_EN2		0x0000
-#define EUD_REG_INT1_EN_MASK	0x0024
-#define EUD_REG_INT_STATUS_1	0x0044
-#define EUD_REG_CTL_OUT_1	0x0074
-#define EUD_REG_VBUS_INT_CLR	0x0080
-#define EUD_REG_CHGR_INT_CLR	0x0084
-#define EUD_REG_CSR_EUD_EN	0x1014
-#define EUD_REG_SW_ATTACH_DET	0x1018
-#define EUD_REG_UTMI_DELAY_LSB	0x1030
-#define EUD_REG_UTMI_DELAY_MSB	0x1034
+#define EUD_REG_COM_TX_ID		0x0000
+#define EUD_REG_COM_TX_LEN		0x0004
+#define EUD_REG_COM_TX_DAT		0x0008
+#define EUD_REG_COM_RX_ID		0x000C
+#define EUD_REG_COM_RX_LEN		0x0010
+#define EUD_REG_COM_RX_DAT		0x0014
+#define EUD_REG_EUD_EN2			0x0000
+#define EUD_REG_INT1_EN_MASK		0x0024
+#define EUD_REG_INT_STATUS_1		0x0044
+#define EUD_REG_CTL_OUT_1		0x0074
+#define EUD_REG_VBUS_INT_CLR		0x0080
+#define EUD_REG_CHGR_INT_CLR		0x0084
+#define EUD_REG_CSR_EUD_EN		0x1014
+#define EUD_REG_SW_ATTACH_DET		0x1018
+#define EUD_REG_UTMI_DELAY_LSB		0x1030
+#define EUD_REG_UTMI_DELAY_MSB		0x1034
+#define EUD_CHIKNBIT_EN_DEL_CNTR	0x118C
 
 #define EUD_INT_RX		BIT(0)
 #define EUD_INT_TX		BIT(1)
@@ -809,6 +811,14 @@ static int msm_eud_probe(struct platform_device *pdev)
 
 	eud_private = pdev;
 	eud_ready = true;
+
+	/*
+	 * Set the chicken bit register to delay EUD enablement.
+	 * REVISIT: Need more understanding about this register.
+	 */
+	writel_relaxed(1, chip->eud_reg_base + EUD_CHIKNBIT_EN_DEL_CNTR);
+	/* Ensure Register Writes Complete */
+	wmb();
 
 	/* Proceed enable other EUD elements if bootloader has enabled it */
 	if (msm_eud_hw_is_enabled(pdev)) {
