@@ -561,9 +561,9 @@ static void eud_uart_rx(struct eud_chip *chip)
 static void eud_uart_tx(struct eud_chip *chip)
 {
 	struct uart_port *port = &chip->port;
-	struct circ_buf *xmit = &port->state->xmit;
-	unsigned int len;
+	struct tty_port *tport = &port->state->port;
 	u32 reg;
+	unsigned char c;
 
 	writel_relaxed(UART_ID, chip->eud_reg_base + EUD_REG_COM_TX_ID);
 	reg = readl_relaxed(chip->eud_reg_base + EUD_REG_COM_TX_ID);
@@ -573,16 +573,9 @@ static void eud_uart_tx(struct eud_chip *chip)
 	}
 	/* Write to Tx Len & Data registers */
 	spin_lock(&port->lock);
-	len = uart_circ_chars_pending(xmit);
-	if (len > 0) {
-		if (len > port->fifosize)
-			len = port->fifosize;
-		while (len--) {
-			writel_relaxed(xmit->buf[xmit->tail],
-			       port->membase + EUD_REG_COM_TX_DAT);
-			xmit->tail = (xmit->tail + 1) & (UART_XMIT_SIZE - 1);
-			port->icount.tx++;
-		}
+	while (!kfifo_get(&tport->xmit_fifo, &c)) {
+		writel_relaxed(c, port->membase + EUD_REG_COM_TX_DAT);
+		port->icount.tx++;
 	}
 	spin_unlock(&port->lock);
 }
@@ -863,7 +856,7 @@ error:
 	return ret;
 }
 
-static int msm_eud_remove(struct platform_device *pdev)
+static void msm_eud_remove(struct platform_device *pdev)
 {
 	struct eud_chip *chip = platform_get_drvdata(pdev);
 	struct uart_port *port = &chip->port;
@@ -875,8 +868,6 @@ static int msm_eud_remove(struct platform_device *pdev)
 	device_init_wakeup(chip->dev, false);
 	if (chip->need_phy_clk_vote)
 		clk_disable_unprepare(chip->eud_ahb2phy_clk);
-
-	return 0;
 }
 
 static const struct of_device_id msm_eud_dt_match[] = {
