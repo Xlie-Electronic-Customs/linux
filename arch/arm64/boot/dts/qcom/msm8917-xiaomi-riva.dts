@@ -151,6 +151,25 @@
 		iovcc-supply = <&pm8937_l5>;
 		touchscreen-size-x = <720>;
 		touchscreen-size-y = <1280>;
+
+		status = "disabled";
+	};
+
+	touchscreen@5d {
+		compatible = "goodix,gt911";
+		reg = <0x5d>;
+		interrupts-extended = <&tlmm 65 IRQ_TYPE_LEVEL_LOW>;
+		reset-gpios = <&tlmm 64 GPIO_ACTIVE_HIGH>;
+		AVDD28-supply = <&pm8937_l10>;
+		VDDIO-supply = <&pm8937_l5>;
+
+		//pinctrl-0 = <&tsp_int_rst_default>;
+		//pinctrl-names = "default";
+
+		touchscreen-size-x = <720>;
+		touchscreen-size-y = <1280>;
+
+		status = "disabled";
 	};
 };
 
