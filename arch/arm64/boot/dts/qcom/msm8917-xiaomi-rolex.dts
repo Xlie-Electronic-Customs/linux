@@ -114,6 +114,11 @@
 			no-map;
 		};
 	};
+
+	vibrator {
+		compatible = "gpio-vibrator";
+		enable-gpios = <&tlmm 97 GPIO_ACTIVE_HIGH>;
+	};
 };
 
 &adsp {
@@ -125,6 +130,14 @@
 };
 
 &apr {
+	status = "okay";
+};
+
+&bam_dmux {
+	status = "okay";
+};
+
+&bam_dmux_dma {
 	status = "okay";
 };
 
@@ -229,11 +242,19 @@
 	};
 };
 
+&gps_mem {
+	status = "okay";
+};
+
 &gpu {
 	status = "okay";
 };
 
 &lpass_codec{
+	status = "okay";
+};
+
+&mba_mem {
 	status = "okay";
 };
 
@@ -278,6 +299,20 @@
 	qcom,dsi-phy-regulator-ldo-mode;
 };
 
+&memshare {
+	status = "okay";
+};
+
+&modem {
+	pll-supply = <&pm8937_l7>;
+	status = "okay";
+};
+
+&mpss_mem {
+	reg = <0x0 0x86800000 0x0 0x5500000>;
+	status = "okay";
+};
+
 &pm8937_gpios {
 	pwm_enable_default: pwm-eanble-default-state {
 		pins = "gpio8";
@@ -319,11 +354,13 @@
 		pm8937_s1: s1 {
 			regulator-min-microvolt = <1000000>;
 			regulator-max-microvolt = <1225000>;
+			regulator-always-on;
 		};
 
 		pm8937_s3: s3 {
 			regulator-min-microvolt = <1300000>;
 			regulator-max-microvolt = <1300000>;
+			regulator-always-on;
 		};
 
 		pm8937_s4: s4 {
@@ -344,7 +381,6 @@
 		pm8937_l6: l6 {
 			regulator-min-microvolt = <1800000>;
 			regulator-max-microvolt = <1800000>;
-			regulator-always-on;
 		};
 
 		pm8937_l7: l7 {
