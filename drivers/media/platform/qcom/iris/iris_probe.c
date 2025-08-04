@@ -385,6 +385,10 @@ static const struct of_device_id iris_dt_match[] = {
 		.data = &sm8750_data,
 	},
 	{
+		.compatible = "qcom,kaanapali-iris",
+		.data = &kaanapali_data,
+	},
+	{
 		.compatible = "qcom,x1p42100-iris",
 		.data = &x1p42100_data,
 	},
