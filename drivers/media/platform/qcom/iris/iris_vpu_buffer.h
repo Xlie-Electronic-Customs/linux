@@ -46,7 +46,7 @@ struct iris_inst;
 #define VP9_NUM_FRAME_INFO_BUF 32
 #define VP9_NUM_PROBABILITY_TABLE_BUF (VP9_NUM_FRAME_INFO_BUF + 4)
 #define VP9_PROB_TABLE_SIZE (3840)
-#define VP9_FRAME_INFO_BUF_SIZE (6144)
+#define VP9_FRAME_INFO_BUF_SIZE (6400)
 #define BUFFER_ALIGNMENT_32_BYTES 32
 #define CCE_TILE_OFFSET_SIZE ALIGN(32 * 4 * 4, BUFFER_ALIGNMENT_32_BYTES)
 #define MAX_SUPERFRAME_HEADER_LEN (34)
@@ -66,6 +66,8 @@ struct iris_inst;
 #define H265_CABAC_HDR_RATIO_HD_TOT 2
 #define H265_CABAC_RES_RATIO_HD_TOT 2
 #define SIZE_H265D_VPP_CMD_PER_BUF (256)
+#define SIZE_THREE_DIMENSION_USERDATA	768
+#define SIZE_H265D_ARP			9728
 
 #define VPX_DECODER_FRAME_CONCURENCY_LVL (2)
 #define VPX_DECODER_FRAME_BIN_HDR_BUDGET 1
@@ -148,6 +150,7 @@ static inline u32 size_h264d_qp(u32 frame_width, u32 frame_height)
 
 u32 iris_vpu_buf_size(struct iris_inst *inst, enum iris_buffer_type buffer_type);
 u32 iris_vpu33_buf_size(struct iris_inst *inst, enum iris_buffer_type buffer_type);
+u32 iris_vpu4x_buf_size(struct iris_inst *inst, enum iris_buffer_type buffer_type);
 int iris_vpu_buf_count(struct iris_inst *inst, enum iris_buffer_type buffer_type);
 
 #endif
