@@ -822,8 +822,7 @@ static bool fw_block_mem(struct a6xx_gmu_bo *bo, const struct block_header *blk)
 	return true;
 }
 
-#define NEXT_BLK(blk) \
-	((const struct block_header *)((const char *)(blk) + sizeof(*(blk)) + (blk)->size))
+#define NEXT_BLK(blk) ((const struct block_header *)((const char *)blk + sizeof(*blk) + blk->size))
 
 static int a6xx_gmu_fw_load(struct a6xx_gmu *gmu)
 {
