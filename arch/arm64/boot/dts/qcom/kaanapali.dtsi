@@ -329,15 +329,53 @@
 		#size-cells = <2>;
 		ranges;
 
+		gunyah_hyp_mem: gunyah_hyp_region@80000000 {
+			no-map;
+			reg = <0x0 0x80000000 0x0 0xe00000>;
+		};
+
+		hypervisor_extended_heap_mem: hypervisor_extended_heap_region@80e00000 {
+			no-map;
+			reg = <0x0 0x80e00000 0x0 0x400000>;
+		};
+
+		/* merge of cpucp_mem and pdp_mem */
+		cpucp_mem: cpucp_pdp_region@81200000 {
+			no-map;
+			reg = <0x0 0x81200000 0x0 0x100000>;
+		};
+
 		pdp_mem: pdp_region@81300000 {
 			reg = <0x0 0x81300000 0x0 0x100000>;
 			no-map;
+		};
+
+		/*
+		 * hyp_tags_mem is dynamically removed from the RAM
+		 * partition tables before boot occurs. Size of region
+		 * varies.
+		 */
+
+		xbl_dtlog_mem: xbl_dtlog_region@81a00000 {
+			no-map;
+			reg = <0x0 0x81a00000 0x0 0x60000>;
+		};
+
+		aop_image_mem: aop_image_region@81c00000 {
+			no-map;
+			reg = <0x0 0x81c00000 0x0 0x60000>;
 		};
 
 		aop_cmd_db_mem: aop-cmd-db@81c60000 {
 			compatible = "qcom,cmd-db";
 			reg = <0x0 0x81c60000 0x0 0x20000>;
 			no-map;
+		};
+
+		/* merged aop_config, tme_crash_dump, tme_log and uefi_log regions */
+		aop_tme_uefi_merged_mem: aop_tme_uefi_merged_region@81c80000 {
+			no-map;
+			reg = <0x0 0x81c80000 0x0 0x74000>;
 		};
 
 		smem_mem: smem@81d00000 {
@@ -350,6 +388,43 @@
 		pdp_ns_shared_mem: pdp_ns_shared_region@81f00000 {
 			reg = <0x0 0x81f00000 0x0 0x100000>;
 			no-map;
+		};
+
+		cpucp_scandump_mem: cpucp_scandump_region@82000000 {
+			no-map;
+			reg = <0x0 0x82000000 0x0 0x380000>;
+		};
+
+		adsp_mhi_mem: adsp_mhi_region@82380000 {
+			no-map;
+			reg = <0x0 0x82380000 0x0 0x20000>;
+		};
+
+		soccp_sdi_mem: soccp_sdi_region@823a0000 {
+			no-map;
+			reg = <0x0 0x823a0000 0x0 0x40000>;
+		};
+
+		pmic_minii_dump_mem: pmic_minii_dump_region@823e0000 {
+			no-map;
+			reg = <0x0 0x823e0000 0x0 0x80000>;
+		};
+
+		qup_fw_mem: qup_fw_region@82460000 {
+			no-map;
+			reg = <0x0 0x82460000 0x0 0x18000>;
+		};
+
+		pvm_fw_mem: pvm_fw_region@824a0000 {
+			no-map;
+			reg = <0x0 0x824a0000 0x0 0x100000>;
+		};
+
+		/* hyp_mem_database_mem is removed by HYP in the RAM partition table */
+
+		tz_stat_mem: tz_stat_region@82700000 {
+			no-map;
+			reg = <0x0 0x82700000 0x0 0x100000>;
 		};
 
 		dsm_partition_1_mem: dsm-partition-1@84a00000 {
@@ -417,6 +492,33 @@
 			no-map;
 		};
 
+		/* First part of the "SPU secure shared memory" region */
+		spu_tz_shared_mem: spu_secure_shared_memory_region@9fc80000 {
+			no-map;
+			reg = <0x0 0x9fc80000 0x0 0x40000>;
+		};
+
+		/* Second part of the "SPU secure shared memory" region */
+		spu_modem_shared_mem: spu_secure_shared_memory_region@9fcc0000 {
+			no-map;
+			reg = <0x0 0x9fcc0000 0x0 0x40000>;
+		};
+
+		spss_region_mem: spss_region_region@9fd00000 {
+			no-map;
+			reg = <0x0 0x9fd00000 0x0 0x2e0000>;
+		};
+
+		dcp_dtb_mem: dcp_dtb_region@a0050000 {
+			no-map;
+			reg = <0x0 0xa0050000 0x0 0x80000>;
+		};
+
+		dcp_mem: dcp_region@a00d0000 {
+			no-map;
+			reg = <0x0 0xa00d0000 0x0 0x300000>;
+		};
+
 		soccp_mem: soccp@a03d0000 {
 			reg = <0x0 0xa03d0000 0x0 0x500000>;
 			no-map;
@@ -434,6 +536,41 @@
 
 		adspslpi_mem: adspslpi@a1400000 {
 			reg = <0x0 0xa1400000 0x0 0x4c00000>;
+			no-map;
+		};
+
+		/* UEFI region at 0xc4800000 is reclaimed by Linux */
+		/* Linux kernel image is loaded at 0xc7800000 */
+		xbl_ramdump_mem: xbl_ramdump_region@d7800000 {
+			no-map;
+			reg = <0x0 0xd7800000 0x0 0x1c0000>;
+		};
+
+		global_sync_mem: global_sync_region@d7a00000 {
+			no-map;
+			reg = <0x0 0xd7a00000 0x0 0x200000>;
+		};
+
+		/* merged hyp_ac, tz_reserved, xbl_sc, tz_ac, and qtee regions */
+		tz_merged_mem: tz_merged_region@d8000000 {
+			no-map;
+			reg = <0x0 0xd8000000 0x0 0x800000>;
+		};
+
+		llcc_lpi_mem: llcc_lpi_region@ff800000 {
+			no-map;
+			reg = <0x0 0xff800000 0x0 0x800000>;
+		};
+
+		kinfo_mem: debug_kinfo_region {
+			alloc-ranges = <0x0 0x00000000 0xffffffff 0xffffffff>;
+			size = <0x0 0x1000>;
+			no-map;
+		};
+
+		ramoops_mem: ramoops-region {
+			alloc-ranges = <0x1 0x00000000 0xfffffffe 0xffffffff>;
+			size = <0x0 0x200000>;
 			no-map;
 		};
 
