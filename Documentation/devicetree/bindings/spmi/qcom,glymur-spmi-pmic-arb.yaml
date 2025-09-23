@@ -19,8 +19,13 @@ description: |
 
 properties:
   compatible:
-    enum:
-      - qcom,glymur-spmi-pmic-arb
+    OneOf:
+      - items:
+          - enum:
+              - qcom,kaanapali-spmi-pmic-arb
+          - const: qcom,glymur-spmi-pmic-arb
+      - enum:
+          - qcom,glymur-spmi-pmic-arb
 
   reg:
     items:
