@@ -169,7 +169,7 @@ static void dpu_hw_sspp_setup_multirect(struct dpu_sw_pipe *pipe)
 	DPU_REG_WRITE(&ctx->hw, SSPP_MULTIRECT_OPMODE, mode_mask);
 }
 
-static void _sspp_setup_opmode(struct dpu_hw_sspp *ctx,
+void _sspp_setup_opmode(struct dpu_hw_sspp *ctx,
 		u32 mask, u8 en)
 {
 	const struct dpu_sspp_sub_blks *sblk = ctx->cap->sblk;
@@ -189,7 +189,7 @@ static void _sspp_setup_opmode(struct dpu_hw_sspp *ctx,
 	DPU_REG_WRITE(&ctx->hw, sblk->scaler_blk.base + SSPP_VIG_OP_MODE, opmode);
 }
 
-static void _sspp_setup_csc10_opmode(struct dpu_hw_sspp *ctx,
+void _sspp_setup_csc10_opmode(struct dpu_hw_sspp *ctx,
 		u32 mask, u8 en)
 {
 	const struct dpu_sspp_sub_blks *sblk = ctx->cap->sblk;
@@ -589,39 +589,63 @@ static bool dpu_hw_sspp_setup_clk_force_ctrl(struct dpu_hw_sspp *ctx, bool enabl
 static void _setup_layer_ops(struct dpu_hw_sspp *c,
 		unsigned long features, const struct dpu_mdss_version *mdss_rev)
 {
-	c->ops.setup_format = dpu_hw_sspp_setup_format;
-	c->ops.setup_rects = dpu_hw_sspp_setup_rects;
-	c->ops.setup_sourceaddress = dpu_hw_sspp_setup_sourceaddress;
-	c->ops.setup_solidfill = dpu_hw_sspp_setup_solidfill;
-	c->ops.setup_pe = dpu_hw_sspp_setup_pe_config;
+	if (mdss_rev->core_major_ver >= 13) {
+		c->ops.setup_format = dpu_hw_sspp_setup_format_v13;
+		c->ops.setup_rects = dpu_hw_sspp_setup_rects_v13;
+		c->ops.setup_sourceaddress = dpu_hw_sspp_setup_sourceaddress_v13;
+		c->ops.setup_solidfill = dpu_hw_sspp_setup_solidfill_v13;
+		c->ops.setup_pe = dpu_hw_sspp_setup_pe_config_v13;
 
-	if (test_bit(DPU_SSPP_QOS, &features)) {
-		c->ops.setup_qos_lut = dpu_hw_sspp_setup_qos_lut;
-		c->ops.setup_qos_ctrl = dpu_hw_sspp_setup_qos_ctrl;
+		if (test_bit(DPU_SSPP_QOS, &features)) {
+			c->ops.setup_qos_lut = dpu_hw_sspp_setup_qos_lut_v13;
+			c->ops.setup_qos_ctrl = dpu_hw_sspp_setup_qos_ctrl_v13;
+		}
+
+		if (test_bit(DPU_SSPP_SMART_DMA_V1, &c->cap->features) ||
+			test_bit(DPU_SSPP_SMART_DMA_V2, &c->cap->features))
+			c->ops.setup_multirect = dpu_hw_sspp_setup_multirect_v13;
+
+		if (test_bit(DPU_SSPP_CDP, &features))
+			c->ops.setup_cdp = dpu_hw_sspp_setup_cdp_v13;
+
+		c->ops.setup_clk_force_ctrl = dpu_hw_sspp_setup_clk_force_ctrl_v13;
+	} else {
+		c->ops.setup_format = dpu_hw_sspp_setup_format;
+		c->ops.setup_rects = dpu_hw_sspp_setup_rects;
+		c->ops.setup_sourceaddress = dpu_hw_sspp_setup_sourceaddress;
+		c->ops.setup_solidfill = dpu_hw_sspp_setup_solidfill;
+		c->ops.setup_pe = dpu_hw_sspp_setup_pe_config;
+
+		if (test_bit(DPU_SSPP_QOS, &features)) {
+			c->ops.setup_qos_lut = dpu_hw_sspp_setup_qos_lut;
+			c->ops.setup_qos_ctrl = dpu_hw_sspp_setup_qos_ctrl;
+		}
+
+		if (test_bit(DPU_SSPP_SMART_DMA_V1, &c->cap->features) ||
+			test_bit(DPU_SSPP_SMART_DMA_V2, &c->cap->features))
+			c->ops.setup_multirect = dpu_hw_sspp_setup_multirect;
+
+		if (test_bit(DPU_SSPP_CDP, &features))
+			c->ops.setup_cdp = dpu_hw_sspp_setup_cdp;
+
+		if (mdss_rev->core_major_ver >= 9)
+			c->ops.setup_clk_force_ctrl = dpu_hw_sspp_setup_clk_force_ctrl;
 	}
 
 	if (test_bit(DPU_SSPP_CSC, &features) ||
 		test_bit(DPU_SSPP_CSC_10BIT, &features))
 		c->ops.setup_csc = dpu_hw_sspp_setup_csc;
 
-	if (test_bit(DPU_SSPP_SMART_DMA_V1, &c->cap->features) ||
-		test_bit(DPU_SSPP_SMART_DMA_V2, &c->cap->features))
-		c->ops.setup_multirect = dpu_hw_sspp_setup_multirect;
-
 	if (test_bit(DPU_SSPP_SCALER_QSEED3_COMPATIBLE, &features))
 		c->ops.setup_scaler = _dpu_hw_sspp_setup_scaler3;
 
-	if (test_bit(DPU_SSPP_CDP, &features))
-		c->ops.setup_cdp = dpu_hw_sspp_setup_cdp;
-
-	if (mdss_rev->core_major_ver >= 9)
-		c->ops.setup_clk_force_ctrl = dpu_hw_sspp_setup_clk_force_ctrl;
 }
 
 #ifdef CONFIG_DEBUG_FS
 int _dpu_hw_sspp_init_debugfs(struct dpu_hw_sspp *hw_pipe, struct dpu_kms *kms,
 			      struct dentry *entry)
 {
+	//return 0;
 	const struct dpu_sspp_cfg *cfg = hw_pipe->cap;
 	const struct dpu_sspp_sub_blks *sblk = cfg->sblk;
 	struct dentry *debugfs_root;
