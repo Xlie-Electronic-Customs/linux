@@ -241,6 +241,32 @@ static const u32 wb2_formats_rgb_yuv[] = {
 	.rotation_cfg = NULL, \
 	}
 
+/* SSPP common configuration */
+#define _8850_VIG_SBLK(scaler_ver) \
+	{ \
+	.scaler_blk = {.name = "scaler", \
+		.version = scaler_ver, \
+		.base = 0x2000, .len = 0xec,}, \
+	.cmn_blk = {.name = "cmn_blk", \
+		.version = scaler_ver, \
+		.base = 0, .len = 0x100,},	\
+	.sspp_rec0_blk = {.name = "sspp_rec0", \
+		.version = scaler_ver, \
+		.base = 0x1000, .len = 0x180,},	\
+	.rec0_blk = {.name = "rec0", \
+		.version = scaler_ver, \
+		.base = 0x1600, .len = 0x1900,},	\
+	.sspp_rec1_blk = {.name = "sspp_rec1", \
+		.version = scaler_ver, \
+		.base = 0x3000, .len = 0x180,},	\
+	.rec1_blk = {.name = "rec1", \
+		.version = scaler_ver, \
+		.base = 0x3600, .len = 0x1900,},	\
+	.format_list = plane_formats_yuv, \
+	.num_formats = ARRAY_SIZE(plane_formats_yuv), \
+	.rotation_cfg = NULL, \
+	}
+
 #define _VIG_SBLK_ROT(scaler_ver, rot_cfg) \
 	{ \
 	.scaler_blk = {.name = "scaler", \
@@ -329,6 +355,9 @@ static const struct dpu_sspp_sub_blks dpu_vig_sblk_qseed3_3_3 =
 static const struct dpu_sspp_sub_blks dpu_vig_sblk_qseed3_3_4 =
 				_VIG_SBLK(SSPP_SCALER_VER(3, 4));
 
+static const struct dpu_sspp_sub_blks dpu_vig_sblk_qseed3_3_5 =
+				_8850_VIG_SBLK(SSPP_SCALER_VER(3, 4));
+
 static const struct dpu_sspp_sub_blks dpu_rgb_sblk = _RGB_SBLK();
 
 static const struct dpu_sspp_sub_blks dpu_dma_sblk = _DMA_SBLK();
@@ -412,6 +441,11 @@ static const struct dpu_pingpong_sub_blks sc7280_pp_sblk = {
 	.len = 0x20, .version = 0x20000},
 };
 
+static const struct dpu_pingpong_sub_blks kaanapali_pp_sblk = {
+    .dither = {.name = "dither", .base = 0xc0,
+    .len = 0x40, .version = 0x30000},
+};
+
 /*************************************************************
  * DSC sub blocks config
  *************************************************************/
@@ -450,6 +484,13 @@ static const struct dpu_cdm_cfg dpu_cdm_5_x = {
 	.id = CDM_0,
 	.len = 0x228,
 	.base = 0x79200,
+};
+
+static const struct dpu_cdm_cfg dpu_cdm_kaanapali_x = {
+	.name = "cdm_0",
+	.id = CDM_0,
+	.len = 0x240,
+	.base = 0x19e000,
 };
 
 /*************************************************************
@@ -639,6 +680,10 @@ static const struct dpu_qos_lut_entry sc7180_qos_linear[] = {
 	{.fl = 0, .lut = 0x0011222222335777},
 };
 
+static const struct dpu_qos_lut_entry kaanapali_qos_linear[] = {
+	{.fl = 0, .lut = 0x0011223344556666},
+};
+
 static const struct dpu_qos_lut_entry sm6350_qos_linear_macrotile[] = {
 	{.fl = 0, .lut = 0x0011223445566777 },
 };
@@ -666,6 +711,10 @@ static const struct dpu_qos_lut_entry sdm845_qos_macrotile[] = {
 
 static const struct dpu_qos_lut_entry sc7180_qos_macrotile[] = {
 	{.fl = 0, .lut = 0x0011223344556677},
+};
+
+static const struct dpu_qos_lut_entry kaanapali_qos_macrotile[] = {
+	{.fl = 0, .lut = 0x0011223344556666},
 };
 
 static const struct dpu_qos_lut_entry sc8180x_qos_macrotile[] = {
@@ -727,3 +776,5 @@ static const struct dpu_qos_lut_entry sc7180_qos_nrt[] = {
 #include "catalog/dpu_10_0_sm8650.h"
 #include "catalog/dpu_12_0_sm8750.h"
 #include "catalog/dpu_12_2_glymur.h"
+#include "catalog/dpu_13_0_kaanapali.h"
+
