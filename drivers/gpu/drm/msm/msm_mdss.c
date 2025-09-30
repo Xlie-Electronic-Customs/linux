@@ -578,6 +578,7 @@ static const struct of_device_id mdss_dt_match[] = {
 	{ .compatible = "qcom,sm8550-mdss", .data = &data_57k },
 	{ .compatible = "qcom,sm8650-mdss", .data = &data_57k },
 	{ .compatible = "qcom,sm8750-mdss", .data = &data_57k },
+	{ .compatible = "qcom,kaanapali-mdss", .data = &data_57k },
 	/* TODO: x1e8: Add reg_bus_bw with real value */
 	{ .compatible = "qcom,x1e80100-mdss", .data = &data_153k6 },
 	{}

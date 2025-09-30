@@ -331,5 +331,38 @@ struct dpu_hw_sspp *dpu_hw_sspp_init(struct drm_device *dev,
 int _dpu_hw_sspp_init_debugfs(struct dpu_hw_sspp *hw_pipe, struct dpu_kms *kms,
 			      struct dentry *entry);
 
+void dpu_hw_sspp_setup_sourceaddress_v13(struct dpu_sw_pipe *pipe,
+		struct dpu_hw_fmt_layout *layout);
+
+void dpu_hw_sspp_setup_pe_config_v13(struct dpu_hw_sspp *ctx,
+		struct dpu_hw_pixel_ext *pe_ext);
+
+void dpu_hw_sspp_setup_multirect_v13(struct dpu_sw_pipe *pipe);
+
+void dpu_hw_sspp_setup_format_v13(struct dpu_sw_pipe *pipe,
+		const struct msm_format *fmt, u32 flags);
+
+void _sspp_setup_opmode(struct dpu_hw_sspp *ctx,
+		u32 mask, u8 en);
+
+void _sspp_setup_csc10_opmode(struct dpu_hw_sspp *ctx,
+		u32 mask, u8 en);
+
+void dpu_hw_sspp_setup_cdp_v13(struct dpu_sw_pipe *pipe,
+				  const struct msm_format *fmt,
+				  bool enable);
+bool dpu_hw_sspp_setup_clk_force_ctrl_v13(struct dpu_hw_sspp *ctx,
+		bool enable);
+
+void dpu_hw_sspp_setup_rects_v13(struct dpu_sw_pipe *pipe,
+		struct dpu_sw_pipe_cfg *cfg);
+
+void dpu_hw_sspp_setup_solidfill_v13(struct dpu_sw_pipe *pipe, u32 color);
+
+void dpu_hw_sspp_setup_qos_lut_v13(struct dpu_hw_sspp *ctx,
+				      struct dpu_hw_qos_cfg *cfg);
+
+void dpu_hw_sspp_setup_qos_ctrl_v13(struct dpu_hw_sspp *ctx,
+				       bool danger_safe_en);
 #endif /*_DPU_HW_SSPP_H */
 
