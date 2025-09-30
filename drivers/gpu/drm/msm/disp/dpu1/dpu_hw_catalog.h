@@ -294,6 +294,11 @@ struct dpu_sspp_sub_blks {
 	u32 qseed_ver;
 	struct dpu_scaler_blk scaler_blk;
 	struct dpu_pp_blk csc_blk;
+	struct dpu_scaler_blk cmn_blk;
+	struct dpu_scaler_blk sspp_rec0_blk;
+	struct dpu_scaler_blk rec0_blk;
+	struct dpu_scaler_blk sspp_rec1_blk;
+	struct dpu_scaler_blk rec1_blk;
 
 	const u32 *format_list;
 	u32 num_formats;
@@ -779,6 +784,7 @@ extern const struct dpu_mdss_cfg dpu_sa8775p_cfg;
 extern const struct dpu_mdss_cfg dpu_sm8550_cfg;
 extern const struct dpu_mdss_cfg dpu_sm8650_cfg;
 extern const struct dpu_mdss_cfg dpu_sm8750_cfg;
+extern const struct dpu_mdss_cfg dpu_kaanapali_cfg;
 extern const struct dpu_mdss_cfg dpu_x1e80100_cfg;
 
 #endif /* _DPU_HW_CATALOG_H */
