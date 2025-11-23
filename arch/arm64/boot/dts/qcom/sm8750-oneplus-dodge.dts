@@ -1131,7 +1131,7 @@
 	firmware-name = "qcom/sm8750/OnePlus/modem.mbn",
 			"qcom/sm8750/OnePlus/modem_dtb.mbn";
 
-	status = "fail";
+	status = "okay";
 };
 
 &i2c_hub_4 {
