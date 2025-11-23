@@ -978,6 +978,10 @@
 	pinctrl-1 = <&sdc2_sleep &sdc2_card_det_n>;
 	pinctrl-names = "default", "sleep";
 
+&ipa {
+	qcom,gsi-loader = "self";
+	memory-region = <&ipa_fw_mem>;
+	firmware-name = "qcom/sm8750/ipa_fws.mbn";
 	status = "okay";
 };
 

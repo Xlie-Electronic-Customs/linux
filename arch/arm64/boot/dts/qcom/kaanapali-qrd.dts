@@ -665,6 +665,13 @@
 	};
 };
 
+&ipa {
+	qcom,gsi-loader = "self";
+	memory-region = <&ipa_fw_mem>;
+	firmware-name = "qcom/kaanapali/ipa_fws.mbn";
+	status = "okay";
+};
+
 &gpu {
 	status = "okay";
 };

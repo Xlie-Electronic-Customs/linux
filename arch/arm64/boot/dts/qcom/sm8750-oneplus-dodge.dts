@@ -1134,6 +1134,13 @@
 	status = "okay";
 };
 
+&ipa {
+	qcom,gsi-loader = "self";
+	memory-region = <&ipa_fw_mem>;
+	firmware-name = "qcom/sm8750/ipa_fws.mbn";
+	status = "okay";
+};
+
 &i2c_hub_4 {
 	status = "okay";
 	clock-frequency = <400000>;
