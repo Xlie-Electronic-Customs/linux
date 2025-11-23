@@ -1536,8 +1536,7 @@
 	firmware-name = "qcom/kaanapali/modem.mbn",
 			"qcom/kaanapali/modem_dtb.mbn";
 
-	/* Modem crashes after some time for OEMPD load failure */
-	status = "fail";
+	status = "okay";
 };
 
 &remoteproc_soccp {
