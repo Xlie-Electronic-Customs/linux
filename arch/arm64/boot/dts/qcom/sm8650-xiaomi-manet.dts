@@ -575,6 +575,13 @@
 	vdd3-supply = <&vreg_l5b_3p1>;
 };
 
+&ipa {
+	qcom,gsi-loader = "self";
+	memory-region = <&ipa_fw_mem>;
+	firmware-name = "qcom/sm8650/ipa_fws.mbn";
+	status = "okay";
+};
+
 &gpu {
 	status = "okay";
 
