@@ -961,6 +961,13 @@
 	status = "okay";
 };
 
+&ipa {
+	qcom,gsi-loader = "self";
+	memory-region = <&ipa_fw_mem>;
+	firmware-name = "qcom/sm8750/ipa_fws.mbn";
+	status = "okay";
+};
+
 &swr0 {
 	status = "okay";
 
