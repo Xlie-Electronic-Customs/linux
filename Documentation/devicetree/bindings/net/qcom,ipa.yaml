@@ -53,6 +53,8 @@ properties:
           - qcom,sm6350-ipa
           - qcom,sm8350-ipa
           - qcom,sm8550-ipa
+          - qcom,sm8750-ipa
+          - qcom,kaanapali-ipa
       - items:
           - enum:
               - qcom,sm8650-ipa
