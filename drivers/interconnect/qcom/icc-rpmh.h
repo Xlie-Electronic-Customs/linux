@@ -96,6 +96,8 @@ struct qcom_icc_node {
 	const char *name;
 	struct icc_node *node;
 	u16 num_links;
+	u16 links[MAX_LINKS];
+	u16 id;
 	u16 channels;
 	u16 buswidth;
 	u64 sum_avg[QCOM_ICC_NUM_BUCKETS];
