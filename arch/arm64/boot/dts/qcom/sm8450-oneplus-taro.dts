@@ -827,27 +827,8 @@
 	status = "okay";
 };
 
-&config_noc {
+&dispcc {
 	status = "disabled";
 };
 
-&system_noc {
-	status = "disabled";
-};
-
-&pcie_noc {
-	status = "disabled";
-};
-
-&aggre1_noc {
-	status = "disabled";
-};
-
-&aggre2_noc {
-	status = "disabled";
-};
-
-&mmss_noc {
-	status = "disabled";
-};
 
