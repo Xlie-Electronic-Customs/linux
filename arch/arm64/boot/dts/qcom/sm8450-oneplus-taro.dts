@@ -37,7 +37,7 @@
 		#size-cells = <2>;
 		ranges;
 
-		bootargs = "clk_ignore_unused pd_ignore_unused console=tty0";
+		bootargs = "earlycon clk_ignore_unused pd_ignore_unused";
 		stdout-path = "serial0:115200n8";
 
 		framebuffer: framebuffer@b8000000 {
@@ -529,6 +529,48 @@
 	status = "okay";
 };
 
+
+&mdss {
+	status = "okay";
+};
+
+&mdss_dsi0 {
+	vdda-supply = <&pm8350_l6>;
+	status = "okay";
+
+	panel@0 {
+		compatible = "panel,samsung-amb670yf07-1440-3216-dsc";
+		reg = <0>;
+
+		reset-gpios = <&tlmm 0 GPIO_ACTIVE_LOW>;
+		te-gpios = <&tlmm 86 GPIO_ACTIVE_HIGH>;
+
+		pinctrl-0 = <&sde_dsi_active &sde_te_active_sleep>;
+		pinctrl-1 = <&sde_dsi_suspend &sde_te_active_sleep>;
+		pinctrl-names = "default", "sleep";
+
+		vddd-supply = <&pm8350c_l10>;
+		vci-supply = <&pm8350c_l13>;
+		vddio-supply = <&pm8350c_l12>;
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&mdss_dsi0_out>;
+			};
+		};
+	};
+};
+
+&mdss_dsi0_out {
+	data-lanes = <0 1 2 3>;
+	remote-endpoint = <&panel_in>;
+};
+
+&mdss_dsi0_phy {
+	vdds-supply = <&pm8350_l5>;
+	status = "okay";
+};
+
 &pcie0 {
 	status = "okay";
 };
@@ -606,14 +648,14 @@
 	};
 
 	sde_dsi_active: sde-dsi-active-state {
-		pins = "gpio0";
+		pins = "gpio3";
 		function = "gpio";
 		drive-strength = <8>;
 		bias-disable;
 	};
 
 	sde_dsi_suspend: sde-dsi-sleep-state {
-		pins = "gpio0";
+		pins = "gpio3";
 		function = "gpio";
 		drive-strength = <2>;
 		bias-pull-down;
@@ -747,13 +789,6 @@
 	bias-pull-up;
 };
 
-&mdss_dp0 {
-	status = "okay";
-};
-
-&mdss_dp0_out {
-	data-lanes = <0 1>;
-};
 
 &gpu {
 	status = "okay";
@@ -825,10 +860,6 @@
 	vdda-phy-supply = <&pm8350_l6>;
 	vdda-pll-supply = <&pm8350_l1>;
 	status = "okay";
-};
-
-&dispcc {
-	status = "disabled";
 };
 
 
