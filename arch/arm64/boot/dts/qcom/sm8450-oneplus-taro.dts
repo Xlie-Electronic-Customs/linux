@@ -15,6 +15,8 @@
 #include "pmr735a.dtsi"
 
 /delete-node/ &cdsp_secure_heap;
+/delete-node/ &video_mem;
+/delete-node/ &adsp_mem;
 /delete-node/ &slpi_mem;
 
 / {
@@ -128,10 +130,22 @@
 			no-map;
 		};
 
-		slpi_mem: slpi_region@87f00000 {
+		video_mem: memory@85700000 {
+			reg = <0x0 0x9fd00000 0x0 0x700000>;
+			no-map;
+		};
+
+		adsp_mem: adsp_region@85e00000 {
+			no-map;
+			reg = <0x0 0x85700000 0x0 0x2800000>;
+		};
+
+		slpi_mem: memory@87f00000 {
 			reg = <0x0 0x87f00000 0x0 0x1a00000>;
 			no-map;
 		};
+
+
 
 		/*
 		 * The bootloader will only keep display hardware enabled
@@ -149,17 +163,67 @@
 	gpio-keys {
 		compatible = "gpio-keys";
 
-		pinctrl-0 = <&vol_up_n>;
+		pinctrl-0 = <&vol_down_n>;
 		pinctrl-names = "default";
 
-		key-volume-up {
-			label = "Volume Up";
-			linux,code = <KEY_VOLUMEUP>;
+		key-volume-down {
+			label = "Volume Down";
+			linux,code = <KEY_VOLUMEDOWN>;
 			gpios = <&pm8350_gpios 6 GPIO_ACTIVE_LOW>;
 			debounce-interval = <15>;
 			linux,can-disable;
 			wakeup-source;
 		};
+	};
+
+	pmic-glink {
+		compatible = "qcom,sm8450-pmic-glink", "qcom,pmic-glink";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		qcom,protection-domain = "tms/servreg", "msm/adsp/charger_pd";
+		orientation-gpios = <&tlmm 91 GPIO_ACTIVE_HIGH>;
+
+		connector@0 {
+			compatible = "usb-c-connector";
+			reg = <0>;
+			power-role = "dual";
+			data-role = "dual";
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+
+					pmic_glink_hs_in: endpoint {
+						remote-endpoint = <&usb_1_dwc3_hs>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+
+					pmic_glink_ss_in: endpoint {
+						remote-endpoint = <&usb_1_qmpphy_out>;
+					};
+				};
+
+				port@2 {
+					reg = <2>;
+
+					pmic_glink_sbu: endpoint {
+						// remote-endpoint = <&fsa4480_sbu_mux>;
+					};
+				};
+
+			};
+		};
+	};
+
+	bat: battery {
+		compatible = "simple-battery";
+		voltage-min-design-microvolt = <6300000>;
 	};
 
 };
@@ -326,7 +390,7 @@
 
 		pm8350c_l3: ldo3 {
 			regulator-name = "pm8350c_l3";
-			regulator-min-microvolt = <3296000>;
+			regulator-min-microvolt = <2800000>;
 			regulator-max-microvolt = <3304000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
@@ -437,6 +501,13 @@
 			regulator-name = "pm8450_l3";
 			regulator-min-microvolt = <912000>;
 			regulator-max-microvolt = <912000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		pm8450_l4: ldo4 {
+			regulator-name = "pm8450_l4";
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
 	};
@@ -571,6 +642,14 @@
 	status = "okay";
 };
 
+&mdss_dp0 {
+	status = "okay";
+};
+
+&mdss_dp0_out {
+	data-lanes = <0 1>;
+};
+
 &pcie0 {
 	status = "okay";
 };
@@ -618,7 +697,23 @@
 };
 
 &pon_resin {
-	linux,code = <KEY_VOLUMEDOWN>;
+	linux,code = <KEY_VOLUMEUP>;
+	status = "okay";
+};
+
+&remoteproc_adsp {
+	status = "okay";
+};
+
+&remoteproc_cdsp {
+	status = "okay";
+};
+
+&remoteproc_mpss {
+	status = "okay";
+};
+
+&remoteproc_slpi {
 	status = "okay";
 };
 
@@ -660,6 +755,46 @@
 		drive-strength = <2>;
 		bias-pull-down;
 	};
+
+	ts_reset_default: ts-reset-default-state {
+		pins = "gpio20";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+		output-high;
+	};
+
+	ts_int_default: ts-int-default-state {
+		pins = "gpio21";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	cp_en_active: cp_en_active {
+		pins = "gpio70";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+		output-high;
+	};
+
+	cp_en_sleep: cp_en_sleep {
+		pins = "gpio70";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+		output-high;
+	};
+
+	cp_int_default: cp_int_default {
+		pins = "gpio44";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+
 
 	sde_te_active_sleep: sde-te-active-sleep-state {
 		pins = "gpio86";
@@ -758,7 +893,7 @@
 };
 
 &pm8350_gpios {
-	vol_up_n: vol-up-n-state {
+	vol_down_n: vol-down-n-state {
 		pins = "gpio6";
 		function = "normal";
 		power-source = <1>;
@@ -798,9 +933,32 @@
 	};
 };
 
-&tlmm {
-	gpio-reserved-ranges = <28 4>;
-};
+// &i2c5 {
+// 	clock-frequency = <100000>;
+// 	status = "okay";
+//
+// 	typec-mux@42 {
+// 		compatible = "fcs,fsa4480";
+// 		reg = <0x42>;
+//
+// 		interrupts-extended = <&tlmm 2 IRQ_TYPE_LEVEL_LOW>;
+//
+// 		vcc-supply = <&vreg_bob>;
+// 		mode-switch;
+// 		orientation-switch;
+//
+// 		port {
+// 			fsa4480_sbu_mux: endpoint {
+// 				remote-endpoint = <&pmic_glink_sbu>;
+// 			};
+// 		};
+// 	};
+//
+// 	/* nq @ 64 */
+// 	/* pm8008j @ c */
+// 	/* pm8008j @ d */
+// };
+
 
 &uart7 {
 	status = "okay";
@@ -845,8 +1003,13 @@
 };
 
 &usb_1 {
-	dr_mode = "peripheral";
+	dr_mode = "otg";
+	maximum-speed = "super-speed";
 	status = "okay";
+};
+
+&usb_1_dwc3_hs {
+	remote-endpoint = <&pmic_glink_hs_in>;
 };
 
 &usb_1_hsphy {
@@ -860,6 +1023,10 @@
 	vdda-phy-supply = <&pm8350_l6>;
 	vdda-pll-supply = <&pm8350_l1>;
 	status = "okay";
+};
+
+&usb_1_qmpphy_out {
+	remote-endpoint = <&pmic_glink_ss_in>;
 };
 
 
