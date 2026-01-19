@@ -929,7 +929,7 @@
 	status = "okay";
 
 	zap-shader {
-		firmware-name = "qcom/sm8450/a730_zap.mbn";
+		firmware-name = "qcom/sm8450/a730_zap.mdt";
 	};
 };
 
