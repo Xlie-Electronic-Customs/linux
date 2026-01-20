@@ -12,16 +12,19 @@ menuconfig INPUT_TOUCHSCREEN
 
 if INPUT_TOUCHSCREEN
 
-config TOUCHSCREEN_SYNAPTICS_TCM_ONCELL
-	tristate "Synaptics TCM Oncell Touchscreen driver"
-	depends on I2C
+menuconfig INPUT_TOUCHSCREEN_OPLUS
+	bool "OPLUS touchscreens"
 	help
-	  Say Y if you have the Synaptics S3908 TCM Oncell
+	  Say Y here, and a list of supported touchscreens will be displayed.
+	  This option doesn't affect the kernel.
 
-	  If unsure, say N
+	  If unsure, say Y.
 
-	  To compile this driver as module, choose M here: the
-	  module will be called synaptics_tcm_oncell.
+if INPUT_TOUCHSCREEN_OPLUS
+
+source "drivers/input/touchscreen/oplus/oplus_touchscreen_v2/Kconfig"
+
+endif
 
 config TOUCHSCREEN_88PM860X
 	tristate "Marvell 88PM860x touchscreen"
