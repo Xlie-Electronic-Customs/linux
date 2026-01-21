@@ -4053,8 +4053,7 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 		if (ret < 0)
 			TP_BOOT_INFO(ts->tp_index, "init get channels failed\n");
 		else {
-			hrtimers_init();
-			ts->temp_timer.function = ts_get_temperature_timeout;
+			hrtimer_setup(&ts->temp_timer, ts_get_temperature_timeout, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 			INIT_WORK(&ts->get_temperature_work, tp_get_temperature_work);
 			hrtimer_start(&ts->temp_timer, ktime_set(15, 0), HRTIMER_MODE_REL);
 		}

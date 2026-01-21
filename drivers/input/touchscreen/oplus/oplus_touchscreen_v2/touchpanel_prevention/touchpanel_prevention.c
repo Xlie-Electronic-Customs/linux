@@ -5222,8 +5222,7 @@ static int kernel_grip_init_V2(struct kernel_grip_info *grip_info, struct device
 		return -1;
 	}
 	for (i_index = 0; i_index < TOUCH_MAX_NUM; i_index++) {
-		hrtimers_init();
-		grip_info->grip_up_timer[i_index].function = p_touch_up_timer_func[i_index];
+		hrtimer_setup(&grip_info->grip_up_timer[i_index], p_touch_up_timer_func[i_index], CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 		INIT_WORK(&grip_info->grip_up_work[i_index], p_touch_report_work[i_index]);
 	}
 	grip_info->grip_up_handle_wq = create_singlethread_workqueue("touch_up_wq");
@@ -5958,8 +5957,7 @@ struct kernel_grip_info *kernel_grip_init(struct device *dev)
 	}
 
 	for (i = 0; i < TOUCH_MAX_NUM; i++) {
-		hrtimers_init();
-		grip_info->grip_up_timer[i].function = p_touch_up_timer_func[i];
+		hrtimer_setup(&grip_info->grip_up_timer[i], p_touch_up_timer_func[i], CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 		INIT_WORK(&grip_info->grip_up_work[i], p_touch_report_work[i]);
 	}
 
