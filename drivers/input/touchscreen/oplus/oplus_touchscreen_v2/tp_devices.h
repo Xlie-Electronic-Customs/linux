@@ -7,6 +7,7 @@
 #define OPLUS_TP_DEVICES_H
 /*device list define*/
 typedef enum tp_dev {
+	TP_OFILM,
 	TP_BIEL,
 	TP_TRULY,
 	TP_BOE,

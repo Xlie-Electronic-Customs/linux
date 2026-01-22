@@ -7,7 +7,7 @@
 #ifndef TOUCH_INTERFACES_H
 #define TOUCH_INTERFACES_H
 
-#define MAX_I2C_RETRY_TIME 2
+#define MAX_I2C_RETRY_TIME 10
 
 /*---SPI READ/WRITE---*/
 #define SPI_WRITE_MASK(a)   (a | 0x80)

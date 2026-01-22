@@ -181,6 +181,7 @@ static inline int syna_tcm_write(struct syna_tcm_data *tcm_info,
 {
 
 	if (*tcm_info->loading_fw) {
+		TPD_INFO("write firmware to device\n");
 	    syna_print_transfer_data(data, length, SYNA_TRANSFER_WRITE);
 	}
 	return touch_i2c_continue_write(tcm_info->client, length, data);

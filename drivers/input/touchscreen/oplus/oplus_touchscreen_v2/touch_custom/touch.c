@@ -13,6 +13,7 @@
 #include "oplus_project.h"
 #endif
 #include "touch.h"
+#include "../touch_comon_api/touch_comon_api.h"
 
 #define MAX_CMDLINE_PARAM_LEN 512
 char tp_dsi_display_primary[MAX_CMDLINE_PARAM_LEN] = "qcom,mdss_dsi_panel_samsung_amb670yf07_1440_3216_dsc_cmd:synaptics-s3908";
@@ -30,12 +31,13 @@ extern unsigned int get_project(void);
 #endif
 
 #define MAX_LIMIT_DATA_LENGTH         100
-int g_tp_prj_id = 0;
+int g_tp_prj_id = 21001;
 int g_tp_dev_vendor = TP_UNKNOWN;
 int j = 0;
 char *chip_name = NULL;
 /*if can not compile success, please update vendor/oplus_touchsreen*/
 struct tp_dev_name tp_dev_names[] = {
+	{TP_OFILM, "OLIM"},
 	{TP_BIEL, "BIEL"},
 	{TP_TRULY, "TRULY"},
 	{TP_BOE, "BOE"},
@@ -96,12 +98,12 @@ int tp_judge_ic_match_commandline(struct panel_info *panel_data)
 	int i = 0;
 	prj_id = get_project();
 
-	pr_err("[TP] prj_id = %d\n", prj_id);
-	pr_err("[TP] tp_dsi_display_primary = %s \n", tp_dsi_display_primary);
+	TPD_INFO("[TP] prj_id = %d\n", prj_id);
+	TPD_INFO("[TP] tp_dsi_display_primary = %s \n", tp_dsi_display_primary);
 	for(i = 0; i < panel_data->project_num; i++) {
 		if(prj_id == panel_data->platform_support_project[i]) {
 			g_tp_prj_id = panel_data->platform_support_project_dir[i];
-			pr_err("[TP] Driver match support project [%d]\n", panel_data->platform_support_project[i]);
+			TPD_INFO("[TP] Driver match support project [%d]\n", panel_data->platform_support_project[i]);
 
 			for(j = 0; j < panel_data->panel_num; j++) {
 				if(strstr(tp_dsi_display_primary, panel_data->platform_support_commandline[j]) \
@@ -110,16 +112,16 @@ int tp_judge_ic_match_commandline(struct panel_info *panel_data)
 					panel_data->tp_type = panel_data->panel_type[j];
 					if(panel_data->chip_num > 1) {
 						chip_name = panel_data->chip_name[j];
-						pr_err("[TP] WGL--1 chip_name = %s, panel_data->chip_name = %s", chip_name, panel_data->chip_name[j]);
+						TPD_INFO("[TP] WGL--1 chip_name = %s, panel_data->chip_name = %s", chip_name, panel_data->chip_name[j]);
 					}
-					pr_err("[TP] match panel type OK , panel type is [%d]\n", panel_data->tp_type);
+					TPD_INFO("[TP] match panel type OK , panel type is [%d]\n", panel_data->tp_type);
 					return j;
 				}
-				pr_err("[TP] Panel not found\n");
+				TPD_INFO("[TP] Panel not found\n");
 			}
 		}
 	}
-	pr_err("[TP] Driver does not match the project\n");
+	TPD_INFO("[TP] Driver does not match the project\n");
 	return -1;
 }
 EXPORT_SYMBOL(tp_judge_ic_match_commandline);
