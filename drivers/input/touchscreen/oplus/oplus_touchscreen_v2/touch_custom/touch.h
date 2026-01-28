@@ -19,9 +19,7 @@
 
 
 extern bool tp_judge_ic_match(char *tp_ic_name);
-#ifndef CONFIG_REMOVE_OPLUS_FUNCTION
-extern int tp_util_get_vendor(struct hw_resource *hw_res, struct panel_info *panel_data);
-#endif
+
 extern int preconfig_power_control(struct touchpanel_data *ts);
 
 extern int reconfig_power_control(struct touchpanel_data *ts);

@@ -17,20 +17,10 @@
 #include <linux/version.h>
 #include <linux/regulator/consumer.h>
 
-#include "touchpanel_proc.h"
 #include "touchpanel_common.h"
 #include "touchpanel_prevention/touchpanel_prevention.h"
 #include "touchpanel_autotest/touchpanel_autotest.h"
-#include "touch_comon_api/touch_comon_api.h"
-#include "touchpanel_tui_support/touchpanel_tui_support.h"
-
-#ifndef CONFIG_REMOVE_OPLUS_FUNCTION
-#ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
-#include<mt-plat/mtk_boot_common.h>
-#else
-#include "boot_mode.h"
-#endif
-#endif
+#include "touch_comon_api.h"
 
 #define NORMAL_MODE  0
 #define GESTURE_MODE 1
@@ -44,10 +34,6 @@
 #define DISABLE_HW_RES_VDDI  3
 #define ENABLE_HW_RESET      4
 #define DISABLE_HW_RESET     5
-
-/*******Part1:LOG TAG Declear************************/
-
-/*******Part2:declear Area********************************/
 
 extern bool is_ftm_boot_mode(struct touchpanel_data *ts);
 extern int cur_tp_index;
@@ -454,20 +440,9 @@ static ssize_t proc_debug_level_read(struct file *file, char __user *buffer,
 static ssize_t proc_debug_level_write(struct file *file,
 				      const char __user *buffer, size_t count, loff_t *ppos)
 {
-#ifdef CONFIG_OPLUS_TP_APK
-	struct touchpanel_data *ts = PDE_DATA(file_inode(file));
-#endif /* end of CONFIG_OPLUS_TP_APK*/
 
 	int tmp = 0;
 	char buf[4] = {0};
-
-#ifdef CONFIG_OPLUS_TP_APK
-
-	if (!ts) {
-		return count;
-	}
-
-#endif /* end of CONFIG_OPLUS_TP_APK*/
 
 	tp_copy_from_user(buf, sizeof(buf), buffer, count, 2);
 
@@ -478,18 +453,6 @@ static ssize_t proc_debug_level_write(struct file *file,
 
 	tp_debug = tmp;
 	touch_misc_state_change(PDE_DATA(file_inode(file)), IOC_STATE_DEBUG_LEVEL, tp_debug);
-#ifdef CONFIG_OPLUS_TP_APK
-
-	if (ts && ts->apk_op && ts->apk_op->apk_debug_set) {
-		if (tp_debug == 0) {
-			ts->apk_op->apk_debug_set(ts->chip_data, false);
-
-		} else {
-			ts->apk_op->apk_debug_set(ts->chip_data, true);
-		}
-	}
-
-#endif /* end of CONFIG_OPLUS_TP_APK*/
 
 	return count;
 }
@@ -602,7 +565,6 @@ static ssize_t proc_gesture_control_indep_write(struct file *file, const char __
 	if (!ts) {
 		return count;
 	}
-	touchpanel_trusted_touch_completion(ts);
 
 	if (copy_from_user(buf, buffer, count)) {
 		TPD_INFO("%s: read proc input error.\n", __func__);
@@ -672,7 +634,6 @@ static ssize_t proc_coordinate_read(struct file *file, char __user *buffer,
 	TP_DEBUG(ts->tp_index, "%s:gesture_type=%u,gesture_panel_id=%u\n", __func__,
 		ts->gesture.gesture_type, ts->gesture.gesture_panel_id);
 
-	tp_healthinfo_report(&ts->monitor_data, HEALTH_GESTURE_READ, &ts->gesture.gesture_type);
 
 	ret = snprintf(page, PAGESIZE - 1,
 				"%u,%d:%d,%d:%d,%d:%d,%d:%d,%d:%d,%d:%d,%u,%u\n", ts->gesture.gesture_type,
@@ -710,7 +671,6 @@ static ssize_t proc_game_switch_write(struct file *file,
 		return count;
 	}
 
-	touchpanel_trusted_touch_completion(ts);
 	if (!ts->ts_ops->mode_switch) {
 		TPD_INFO("%s:not support ts_ops->mode_switch callback\n", __func__);
 		return count;
@@ -736,9 +696,6 @@ static ssize_t proc_game_switch_write(struct file *file,
 
 	ts->noise_level = value;
 	touch_misc_state_change(ts, IOC_STATE_GAME, value);
-	if (ts->health_monitor_support) {
-		ts->monitor_data.in_game_mode = value;
-	}
 
 	TP_INFO(ts->tp_index, "%s: game_switch value=0x%x\n", __func__, value);
 
@@ -1005,21 +962,6 @@ static ssize_t proc_fw_update_write(struct file *file,
 	if (!ts) {
 		return count;
 	}
-	touchpanel_trusted_touch_completion(ts);
-
-#ifndef CONFIG_REMOVE_OPLUS_FUNCTION
-#ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
-
-	if (ts->boot_mode == KERNEL_POWER_OFF_CHARGING_BOOT)
-#else
-	if (ts->boot_mode == MSM_BOOT_MODE__CHARGE)
-#endif
-#endif
-	{
-		TP_INFO(ts->tp_index,
-			"boot mode is MSM_BOOT_MODE__CHARGE,not need update tp firmware\n");
-		return count;
-	}
 
 	tp_copy_from_user(buf, sizeof(buf), buffer, count, 2);
 
@@ -1178,7 +1120,6 @@ static ssize_t proc_fd_enable_write(struct file *file,
 	if (!ts) {
 		return count;
 	}
-	touchpanel_trusted_touch_completion(ts);
 
 	tp_copy_from_user(buf, sizeof(buf), buffer, count, 2);
 
@@ -1315,7 +1256,6 @@ static ssize_t proc_fp_enable_write(struct file *file,
 		return count;
 	}
 
-	touchpanel_trusted_touch_completion(ts);
 	tp_copy_from_user(buf, sizeof(buf), buffer, count, 2);
 
 	if (kstrtoint(buf, 10, &value)) {
@@ -1568,7 +1508,6 @@ static ssize_t proc_rate_white_list_write(struct file *file,
 		return count;
 	}
 
-	touchpanel_trusted_touch_completion(ts);
 	if (!ts->ts_ops->rate_white_list_ctrl) {
 		TPD_INFO("%s:not support ts_ops->rate_white_list_ctrl callback\n", __func__);
 		return count;
@@ -1634,7 +1573,6 @@ static ssize_t proc_switch_usb_state_write(struct file *file, const char __user 
 		TPD_INFO("%s: ts is NULL\n", __func__);
 		return count;
 	}
-	touchpanel_trusted_touch_completion(ts);
 
 	tp_copy_from_user(buf, sizeof(buf), buffer, count, 2);
 
@@ -1693,7 +1631,6 @@ static ssize_t proc_wireless_charge_detect_write(struct file *file,
 		TPD_INFO("%s: ts is NULL\n", __func__);
 		return count;
 	}
-	touchpanel_trusted_touch_completion(ts);
 
 	tp_copy_from_user(buf, sizeof(buf), buffer, count, 2);
 
@@ -1848,7 +1785,6 @@ static ssize_t proc_aging_test_write(struct file *file,
 	if (!ts) {
 		return count;
 	}
-	touchpanel_trusted_touch_completion(ts);
 
 	if (!ts->aging_test_ops) {
 		return count;
@@ -1912,7 +1848,6 @@ static ssize_t proc_smooth_level_write(struct file *file, const char __user *buf
 	TPD_INFO("%s: ts is NULL\n", __func__);
 		return count;
 	}
-	touchpanel_trusted_touch_completion(ts);
 
 	if (!ts->ts_ops->smooth_lv_set) {
 		TPD_INFO("%s:not support ts_ops->smooth_lv_set callback\n", __func__);
@@ -1934,9 +1869,6 @@ static ssize_t proc_smooth_level_write(struct file *file, const char __user *buf
 				ts->smooth_level_chosen = value;
 			} else {
 				ts->smooth_level_chosen = SMOOTH_LEVEL_NUM - 1;
-			}
-			if (ts->health_monitor_support && ts->smooth_level_chosen) {
-				ts->monitor_data.smooth_level_chosen = ts->smooth_level_chosen;
 			}
 			raw_level = ts->smooth_level_used_array[ts->smooth_level_chosen];
 		}
@@ -1988,7 +1920,6 @@ static ssize_t proc_sensitive_level_write(struct file *file, const char __user *
 		TPD_INFO("%s: ts is NULL\n", __func__);
 		return count;
 	}
-	touchpanel_trusted_touch_completion(ts);
 
 	if (!ts->ts_ops->sensitive_lv_set) {
 		TPD_INFO("%s:not support ts_ops->sensitive_lv_set callback\n", __func__);
@@ -2010,9 +1941,6 @@ static ssize_t proc_sensitive_level_write(struct file *file, const char __user *
 			ts->sensitive_level_chosen = value;
 		} else {
 			ts->sensitive_level_chosen = SENSITIVE_LEVEL_NUM - 1;
-		}
-		if (ts->health_monitor_support && ts->sensitive_level_chosen) {
-			ts->monitor_data.sensitive_level_chosen = ts->sensitive_level_chosen;
 		}
 		raw_level = ts->sensitive_level_used_array[ts->sensitive_level_chosen];
 	}
@@ -2055,7 +1983,6 @@ static ssize_t proc_diaphragm_touch_level_write(struct file *file, const char __
 		TPD_INFO("%s: ts is NULL\n", __func__);
 		return count;
 	}
-	touchpanel_trusted_touch_completion(ts);
 
 	if (!ts->ts_ops->diaphragm_touch_lv_set) {
 		TPD_INFO("%s:not support ts_ops->diaphragm_touch_lv_set callback\n", __func__);
@@ -2295,585 +2222,6 @@ static ssize_t proc_pencil_opp_read(struct file *file, char __user *user_buf, si
 	return ret;
 }
 DECLARE_PROC_OPS(proc_pencil_opp_fops, simple_open, proc_pencil_opp_read, NULL, NULL);
-
-/*******Part4:Debug node Function  Area********************/
-
-#ifdef CONFIG_OPLUS_TP_APK
-void log_buf_write(struct touchpanel_data *ts, u8 value)
-{
-	if (ts->log_buf) {
-		u16 *head;
-		head = (u16 *)(&ts->log_buf[0]);
-
-		if ((*head) == 0) {
-			(*head) = 1;
-		}
-
-		if ((*head) < 1023) {
-			(*head)++;
-
-		} else {
-			(*head) = 2;
-		}
-
-		ts->log_buf[*head] = value;
-	}
-}
-EXPORT_SYMBOL(log_buf_write);
-
-static int log_buf_read(struct touchpanel_data *ts, char *buf, int len)
-{
-	if (ts->log_buf == NULL) {
-		return 0;
-	}
-
-	if (len > 1024) {
-		len = 1024;
-	}
-
-	memcpy((u8 *)buf, ts->log_buf, len);
-	return len;
-}
-
-
-static char apk_charger_sta_read(struct touchpanel_data *ts)
-{
-	if (ts->apk_op->apk_charger_get) {
-		if (ts->apk_op->apk_charger_get(ts->chip_data)) {
-			return '1';
-		}
-
-		return '0';
-	}
-
-	return '-';
-}
-
-static int apk_data_read(struct touchpanel_data *ts, char *buf, int len)
-{
-	switch (ts->data_now) {
-	case BASE_DATA:
-		if (ts->apk_op->apk_basedata_get) {
-			return ts->apk_op->apk_basedata_get(ts->chip_data, buf, len);
-		}
-
-		break;
-
-	case DIFF_DATA:
-		if (ts->apk_op->apk_diffdata_get) {
-			return ts->apk_op->apk_diffdata_get(ts->chip_data, buf, len);
-		}
-
-		break;
-
-	case DEBUG_INFO:
-		return log_buf_read(ts, buf, len);
-		break;
-
-	case RAW_DATA:
-		if (ts->apk_op->apk_rawdata_get) {
-			return ts->apk_op->apk_rawdata_get(ts->chip_data, buf, len);
-		}
-
-		break;
-
-	case BACK_DATA:
-		if (ts->apk_op->apk_backdata_get) {
-			return ts->apk_op->apk_backdata_get(ts->chip_data, buf, len);
-		}
-
-		break;
-
-	default:
-		break;
-	}
-
-	buf[0] = '-';
-	return 1;
-}
-
-static char apk_earphone_sta_read(struct touchpanel_data *ts)
-{
-	if (ts->apk_op->apk_earphone_get) {
-		if (ts->apk_op->apk_earphone_get(ts->chip_data)) {
-			return '1';
-		}
-
-		return '0';
-	}
-
-	return '-';
-}
-
-static int apk_gesture_read(struct touchpanel_data *ts, char *buf, int len)
-{
-	if (ts->apk_op->apk_gesture_get) {
-		if (ts->apk_op->apk_gesture_get(ts->chip_data)) {
-			return ts->apk_op->apk_gesture_info(ts->chip_data, buf, len);
-		}
-
-		buf[0] = '0';
-		return 1;
-	}
-
-	buf[0] = '-';
-	return 1;
-}
-
-static int apk_info_read(struct touchpanel_data *ts, char *buf, int len)
-{
-	if (ts->apk_op->apk_tp_info_get) {
-		return ts->apk_op->apk_tp_info_get(ts->chip_data, buf, len);
-	}
-
-	buf[0] = '-';
-	return 1;
-}
-
-static char apk_noise_read(struct touchpanel_data *ts)
-{
-	if (ts->apk_op->apk_noise_get) {
-		if (ts->apk_op->apk_noise_get(ts->chip_data)) {
-			return '1';
-		}
-
-		return '0';
-	}
-
-	return '-';
-}
-
-static char apk_water_read(struct touchpanel_data *ts)
-{
-	if (ts->apk_op->apk_water_get) {
-		if (ts->apk_op->apk_water_get(ts->chip_data) == 1) {
-			return '1';
-		}
-
-		if (ts->apk_op->apk_water_get(ts->chip_data) == 2) {
-			return '2';
-		}
-
-		return '0';
-	}
-
-	return '-';
-}
-
-static char apk_proximity_read(struct touchpanel_data *ts)
-{
-	if (ts->apk_op->apk_proximity_dis) {
-		int dis;
-		dis = ts->apk_op->apk_proximity_dis(ts->chip_data);
-
-		if (dis > 0) {
-			if (dis == 1) {
-				return '1';
-			}
-
-			return '2';
-		}
-
-		return '0';
-	}
-
-	return '-';
-}
-
-static char apk_debug_sta(struct touchpanel_data *ts)
-{
-	if (ts->apk_op->apk_debug_get) {
-		if (ts->apk_op->apk_debug_get(ts->chip_data)) {
-			return '1';
-		}
-
-		return '0';
-	}
-
-	return '-';
-}
-
-static char apk_game_read(struct touchpanel_data *ts)
-{
-	if (ts->apk_op->apk_game_get) {
-		if (ts->apk_op->apk_game_get(ts->chip_data)) {
-			return '1';
-		}
-
-		return '0';
-	}
-
-	return '-';
-}
-
-static ssize_t oplus_apk_read(struct file *file,
-			      char __user *user_buf,
-			      size_t count,
-			      loff_t *ppos)
-{
-	char *buf;
-	int len = 0;
-	int ret = 0;
-	struct touchpanel_data *ts = PDE_DATA(file_inode(file));
-
-	if (!ts) {
-		TPD_INFO("ts not exist!\n");
-		return -ENODEV;
-	}
-
-	if (ts->apk_op == NULL) {
-		TPD_INFO("ts apk_op not exist!\n");
-		return -ENODEV;
-	}
-
-	if (*ppos != 0 || count < 1) {
-		return 0;
-	}
-
-	TPD_INFO("apk read is %c, count is %d.\n", (char)ts->type_now, (int)count);
-	buf = kzalloc(count, GFP_KERNEL);
-
-	if (IS_ERR(buf) || buf == NULL) {
-		ret = -EFAULT;
-		goto read_exit;
-	}
-
-	mutex_lock(&ts->mutex);
-
-	switch (ts->type_now) {
-	case APK_CHARGER:
-		buf[0] = apk_charger_sta_read(ts);
-		len = 1;
-		break;
-
-	case APK_DATA:
-		len = apk_data_read(ts, buf, count);
-		break;
-
-	case APK_EARPHONE:
-		buf[0] = apk_earphone_sta_read(ts);
-		len = 1;
-		break;
-
-	case APK_GESTURE:
-		len = apk_gesture_read(ts, buf, count);
-		break;
-
-	case APK_INFO:
-		len = apk_info_read(ts, buf, count);
-		break;
-
-	case APK_NOISE:
-		buf[0] = apk_noise_read(ts);
-		len = 1;
-		break;
-
-	case APK_WATER:
-		buf[0] = apk_water_read(ts);
-		len = 1;
-		break;
-
-	case APK_PROXIMITY:
-		buf[0] = apk_proximity_read(ts);
-		len = 1;
-		break;
-
-	case APK_DEBUG_MODE:
-		buf[0] = apk_debug_sta(ts);
-		len = 1;
-		break;
-
-	case APK_GAME_MODE:
-		buf[0] = apk_game_read(ts);
-		len = 1;
-		break;
-
-	default:
-		break;
-	}
-
-	if (len == 1 && len < count) {
-		buf[len] = '\n';
-		len++;
-	}
-
-	mutex_unlock(&ts->mutex);
-
-	if (copy_to_user(user_buf, buf, len)) {
-		TPD_INFO("%s: can not copy the buf.\n", __func__);
-		ret = -EFAULT;
-		goto read_exit;
-	}
-
-	ret = len;
-	*ppos += ret;
-
-read_exit:
-
-	if (buf != NULL) {
-		kfree(buf);
-	}
-
-	return ret;
-}
-
-static void apk_charger_switch(struct touchpanel_data *ts, char on_off)
-{
-	if (ts->apk_op->apk_charger_set) {
-		if (on_off == '1') {
-			ts->apk_op->apk_charger_set(ts->chip_data, true);
-
-		} else if (on_off == '0') {
-			ts->apk_op->apk_charger_set(ts->chip_data, false);
-		}
-	}
-}
-
-static void apk_earphone_switch(struct touchpanel_data *ts, char on_off)
-{
-	if (ts->apk_op->apk_earphone_set) {
-		if (on_off == '1') {
-			ts->apk_op->apk_earphone_set(ts->chip_data, true);
-
-		} else if (on_off == '0') {
-			ts->apk_op->apk_earphone_set(ts->chip_data, false);
-		}
-	}
-}
-
-static void apk_gesture_debug(struct touchpanel_data *ts, char on_off)
-{
-	if (ts->apk_op->apk_gesture_debug) {
-		if (on_off == '1') {
-			if (ts->gesture_buf == NULL) {
-				ts->gesture_buf = kzalloc(1024, GFP_KERNEL);
-			}
-
-			if (ts->gesture_buf) {
-				ts->gesture_debug_sta = true;
-				ts->apk_op->apk_gesture_debug(ts->chip_data, true);
-
-			} else {
-				ts->gesture_debug_sta = false;
-				ts->apk_op->apk_gesture_debug(ts->chip_data, false);
-			}
-
-		} else if (on_off == '0') {
-			ts->apk_op->apk_gesture_debug(ts->chip_data, false);
-
-			if (ts->gesture_buf) {
-				kfree(ts->gesture_buf);
-				ts->gesture_buf = NULL;
-			}
-
-			ts->gesture_debug_sta = false;
-		}
-	}
-}
-
-static void apk_noise_switch(struct touchpanel_data *ts, char on_off)
-{
-	if (ts->apk_op->apk_noise_set) {
-		if (on_off == '1') {
-			ts->apk_op->apk_noise_set(ts->chip_data, true);
-
-		} else if (on_off == '0') {
-			ts->apk_op->apk_noise_set(ts->chip_data, false);
-		}
-	}
-}
-
-static void apk_water_switch(struct touchpanel_data *ts, char on_off)
-{
-	if (ts->apk_op->apk_water_set) {
-		if (on_off == '1') {
-			ts->apk_op->apk_water_set(ts->chip_data, 1);
-
-		} else if (on_off == '2') {
-			ts->apk_op->apk_water_set(ts->chip_data, 2);
-
-		} else if (on_off == '0') {
-			ts->apk_op->apk_water_set(ts->chip_data, 0);
-		}
-	}
-}
-
-static void apk_proximity_switch(struct touchpanel_data *ts,
-				 char on_off)
-{
-	if (ts->apk_op->apk_proximity_set) {
-		if (on_off == '1') {
-			ts->apk_op->apk_proximity_set(ts->chip_data, true);
-
-		} else if (on_off == '0') {
-			ts->apk_op->apk_proximity_set(ts->chip_data, false);
-		}
-	}
-}
-
-static void apk_debug_switch(struct touchpanel_data *ts, char on_off)
-{
-	if (ts->apk_op->apk_debug_set) {
-		if (on_off == '1') {
-			ts->apk_op->apk_debug_set(ts->chip_data, true);
-
-			if (ts->log_buf == NULL) {
-				ts->log_buf = kzalloc(1024, GFP_KERNEL);
-			}
-
-		} else if (on_off == '0') {
-			ts->apk_op->apk_debug_set(ts->chip_data, false);
-
-			if (ts->log_buf) {
-				kfree(ts->log_buf);
-				ts->log_buf = NULL;
-			}
-		}
-	}
-}
-
-static void apk_data_type_set(struct touchpanel_data *ts, char ch)
-{
-	APK_DATA_TYPE type;
-	type = (APK_DATA_TYPE)ch;
-
-	switch (type) {
-	case BASE_DATA:
-	case DIFF_DATA:
-	case DEBUG_INFO:
-	case RAW_DATA:
-	case BACK_DATA:
-		ts->data_now = type;
-
-		if (ts->apk_op->apk_data_type_set) {
-			ts->apk_op->apk_data_type_set(ts->chip_data, ts->data_now);
-		}
-
-		break;
-
-	default:
-		break;
-	}
-}
-
-static void apk_game_switch(struct touchpanel_data *ts, char on_off)
-{
-	if (ts->apk_op->apk_game_set) {
-		if (on_off == '1') {
-			ts->apk_op->apk_game_set(ts->chip_data, true);
-
-		} else if (on_off == '0') {
-			ts->apk_op->apk_game_set(ts->chip_data, false);
-		}
-	}
-}
-
-static ssize_t oplus_apk_write(struct file *file,
-			       const char __user *buffer,
-			       size_t count,
-			       loff_t *ppos)
-{
-	char *buf;
-	APK_SWITCH_TYPE type;
-	int ret = count;
-	struct touchpanel_data *ts = PDE_DATA(file_inode(file));
-
-	if (!ts) {
-		TPD_INFO("ts not exist!\n");
-		return -ENODEV;
-	}
-
-	if (ts->apk_op == NULL) {
-		TPD_INFO("ts apk_op not exist!\n");
-		return -ENODEV;
-	}
-
-	if (count < 1) {
-		return 0;
-	}
-
-
-	buf = kzalloc(count, GFP_KERNEL);
-
-	if (IS_ERR(buf) || buf == NULL) {
-		ret = -EFAULT;
-		goto write_exit;
-	}
-
-	if (copy_from_user(buf, buffer, count)) {
-		TPD_INFO("%s: can not copy the buf.\n", __func__);
-		ret = -EFAULT;
-		goto write_exit;
-	}
-
-	mutex_lock(&ts->mutex);
-
-	type = (APK_SWITCH_TYPE)buf[0];
-	TPD_INFO("apk write type is %c, count is %d.\n", (char)type,
-		 (int)count);
-
-	if (count > 1) {
-		switch (type) {
-		case APK_CHARGER:
-			apk_charger_switch(ts, buf[1]);
-			break;
-
-		case APK_DATA:
-			apk_data_type_set(ts, buf[1]);
-			break;
-
-		case APK_EARPHONE:
-			apk_earphone_switch(ts, buf[1]);
-			break;
-
-		case APK_GESTURE:
-			apk_gesture_debug(ts, buf[1]);
-			break;
-
-		case APK_INFO: /* read only, do nothing in write.*/
-			break;
-
-		case APK_NOISE:
-			apk_noise_switch(ts, buf[1]);
-			break;
-
-		case APK_PROXIMITY:
-			apk_proximity_switch(ts, buf[1]);
-			break;
-
-		case APK_WATER:
-			apk_water_switch(ts, buf[1]);
-			break;
-
-		case APK_DEBUG_MODE:
-			apk_debug_switch(ts, buf[1]);
-			break;
-
-		case APK_GAME_MODE:
-			apk_game_switch(ts, buf[1]);
-			break;
-
-		default:
-			type = APK_NULL;
-			break;
-		}
-	}
-
-	ts->type_now = type;
-	mutex_unlock(&ts->mutex);
-
-write_exit:
-
-	if (buf != NULL) {
-		kfree(buf);
-	}
-
-	return ret;
-}
-
-DECLARE_PROC_OPS(proc_oplus_apk_fops, simple_open, oplus_apk_read, oplus_apk_write, NULL);
-
-#endif /*end of CONFIG_OPLUS_TP_APK*/
 
 /*proc/touchpanel/debug_info/baseline*/
 static int tp_baseline_debug_read_func(struct seq_file *s, void *v)
@@ -3147,9 +2495,6 @@ static int tp_main_register_read_func(struct seq_file *s, void *v)
 {
 	struct touchpanel_data *ts = s->private;
 	struct debug_info_proc_operations *debug_info_ops;
-#ifndef CONFIG_REMOVE_OPLUS_FUNCTION
-	struct monitor_data *monitor_data = &ts->monitor_data;
-#endif
 
 	if (!ts) {
 		return 0;
@@ -3193,17 +2538,6 @@ static int tp_main_register_read_func(struct seq_file *s, void *v)
 		seq_printf(s, "kernel_grip_info:\n");
 		kernel_grip_print_func(s, ts->grip_info);
 	}
-#ifndef CONFIG_REMOVE_OPLUS_FUNCTION
-	if (ts->health_monitor_support && tp_debug == 2) {
-		if (monitor_data->fw_version) {
-			memset(monitor_data->fw_version, 0, MAX_DEVICE_VERSION_LENGTH);
-			strncpy(monitor_data->fw_version, ts->panel_data.manufacture_info.version,
-				strlen(ts->panel_data.manufacture_info.version));
-		}
-
-		tp_healthinfo_read(s, monitor_data);
-	}
-#endif
 	mutex_unlock(&ts->mutex);
 
 	if (ts->int_mode == BANNABLE) {
@@ -3742,110 +3076,6 @@ static ssize_t proc_glove_mode_read(struct file *file, char __user *buffer,
 DECLARE_PROC_OPS(proc_glove_mode, simple_open,
 		  proc_glove_mode_read, proc_glove_mode_write, NULL);
 
-
-#ifndef CONFIG_REMOVE_OPLUS_FUNCTION
-/*proc/touchpanel/debug_info/health_monitor*/
-static int tp_health_monitor_read_func(struct seq_file *s, void *v)
-{
-	struct touchpanel_data *ts = s->private;
-	struct monitor_data *monitor_data = &ts->monitor_data;
-
-	mutex_lock(&ts->mutex);
-
-	if (monitor_data->fw_version) {
-		memset(monitor_data->fw_version, 0, MAX_DEVICE_VERSION_LENGTH);
-		strncpy(monitor_data->fw_version, ts->panel_data.manufacture_info.version,
-			strlen(ts->panel_data.manufacture_info.version));
-	}
-
-	tp_healthinfo_read(s, monitor_data);
-
-	mutex_unlock(&ts->mutex);
-	return 0;
-}
-
-static ssize_t health_monitor_control(struct file *file, const char __user *buf, size_t count, loff_t *lo)
-{
-	struct touchpanel_data *ts = PDE_DATA(file_inode(file));
-	struct monitor_data *monitor_data = &ts->monitor_data;
-	char buffer[4] = {0};
-	int tmp = 0;
-
-	mutex_lock(&ts->mutex);
-	if (count > 2) {
-		goto EXIT;
-	}
-	if (copy_from_user(buffer, buf, count)) {
-		TPD_INFO("%s: read proc input error.\n", __func__);
-		goto EXIT;
-	}
-
-	if (1 == sscanf(buffer, "%d", &tmp) && tmp == 0) {
-		tp_healthinfo_clear(monitor_data);
-	} else {
-		TPD_INFO("invalid operation\n");
-	}
-
-EXIT:
-	mutex_unlock(&ts->mutex);
-	return count;
-}
-
-static int health_monitor_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, tp_health_monitor_read_func, PDE_DATA(inode));
-}
-
-DECLARE_PROC_OPS(tp_health_monitor_proc_fops, health_monitor_open, seq_read, health_monitor_control, single_release);
-
-
-/*proc/touchpanel/debug_info/health_simulate_trigger*/
-static ssize_t proc_health_simulate_trigger_read(struct file *file, char __user *buffer,
-				     size_t count, loff_t *ppos)
-{
-	struct touchpanel_data *ts = PDE_DATA(file_inode(file));
-	uint8_t ret = 0;
-	char page[PAGESIZE] = {0};
-
-	if (!ts || !ts->health_monitor_support) {
-		return count;
-	}
-
-	TPD_INFO("%s: health_simulate_trigger = %d.\n", __func__, ts->monitor_data.health_simulate_trigger);
-	snprintf(page, PAGESIZE - 1, "%d", ts->monitor_data.health_simulate_trigger);
-	ret = simple_read_from_buffer(buffer, count, ppos, page, strlen(page));
-
-	return ret;
-}
-
-static ssize_t proc_health_simulate_trigger_write(struct file *file,
-				      const char __user *buffer, size_t count, loff_t *ppos)
-{
-	struct touchpanel_data *ts = PDE_DATA(file_inode(file));
-
-	int tmp = 0;
-	char buf[4] = {0};
-
-	if (!ts || !ts->health_monitor_support) {
-		return count;
-	}
-
-	tp_copy_from_user(buf, sizeof(buf), buffer, count, 2);
-
-	if (kstrtoint(buf, 10, &tmp)) {
-		TPD_INFO("%s: kstrtoint error\n", __func__);
-		return count;
-	}
-
-	ts->monitor_data.health_simulate_trigger = tmp;
-
-	return count;
-}
-
-DECLARE_PROC_OPS(proc_health_simulate_trigger_ops, simple_open,
-		   proc_health_simulate_trigger_read, proc_health_simulate_trigger_write, NULL);
-#endif
-
 /*******Part5:Register node Function  Area********************/
 
 typedef struct {
@@ -3883,16 +3113,6 @@ static int init_debug_info_proc(struct touchpanel_data *ts)
 			"snr", 0666, NULL, &proc_snr_ops, ts, false,
 			ts->snr_read_support
 		},/* show abs_doze interface*/
-#ifndef CONFIG_REMOVE_OPLUS_FUNCTION
-		{
-			"health_monitor", 0666, NULL, &tp_health_monitor_proc_fops, ts, false,
-			ts->health_monitor_support
-		},
-		{
-			"health_simulate_trigger", 0666, NULL, &proc_health_simulate_trigger_ops, ts, false,
-			ts->health_monitor_support
-		},
-#endif
 		{
 			"freq_hop_simulate_support", 0666, NULL, &proc_freq_hop_fops, ts, false,
 			ts->freq_hop_simulate_support
@@ -3993,10 +3213,6 @@ static int init_touchpanel_proc_part2(struct touchpanel_data *ts, struct proc_di
 			"calibration_status", 0666, NULL, &proc_cal_status_fops, ts, false,
 			ts->auto_test_need_cal_support
 		},
-		/* proc/touchpanel/oplus_apk. Add the new test node for debug and apk. By zhangping 20190402 start*/
-#ifdef CONFIG_OPLUS_TP_APK
-		{"oplus_apk", 0666, NULL, &proc_oplus_apk_fops, ts, false, true},
-#endif /* end of CONFIG_OPLUS_TP_APK*/
 	};
 
 	for (i = 0; i < ARRAY_SIZE(tp_proc_node_part2); i++) {
@@ -4092,11 +3308,6 @@ int init_touchpanel_proc(struct touchpanel_data *ts)
 			"oplus_tp_direction", 0666, NULL, &touch_dir_proc_fops, ts, false,
 			ts->fw_edge_limit_support
 		},
-
-		/* proc/touchpanel/oplus_apk. Add the new test node for debug and apk. By zhangping 20190402 start*/
-#ifdef CONFIG_OPLUS_TP_APK
-		{"oplus_apk", 0666, NULL, &proc_oplus_apk_fops, ts, false, true},
-#endif /* end of CONFIG_OPLUS_TP_APK*/
 		{
 			"pencil_connected", 0666, NULL, &proc_pencil_connect_fops, ts, false,
 			ts->pen_support
@@ -4116,8 +3327,6 @@ int init_touchpanel_proc(struct touchpanel_data *ts)
 	};
 
 	TP_INFO(ts->tp_index, "%s entry\n", __func__);
-
-	/*proc files-step1:/proc/devinfo/tp  (touchpanel device info)*/
 
 	/*proc files-step2:/proc/touchpanel*/
 	if (ts->tp_index == 0) {

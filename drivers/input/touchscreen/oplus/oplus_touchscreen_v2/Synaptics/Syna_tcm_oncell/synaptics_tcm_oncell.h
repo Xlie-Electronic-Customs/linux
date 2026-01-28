@@ -25,13 +25,8 @@
 #define SYNAPTICS_TCM_ID_PRODUCT (1 << 0)
 #define SYNAPTICS_TCM_ID_VERSION 0x0007
 
-#ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM /*mtk has to limit the amount of data*/
-#define RD_CHUNK_SIZE  256     /* read length limit in bytes, 0 = unlimited */
-#define WR_CHUNK_SIZE 2048   /* write length limit in bytes, 0 = unlimited */
-#else
 #define RD_CHUNK_SIZE 0 /* read length limit in bytes, 0 = unlimited */
 #define WR_CHUNK_SIZE 0 /* write length limit in bytes, 0 = unlimited */
-#endif
 
 #define MESSAGE_HEADER_SIZE     4
 #define MESSAGE_MARKER          0xA5
@@ -73,7 +68,6 @@
 			buffer.data_length = 0; \
         } \
 	} while (0)
-
 
 #define STR(x) #x
 
@@ -496,9 +490,6 @@ struct syna_tcm_data {
 	struct synaptics_proc_operations *syna_ops;
 	struct health_info health_info;
 	struct touchpanel_data *ts;
-#ifndef CONFIG_REMOVE_OPLUS_FUNCTION
-	struct panel_info *panel_data;
-#endif
 
 	/*for syna async work*/
 	struct completion resume_complete;
@@ -697,5 +688,10 @@ struct syna_support_grip_zone {
 	char name[GRIP_TAG_SIZE];
 	int (*handle_func)(void *chip_data, struct grip_zone_area *grip_zone, bool enable);
 };
+
+void syna_reserve_read(struct seq_file *s, void *chip_data);
+void syna_freq_hop_trigger(void *chip_data);
+struct device_hcd *syna_remote_device_init(struct syna_tcm_data *tcm_info);
+int syna_remote_device_destory(struct syna_tcm_data *tcm_info);
 
 #endif  /*_SYNAPTICS_TCM_CORE_H_*/

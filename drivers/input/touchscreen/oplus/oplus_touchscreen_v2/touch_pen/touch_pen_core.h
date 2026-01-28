@@ -11,7 +11,7 @@
 #include <linux/types.h>
 
 #include "../touchpanel_common.h"
-#include "../touch_comon_api/touch_comon_api.h"
+#include "../touch_comon_api.h"
 
 extern unsigned int tp_debug;
 

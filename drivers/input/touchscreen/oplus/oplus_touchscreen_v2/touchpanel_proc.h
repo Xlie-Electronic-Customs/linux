@@ -6,8 +6,6 @@
 #ifndef _TOUCHPANEL_PROC_H_
 #define _TOUCHPANEL_PROC_H_
 
-#include "touchpanel_common.h"
-
 int init_touchpanel_proc(struct touchpanel_data *ts);
 void remove_touchpanel_proc(struct touchpanel_data *ts);
 void tp_freq_hop_work(struct work_struct *work);

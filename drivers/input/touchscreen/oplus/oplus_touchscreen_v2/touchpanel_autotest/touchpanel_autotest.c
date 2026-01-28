@@ -5,8 +5,7 @@
 
 #include "../touchpanel_common.h"
 #include "touchpanel_autotest.h"
-#include "../touch_comon_api/touch_comon_api.h"
-#include "../touchpanel_healthinfo/touchpanel_healthinfo.h"
+#include "../touch_comon_api.h"
 #include <linux/seq_file.h>
 #include <linux/delay.h>
 #include <linux/uaccess.h>
@@ -332,7 +331,7 @@ static int tp_test_limit_switch(struct touchpanel_data *ts)
 		return -1;
 	}
 
-	ts->panel_data.aging_test_limit_name = tp_devm_kzalloc(ts->dev, MAX_FW_NAME_LENGTH, GFP_KERNEL);
+	ts->panel_data.aging_test_limit_name = devm_kzalloc(ts->dev, MAX_FW_NAME_LENGTH, GFP_KERNEL);
 	if (ts->panel_data.aging_test_limit_name == NULL) {
 		TP_INFO(ts->tp_index, "[TP]panel_data.test_limit_name kzalloc error\n");
 		return -1;
@@ -353,7 +352,7 @@ static int tp_test_limit_switch(struct touchpanel_data *ts)
 	return 0;
 
 EXIT:
-	tp_devm_kfree(ts->dev, (void **)&ts->panel_data.aging_test_limit_name, MAX_FW_NAME_LENGTH);
+	devm_kfree(ts->dev, (void **)&ts->panel_data.aging_test_limit_name);
 
 	return -1;
 }
@@ -390,7 +389,7 @@ static int request_real_test_limit(struct touchpanel_data *ts,
 		if (ret < 0) {
 			ret = request_test_limit(fw, test_limit_name, device);
 		}
-		tp_devm_kfree(ts->dev, (void **)&ts->panel_data.aging_test_limit_name, MAX_FW_NAME_LENGTH);
+		devm_kfree(ts->dev, (void **)&ts->panel_data.aging_test_limit_name);
 	} else {
 		ret = request_test_limit(fw, test_limit_name, device);
 	}
@@ -698,8 +697,6 @@ int tp_auto_test(struct seq_file *s, void *v)
 
 	error_count = ts->engineer_ops->auto_test(s, ts);
 
-	tp_healthinfo_report(&ts->monitor_data, HEALTH_TEST_AUTO, &error_count);
-
 	/*step5: release test limit firmware*/
 
 	release_firmware(ts->com_test_data.limit_fw);
@@ -806,8 +803,6 @@ int tp_black_screen_test(struct file *file, char __user *buffer, size_t count,
 			 "1 errors:not support gesture test");
 		error_count = -1;
 	}
-
-	tp_healthinfo_report(&ts->monitor_data, HEALTH_TEST_BLACKSCREEN, &error_count);
 
 	ts->in_test_process = false;
 

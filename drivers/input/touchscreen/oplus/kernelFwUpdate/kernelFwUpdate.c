@@ -49,7 +49,6 @@ static const struct attribute_group fw_update_attr_group = {
 
 static struct class kernel_fw_update_class = {
     .name =      "kernel_fw_update",
-    .owner =     THIS_MODULE,
 };
 
 static void fw_update_uevent_env(const char *name)

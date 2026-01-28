@@ -325,7 +325,7 @@ exit:
 	return retval;
 }
 
-int remote_rmi4_i2c_enable(struct rmidev_data *dev_data, bool enable)
+static int remote_rmi4_i2c_enable(struct rmidev_data *dev_data, bool enable)
 {
 	if (enable) {
 		*(dev_data->pdata->enable_remote) = 0;
@@ -631,7 +631,6 @@ static int rmidev_create_device_class(struct rmidev_data *dev_data)
 		       __func__, CHAR_DEVICE_NAME);
 		return -ENODEV;
 	}
-
 
 	return 0;
 }

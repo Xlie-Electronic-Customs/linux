@@ -6651,11 +6651,7 @@ void __exit tp_driver_exit_3706(void)
 	return;
 }
 
-#ifdef CONFIG_TOUCHPANEL_LATE_INIT
-late_initcall(tp_driver_init_3706);
-#else
 module_init(tp_driver_init_3706);
-#endif
 module_exit(tp_driver_exit_3706);
 
 MODULE_DESCRIPTION("Touchscreen s3706 Driver");

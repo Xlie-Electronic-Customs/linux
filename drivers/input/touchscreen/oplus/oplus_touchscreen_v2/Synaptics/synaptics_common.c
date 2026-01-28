@@ -17,7 +17,7 @@
 #endif
 /*******Part1:Call Back Function implement*******/
 
-unsigned int extract_uint_le(const unsigned char *ptr)
+static unsigned int extract_uint_le(const unsigned char *ptr)
 {
 	return (unsigned int)ptr[0] +
 	       (unsigned int)ptr[1] * 0x100 +

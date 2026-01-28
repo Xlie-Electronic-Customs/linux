@@ -496,8 +496,5 @@ int kernel_grip_print_func(struct seq_file *s,
 int notify_prevention_handle(struct kernel_grip_info *grip_info,
 			     int obj_attention, struct point_info *points);
 
-int dead_grip_handle(struct kernel_grip_info *grip_info, int obj_attention,
-		     struct point_info *points);
-
 #endif /*_TOUCHPANEL_PREVENTION_H_*/
 

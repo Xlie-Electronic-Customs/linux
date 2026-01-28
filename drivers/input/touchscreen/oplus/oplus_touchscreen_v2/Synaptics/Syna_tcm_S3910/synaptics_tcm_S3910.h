@@ -25,13 +25,8 @@
 #define SYNAPTICS_TCM_ID_PRODUCT (1 << 0)
 #define SYNAPTICS_TCM_ID_VERSION 0x0007
 
-#ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM /*mtk has to limit the amount of data*/
-#define RD_CHUNK_SIZE 2048     /* read length limit in bytes, 0 = unlimited */
-#define WR_CHUNK_SIZE 2048   /* write length limit in bytes, 0 = unlimited */
-#else
 #define RD_CHUNK_SIZE 0 /* read length limit in bytes, 0 = unlimited */
 #define WR_CHUNK_SIZE 0 /* write length limit in bytes, 0 = unlimited */
-#endif
 
 #define MESSAGE_HEADER_SIZE     4
 #define MESSAGE_MARKER          0xA5
@@ -84,6 +79,16 @@
 			buffer.data_length = 0; \
 		} \
 	} while (0)
+
+#define MAX(a, b) \
+	({__typeof__(a) _a = (a); \
+	__typeof__(b) _b = (b); \
+	_a > _b ? _a : _b; })
+
+#define MIN(a, b) \
+	({__typeof__(a) _a = (a); \
+	__typeof__(b) _b = (b); \
+	_a < _b ? _a : _b; })
 
 #define STR(x) #x
 

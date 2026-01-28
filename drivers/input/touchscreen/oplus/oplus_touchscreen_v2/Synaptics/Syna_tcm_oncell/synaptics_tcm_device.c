@@ -505,7 +505,6 @@ static int device_create_class(struct device_hcd *device_hcd)
 		return -ENODEV;
 	}
 
-
 	return 0;
 }
 

@@ -8,10 +8,6 @@
 #include <linux/interrupt.h>
 #include "synaptics_tcm_S3910.h"
 
-#ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
-#include <linux/platform_data/spi-mt65xx.h>
-#endif
-
 
 static int syna_ver_bottom_large_handle_func(void *chip_data,
 		struct grip_zone_area *grip_zone,
@@ -85,15 +81,6 @@ static struct syna_support_grip_zone syna_grip[] = {
 	{},
 };
 
-#ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
-const struct mtk_chip_config st_spi_ctrdata = {
-	.sample_sel = 0,
-	.cs_setuptime = 5000,
-	.cs_holdtime = 3000,
-	.cs_idletime = 0,
-	.tick_delay = 0,
-};
-#endif
 static unsigned char *buf;
 static unsigned int buf_size;
 static struct spi_transfer *xfer;
@@ -3802,7 +3789,7 @@ static fw_check_state syna_fw_check(void *chip_data,
 			}
 			snprintf(dev_version, MAX_DEVICE_VERSION_LENGTH  - ver_len,
 				 "%s", (char *)tcm_info->app_info.customer_config_id);
-			strncpy(&panel_data->manufacture_info.version[ver_len],
+			strlcpy(&panel_data->manufacture_info.version[ver_len],
 				dev_version, MAX_DEVICE_VERSION_LENGTH - ver_len);
 		}
 	}
@@ -5307,7 +5294,7 @@ static int syna_delta_noise_test_freq(struct seq_file *s, void *chip_data,
 
 #define MAX_FREQ_NOISE_TIMES      4
 #define DEFAULT_FREQ_NOISE_TIMES  0
-static int syna_delta_noise_test(struct seq_file *s, void *chip_data,
+int syna_delta_noise_test(struct seq_file *s, void *chip_data,
 	struct auto_testdata *syna_testdata, struct test_item_info *p_test_item_info)
 {
 	int count = 0;
@@ -8083,32 +8070,11 @@ static int syna_tcm_probe(struct spi_device *spi)
 		goto ts_alloc_failed;
 	}
 
-	/*3. init member of ts*/
-#ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
-	/* init spi_device from mtk */
-	spi->mode = SPI_MODE_0;
-	spi->bits_per_word = 8;
-	spi->max_speed_hz = 15 * 1000 * 1000;
-	spi->cs_setup.value = 1;
-	spi->cs_setup.unit = 0;
-	spi->cs_hold.value = 1;
-	spi->cs_hold.unit = 0;
-	spi->cs_inactive.value = 1;
-	spi->cs_inactive.unit = 0;
-
-	retval = spi_setup(spi);
-	if (retval < 0) {
-		TPD_INFO(" failed to setup spi!\n");
-	}
-#else
-	spi->controller_data = (void *)&st_spi_ctrdata;
-#endif
-#endif
 	ts->dev = &spi->dev;
 	ts->s_client  = spi;
 	ts->irq = spi->irq;
 	ts->chip_data = tcm_info;
+	ts->s_client->chip_select = 0; /*modify reg=0 for more tp vendor share same spi interface*/
 	spi_set_drvdata(spi, ts);
 	/* add input_dev info */
 	ts->id.bustype = BUS_SPI;
@@ -8405,17 +8371,11 @@ static const struct dev_pm_ops syna_pm_ops = {
 
 static const struct spi_device_id syna_tmc_id[] = {
         { TPD_DEVICE, 0},
-#ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
-        { "oplus,tp_noflash", 0 },
-#endif
         { }
 };
 
 static struct of_device_id syna_match_table[] = {
         { .compatible = TPD_DEVICE, },
-#ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
-        { .compatible = "oplus,tp_noflash", },
-#endif
         { .compatible = "synaptics-s3910", },
         { }
 };
@@ -8460,11 +8420,7 @@ static void __exit tp_driver_exit_syna_tcm(void)
 	return;
 }
 
-#ifdef CONFIG_TOUCHPANEL_LATE_INIT
-late_initcall(tp_driver_init_syna_tcm);
-#else
 module_init(tp_driver_init_syna_tcm);
-#endif
 module_exit(tp_driver_exit_syna_tcm);
 
 MODULE_DESCRIPTION("Touchscreen Synaptics tcm oncell Driver");

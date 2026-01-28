@@ -7,7 +7,7 @@
 #ifndef TOUCH_INTERFACES_H
 #define TOUCH_INTERFACES_H
 
-#define MAX_I2C_RETRY_TIME 10
+#define MAX_I2C_RETRY_TIME 2
 
 /*---SPI READ/WRITE---*/
 #define SPI_WRITE_MASK(a)   (a | 0x80)
@@ -63,8 +63,6 @@ int32_t CTP_SPI_WRITE(struct spi_device *client, uint8_t *buf, uint16_t len);
 int spi_write_firmware(struct spi_device *client, u8 *fw, u32 *len_array,
 		       u8 array_len);
 int free_touch_interfaces(struct device *dev);
-int upload_touchpanel_kevent_data(unsigned char *payload);
-
 
 #endif /*TOUCH_INTERFACES_H*/
 

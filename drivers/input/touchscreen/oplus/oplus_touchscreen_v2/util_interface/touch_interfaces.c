@@ -10,13 +10,8 @@
 
 #include "touch_interfaces.h"
 #include "../touchpanel_common.h"
-#include "../touch_comon_api/touch_comon_api.h"
-#include "../touchpanel_healthinfo/touchpanel_healthinfo.h"
-#include "../touchpanel_healthinfo/touchpanel_exception.h"
-#ifdef CONFIG_TOUCHPANEL_TRUSTED_TOUCH
-#include "../touchpanel_tui_support/touchpanel_tui_support.h"
-#include <linux/pm_runtime.h>
-#endif
+#include "../touch_comon_api.h"
+#include "../touchpanel_exception.h"
 
 #define FIX_I2C_LENGTH   256
 
@@ -58,28 +53,10 @@ int touch_i2c_continue_read(struct i2c_client *client, unsigned short length,
 			break;
 		}
 		msleep(20);
-#ifdef CONFIG_TOUCHPANEL_TRUSTED_TOUCH
-#ifdef CONFIG_ARCH_QTI_VM
-		if (atomic_read(&ts->trusted_touch_enabled) &&
-				retval == -ECONNRESET) {
-			pr_err("failed i2c read reacquiring session\n");
-			pm_runtime_put_sync(
-				ts->client->adapter->dev.parent);
-			pm_runtime_get_sync(
-				ts->client->adapter->dev.parent);
-		}
-#endif
-#endif
 	}
 
 	if (retry == MAX_I2C_RETRY_TIME) {
 		TPD_INFO("%s: I2C read over retry limit\n", __func__);
-#ifdef CONFIG_TOUCHPANEL_TRUSTED_TOUCH
-#ifdef CONFIG_ARCH_QTI_VM
-		pr_err("initiating abort due to i2c xfer failure\n");
-		touchpanel_tvm_i2c_failure_report(ts);
-#endif
-#endif
 		retval = -EIO;
 	}
 
@@ -154,30 +131,12 @@ int touch_i2c_continue_write(struct i2c_client *client, unsigned short length,
 			retval = length;
 			break;
 		}
-#ifdef CONFIG_TOUCHPANEL_TRUSTED_TOUCH
-#ifdef CONFIG_ARCH_QTI_VM
-		if (atomic_read(&ts->trusted_touch_enabled) &&
-				retval == -ECONNRESET) {
-			pr_err("failed i2c read reacquiring session\n");
-			pm_runtime_put_sync(
-				ts->client->adapter->dev.parent);
-			pm_runtime_get_sync(
-				ts->client->adapter->dev.parent);
-		}
-#endif
-#endif
 
 		msleep(20);
 	}
 
 	if (retry == MAX_I2C_RETRY_TIME) {
 		TPD_INFO("%s: I2C write over retry limit\n", __func__);
-#ifdef CONFIG_TOUCHPANEL_TRUSTED_TOUCH
-#ifdef CONFIG_ARCH_QTI_VM
-		pr_err("initiating abort due to i2c xfer failure\n");
-		touchpanel_tvm_i2c_failure_report(ts);
-#endif
-#endif
 		retval = -EIO;
 	}
 
@@ -222,12 +181,11 @@ int touch_i2c_write_block(struct i2c_client *client, u16 addr,
 	if (total_length > FIX_I2C_LENGTH) {
 		if (ts->interface_data.write_buf_size < total_length) {
 			if (ts->interface_data.write_buf) {
-				tp_devm_kfree(&client->dev, (void **)&ts->interface_data.write_buf,
-					      ts->interface_data.write_buf_size);
+				devm_kfree(&client->dev, (void **)&ts->interface_data.write_buf);
 				TPD_INFO("write block_1, free once.\n");
 			}
 
-			ts->interface_data.write_buf = tp_devm_kzalloc(&client->dev, total_length,
+			ts->interface_data.write_buf = devm_kzalloc(&client->dev, total_length,
 						       GFP_KERNEL | GFP_DMA);
 
 			if (!ts->interface_data.write_buf) {
@@ -248,9 +206,8 @@ int touch_i2c_write_block(struct i2c_client *client, u16 addr,
 
 	} else {
 		if (ts->interface_data.write_buf_size > FIX_I2C_LENGTH) {
-			tp_devm_kfree(&client->dev, (void **)&ts->interface_data.write_buf,
-				      ts->interface_data.write_buf_size);
-			ts->interface_data.write_buf = tp_devm_kzalloc(&client->dev, FIX_I2C_LENGTH,
+			devm_kfree(&client->dev, (void **)&ts->interface_data.write_buf);
+			ts->interface_data.write_buf = devm_kzalloc(&client->dev, FIX_I2C_LENGTH,
 						       GFP_KERNEL | GFP_DMA);
 
 			if (!ts->interface_data.write_buf) {
@@ -267,7 +224,7 @@ int touch_i2c_write_block(struct i2c_client *client, u16 addr,
 
 		} else {
 			if (!ts->interface_data.write_buf) {
-				ts->interface_data.write_buf = tp_devm_kzalloc(&client->dev, FIX_I2C_LENGTH,
+				ts->interface_data.write_buf = devm_kzalloc(&client->dev, FIX_I2C_LENGTH,
 							       GFP_KERNEL | GFP_DMA);
 
 				if (!ts->interface_data.write_buf) {
@@ -320,11 +277,6 @@ int touch_i2c_write_block(struct i2c_client *client, u16 addr,
 		retval = -EIO;
 	}
 
-	if (ts->health_monitor_support) {
-		ts->monitor_data.bus_buf = msg[0].buf;
-		ts->monitor_data.bus_len = msg[0].len;
-		tp_healthinfo_report(&ts->monitor_data, HEALTH_BUS, &retval);
-	}
 
 	if (ts->exception_upload_support) {
 		if (retry == MAX_I2C_RETRY_TIME) {
@@ -332,6 +284,7 @@ int touch_i2c_write_block(struct i2c_client *client, u16 addr,
 		} else {
 			ts->exception_data.bus_error_count = 0;
 		}
+		tp_exception_report(&ts->exception_data, EXCEP_BUS, "bus_failed", sizeof("bus_failed"));
 	}
 
 	mutex_unlock(&ts->interface_data.bus_mutex);
@@ -524,12 +477,11 @@ inline int touch_i2c_read(struct i2c_client *client, char *writebuf,
 	if (writelen > FIX_I2C_LENGTH) {
 		if (ts->interface_data.read_w_buf_size < writelen) {
 			if (ts->interface_data.read_w_buffer) {
-				tp_devm_kfree(&client->dev, (void **)&ts->interface_data.read_w_buffer,
-					      ts->interface_data.read_w_buf_size);
+				devm_kfree(&client->dev, (void **)&ts->interface_data.read_w_buffer);
 				TPD_INFO("read w block_1, free once.\n");
 			}
 
-			ts->interface_data.read_w_buffer = tp_devm_kzalloc(&client->dev, writelen,
+			ts->interface_data.read_w_buffer = devm_kzalloc(&client->dev, writelen,
 							   GFP_KERNEL | GFP_DMA);
 
 			if (!ts->interface_data.read_w_buffer) {
@@ -550,9 +502,8 @@ inline int touch_i2c_read(struct i2c_client *client, char *writebuf,
 
 	} else {
 		if (ts->interface_data.read_w_buf_size > FIX_I2C_LENGTH) {
-			tp_devm_kfree(&client->dev, (void **)&ts->interface_data.read_w_buffer,
-				      ts->interface_data.read_w_buf_size);
-			ts->interface_data.read_w_buffer = tp_devm_kzalloc(&client->dev, FIX_I2C_LENGTH,
+			devm_kfree(&client->dev, (void **)&ts->interface_data.read_w_buffer);
+			ts->interface_data.read_w_buffer = devm_kzalloc(&client->dev, FIX_I2C_LENGTH,
 							   GFP_KERNEL | GFP_DMA);
 
 			if (!ts->interface_data.read_w_buffer) {
@@ -569,7 +520,7 @@ inline int touch_i2c_read(struct i2c_client *client, char *writebuf,
 
 		} else {
 			if (!ts->interface_data.read_w_buffer) {
-				ts->interface_data.read_w_buffer = tp_devm_kzalloc(&client->dev, FIX_I2C_LENGTH,
+				ts->interface_data.read_w_buffer = devm_kzalloc(&client->dev, FIX_I2C_LENGTH,
 								   GFP_KERNEL | GFP_DMA);
 
 				if (!ts->interface_data.read_w_buffer) {
@@ -596,12 +547,11 @@ inline int touch_i2c_read(struct i2c_client *client, char *writebuf,
 	if (readlen > FIX_I2C_LENGTH) {
 		if (ts->interface_data.read_buf_size < readlen) {
 			if (ts->interface_data.read_buf) {
-				tp_devm_kfree(&client->dev, (void **)&ts->interface_data.read_buf,
-					      ts->interface_data.read_buf_size);
+				devm_kfree(&client->dev, (void **)&ts->interface_data.read_buf);
 				TPD_INFO("read block_1, free once.\n");
 			}
 
-			ts->interface_data.read_buf = tp_devm_kzalloc(&client->dev, readlen,
+			ts->interface_data.read_buf = devm_kzalloc(&client->dev, readlen,
 						      GFP_KERNEL | GFP_DMA);
 
 			if (!ts->interface_data.read_buf) {
@@ -622,9 +572,8 @@ inline int touch_i2c_read(struct i2c_client *client, char *writebuf,
 
 	} else {
 		if (ts->interface_data.read_buf_size > FIX_I2C_LENGTH) {
-			tp_devm_kfree(&client->dev, (void **)&ts->interface_data.read_buf,
-				      ts->interface_data.read_buf_size);
-			ts->interface_data.read_buf = tp_devm_kzalloc(&client->dev, FIX_I2C_LENGTH,
+			devm_kfree(&client->dev, (void **)&ts->interface_data.read_buf);
+			ts->interface_data.read_buf = devm_kzalloc(&client->dev, FIX_I2C_LENGTH,
 						      GFP_KERNEL | GFP_DMA);
 
 			if (!ts->interface_data.read_buf) {
@@ -641,7 +590,7 @@ inline int touch_i2c_read(struct i2c_client *client, char *writebuf,
 
 		} else {
 			if (!ts->interface_data.read_buf) {
-				ts->interface_data.read_buf = tp_devm_kzalloc(&client->dev, FIX_I2C_LENGTH,
+				ts->interface_data.read_buf = devm_kzalloc(&client->dev, FIX_I2C_LENGTH,
 							      GFP_KERNEL | GFP_DMA);
 
 				if (!ts->interface_data.read_buf) {
@@ -701,19 +650,6 @@ inline int touch_i2c_read(struct i2c_client *client, char *writebuf,
 	}
 
 	memcpy(readbuf, ts->interface_data.read_buf, readlen);
-	if (writelen > 0) {
-		if (ts->health_monitor_support) {
-			ts->monitor_data.bus_buf = msg[0].buf;
-			ts->monitor_data.bus_len = msg[0].len;
-			tp_healthinfo_report(&ts->monitor_data, HEALTH_BUS, &retval);
-		}
-	} else {
-		if (ts->health_monitor_support) {
-			ts->monitor_data.bus_buf = message.buf;
-			ts->monitor_data.bus_len = message.len;
-			tp_healthinfo_report(&ts->monitor_data, HEALTH_BUS, &retval);
-		}
-	}
 
 	if (ts->exception_upload_support) {
 		if (retry == MAX_I2C_RETRY_TIME) {
@@ -721,6 +657,7 @@ inline int touch_i2c_read(struct i2c_client *client, char *writebuf,
 		} else {
 			ts->exception_data.bus_error_count = 0;
 		}
+		tp_exception_report(&ts->exception_data, EXCEP_BUS, "bus_failed", sizeof("bus_failed"));
 	}
 
 	mutex_unlock(&ts->interface_data.bus_mutex);
@@ -821,7 +758,7 @@ int32_t spi_read_write(struct spi_device *client, uint8_t *buf, size_t len,
 
 	switch (rw) {
 	case SPIREAD:
-		tx_buf = tp_devm_kzalloc(&client->dev, len + DUMMY_BYTES, GFP_KERNEL | GFP_DMA);
+		tx_buf = devm_kzalloc(&client->dev, len + DUMMY_BYTES, GFP_KERNEL | GFP_DMA);
 
 		if (!tx_buf) {
 			status = -ENOMEM;
@@ -830,7 +767,7 @@ int32_t spi_read_write(struct spi_device *client, uint8_t *buf, size_t len,
 
 		memset(tx_buf, 0xFF, len + DUMMY_BYTES);
 		memcpy(tx_buf, buf, len + DUMMY_BYTES);
-		rx_buf = tp_devm_kzalloc(&client->dev, len + DUMMY_BYTES, GFP_KERNEL | GFP_DMA);
+		rx_buf = devm_kzalloc(&client->dev, len + DUMMY_BYTES, GFP_KERNEL | GFP_DMA);
 
 		if (!rx_buf) {
 			status = -ENOMEM;
@@ -844,7 +781,7 @@ int32_t spi_read_write(struct spi_device *client, uint8_t *buf, size_t len,
 		break;
 
 	case SPIWRITE:
-		tx_buf = tp_devm_kzalloc(&client->dev, len, GFP_KERNEL | GFP_DMA);
+		tx_buf = devm_kzalloc(&client->dev, len, GFP_KERNEL | GFP_DMA);
 
 		if (!tx_buf) {
 			status = -ENOMEM;
@@ -869,11 +806,11 @@ int32_t spi_read_write(struct spi_device *client, uint8_t *buf, size_t len,
 spi_out:
 
 	if (tx_buf) {
-		tp_devm_kfree(&client->dev, (void **)&tx_buf, len + DUMMY_BYTES);
+		devm_kfree(&client->dev, (void **)&tx_buf);
 	}
 
 	if (rx_buf) {
-		tp_devm_kfree(&client->dev, (void **)&rx_buf, len + DUMMY_BYTES);
+		devm_kfree(&client->dev, (void **)&rx_buf);
 	}
 
 	return status;
@@ -968,7 +905,7 @@ int spi_write_firmware(struct spi_device *client, u8 *fw, u32 *len_array,
 	struct spi_message m;
 	struct spi_transfer *t;
 
-	t = tp_devm_kzalloc(&client->dev, sizeof(struct spi_transfer) * array_len,
+	t = devm_kzalloc(&client->dev, sizeof(struct spi_transfer) * array_len,
 			    GFP_KERNEL | GFP_DMA);
 
 	if (!t) {
@@ -1004,7 +941,7 @@ int spi_write_firmware(struct spi_device *client, u8 *fw, u32 *len_array,
 		TPD_INFO("error, ret=%d\n", ret);
 	}
 
-	tp_devm_kfree(&client->dev, (void **)&t, sizeof(struct spi_transfer)*array_len);
+	devm_kfree(&client->dev, (void **)&t);
 	return ret;
 }
 EXPORT_SYMBOL(spi_write_firmware);

@@ -9,29 +9,17 @@
 #include <linux/input.h>
 #include <linux/serio.h>
 #include <linux/regulator/consumer.h>
-#ifndef CONFIG_REMOVE_OPLUS_FUNCTION
-#include "oplus_project.h"
-#endif
 #include "touch.h"
-#include "../touch_comon_api/touch_comon_api.h"
 
 #define MAX_CMDLINE_PARAM_LEN 512
-char tp_dsi_display_primary[MAX_CMDLINE_PARAM_LEN] = "qcom,mdss_dsi_panel_samsung_amb670yf07_1440_3216_dsc_cmd:synaptics-s3908";
+char tp_dsi_display_primary[MAX_CMDLINE_PARAM_LEN];
 char tp_dsi_display_secondary[MAX_CMDLINE_PARAM_LEN];
 
 EXPORT_SYMBOL(tp_dsi_display_primary);
 EXPORT_SYMBOL(tp_dsi_display_secondary);
 
-#if defined(CONFIG_OPLUS_FEATURE_OPROJECT)
-extern unsigned int get_project(void);
-#else
- __attribute__((weak)) unsigned int get_project(void) {
-	return -1;
-}
-#endif
-
 #define MAX_LIMIT_DATA_LENGTH         100
-int g_tp_prj_id = 21001;
+int g_tp_prj_id = 0;
 int g_tp_dev_vendor = TP_UNKNOWN;
 int j = 0;
 char *chip_name = NULL;
@@ -94,16 +82,15 @@ EXPORT_SYMBOL(tp_judge_ic_match);
 
 int tp_judge_ic_match_commandline(struct panel_info *panel_data)
 {
-	int prj_id = 0;
+	int prj_id = 133194;
 	int i = 0;
-	prj_id = get_project();
 
-	TPD_INFO("[TP] prj_id = %d\n", prj_id);
-	TPD_INFO("[TP] tp_dsi_display_primary = %s \n", tp_dsi_display_primary);
+	pr_err("[TP] prj_id = %d\n", prj_id);
+	pr_err("[TP] tp_dsi_display_primary = %s \n", tp_dsi_display_primary);
 	for(i = 0; i < panel_data->project_num; i++) {
 		if(prj_id == panel_data->platform_support_project[i]) {
 			g_tp_prj_id = panel_data->platform_support_project_dir[i];
-			TPD_INFO("[TP] Driver match support project [%d]\n", panel_data->platform_support_project[i]);
+			pr_err("[TP] Driver match support project [%d]\n", panel_data->platform_support_project[i]);
 
 			for(j = 0; j < panel_data->panel_num; j++) {
 				if(strstr(tp_dsi_display_primary, panel_data->platform_support_commandline[j]) \
@@ -112,64 +99,20 @@ int tp_judge_ic_match_commandline(struct panel_info *panel_data)
 					panel_data->tp_type = panel_data->panel_type[j];
 					if(panel_data->chip_num > 1) {
 						chip_name = panel_data->chip_name[j];
-						TPD_INFO("[TP] WGL--1 chip_name = %s, panel_data->chip_name = %s", chip_name, panel_data->chip_name[j]);
+						pr_err("[TP] WGL--1 chip_name = %s, panel_data->chip_name = %s", chip_name, panel_data->chip_name[j]);
 					}
-					TPD_INFO("[TP] match panel type OK , panel type is [%d]\n", panel_data->tp_type);
+					pr_err("[TP] match panel type OK , panel type is [%d]\n", panel_data->tp_type);
 					return j;
 				}
-				TPD_INFO("[TP] Panel not found\n");
+				pr_err("[TP] Panel not found\n");
 			}
 		}
 	}
-	TPD_INFO("[TP] Driver does not match the project\n");
+	pr_err("[TP] Driver does not match the project\n");
 	return -1;
 }
 EXPORT_SYMBOL(tp_judge_ic_match_commandline);
 
-#ifndef CONFIG_REMOVE_OPLUS_FUNCTION
-int tp_util_get_vendor(struct hw_resource *hw_res, struct panel_info *panel_data)
-{
-	char *vendor;
-
-	panel_data->test_limit_name = kzalloc(MAX_LIMIT_DATA_LENGTH, GFP_KERNEL|GFP_DMA);
-	if (panel_data->test_limit_name == NULL) {
-		pr_err("[TP]panel_data.test_limit_name kzalloc error\n");
-	}
-
-	if (panel_data->tp_type == TP_UNKNOWN) {
-		pr_err("[TP]%s type is unknown\n", __func__);
-		return 0;
-	}
-	if (panel_data->firmware_name[j]) {
-		memcpy(panel_data->manufacture_info.version, panel_data->firmware_name[j], strlen(panel_data->firmware_name[j]));
-		panel_data->vid_len = strlen(panel_data->firmware_name[j]);
-	}
-
-	vendor = GET_TP_DEV_NAME(panel_data->tp_type);
-	if(panel_data->chip_num == 1) {
-		chip_name = panel_data->chip_name[0];
-	}
-	strcpy(panel_data->manufacture_info.manufacture, vendor);
-	snprintf(panel_data->fw_name, MAX_FW_NAME_LENGTH,
-		"tp/%d/FW_%s_%s.img",
-		g_tp_prj_id, chip_name, vendor);
-
-	if (panel_data->test_limit_name) {
-		snprintf(panel_data->test_limit_name, MAX_LIMIT_DATA_LENGTH,
-			"tp/%d/LIMIT_%s_%s.img",
-			g_tp_prj_id, chip_name, vendor);
-	}
-
-	panel_data->manufacture_info.fw_path = panel_data->fw_name;
-
-	pr_info("[TP]vendor:%s fw:%s limit:%s\n",
-		vendor,
-		panel_data->fw_name,
-		panel_data->test_limit_name==NULL?"NO Limit":panel_data->test_limit_name);
-	return 0;
-}
-EXPORT_SYMBOL(tp_util_get_vendor);
-#endif
 int preconfig_power_control(struct touchpanel_data *ts)
 {
 	return 0;

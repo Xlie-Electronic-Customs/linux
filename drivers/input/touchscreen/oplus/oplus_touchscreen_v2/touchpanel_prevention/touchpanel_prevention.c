@@ -10,8 +10,7 @@
 
 #include "../touchpanel_common.h"
 #include "touchpanel_prevention.h"
-#include "../touch_comon_api/touch_comon_api.h"
-#include "../touchpanel_healthinfo/touchpanel_healthinfo.h"
+#include "../touch_comon_api.h"
 
 /*******Start of LOG TAG Declear**********************************/
 #ifdef TPD_DEVICE
@@ -20,7 +19,6 @@
 #else
 #define TPD_DEVICE "prevent"
 #endif
-
 
 static void grip_prase_reclining_mode_handle(struct kernel_grip_info *grip_info);
 
@@ -45,35 +43,6 @@ static bool dead_grip_judged(struct kernel_grip_info *grip_info,
 	}
 
 	return true;
-}
-
-/* strategy 1: dead rejection*/
-int dead_grip_handle(struct kernel_grip_info *grip_info, int obj_attention,
-		     struct point_info *points)
-{
-	int i = 0;
-	bool is_exit = false;
-	int obj_final = obj_attention;
-
-	for (i = 0; i < TOUCH_MAX_NUM; i++) {
-		if (((obj_attention & TOUCH_BIT_CHECK) >> i) & 0x01) {
-			if (grip_info->dead_out_status[i]) {    /*if already outside the range, skip handle*/
-				continue;
-			}
-
-			is_exit = dead_grip_judged(grip_info, points[i]);
-			grip_info->dead_out_status[i] = is_exit;        /*set outside flag*/
-
-			if (!is_exit) {
-				obj_final = obj_final & (~(1 << i));
-			}
-
-		} else {
-			grip_info->dead_out_status[i] = 0;
-		}
-	}
-
-	return obj_final;
 }
 
 static void init_filter_data(struct kernel_grip_info *grip_info, uint8_t index,
@@ -695,10 +664,6 @@ static  inline void touch_report_work(struct work_struct *work, unsigned int i)
 	}
 #endif
 
-	if (ts->health_monitor_support) {
-		tp_healthinfo_report(&ts->monitor_data, HEALTH_GRIP_UP, &up_id);
-		TPD_DETAIL("healthinfo point %d report UP in grip\n", up_id);
-	}
 
 	ts->grip_info->grip_hold_status[up_id] = 0;
 OUT:
@@ -721,60 +686,6 @@ touch_report_work(6)
 touch_report_work(7)
 touch_report_work(8)
 touch_report_work(9)
-
-static inline enum hrtimer_restart touch_up_timer_func(struct hrtimer *hrtimer,
-		unsigned int i)
-{
-	struct touchpanel_data *ts = NULL;
-	struct kernel_grip_info *grip_info = NULL;
-
-	if (i >= TOUCH_MAX_NUM) {
-		TPD_INFO("%s: i %d is too big\n", __func__,  i);
-		return HRTIMER_NORESTART;
-	}
-
-	grip_info = container_of(hrtimer, struct kernel_grip_info, grip_up_timer[i]);
-
-	if (!grip_info) {
-		TPD_INFO("grip_info is null.\n");
-		return HRTIMER_NORESTART;
-	}
-
-	ts = grip_info->p_ts;
-
-	if (!ts) {
-		TPD_INFO("ts is null.\n");
-		return HRTIMER_NORESTART;
-	}
-
-	TPD_INFO("time called once.\n");
-	grip_info->work_id++;
-
-	if (grip_info->work_id >= TOUCH_MAX_NUM) {
-		grip_info->work_id = 0;
-	}
-
-	queue_work(ts->grip_info->grip_up_handle_wq,
-		   &ts->grip_info->grip_up_work[grip_info->work_id]);
-	return HRTIMER_NORESTART;
-}
-
-#define touch_up_timer_func(index) \
-static enum hrtimer_restart touch_up_timer_func##index(struct hrtimer *hrtimer) \
-{ \
-	return touch_up_timer_func(hrtimer, index); \
-}
-
-touch_up_timer_func(0)
-touch_up_timer_func(1)
-touch_up_timer_func(2)
-touch_up_timer_func(3)
-touch_up_timer_func(4)
-touch_up_timer_func(5)
-touch_up_timer_func(6)
-touch_up_timer_func(7)
-touch_up_timer_func(8)
-touch_up_timer_func(9)
 
 static int large_condition_handle(struct kernel_grip_info *grip_info,
 				  int obj_attention, struct point_info *points)
@@ -4510,21 +4421,11 @@ static void proc_reclining_mode_handle(struct kernel_grip_info *grip_info)
 	if (VERTICAL_RECLINING_MODE == grip_info->touch_reclining_mode) {
 		transform_reclining_para(grip_info);
 		grip_info->grip_moni_data.vertical_reclining_mode_times++;
-		if (ts->health_monitor_support) {
-			reset_healthinfo_time_counter(&grip_info->reclining_start_time);
-		}
 	} else if (LANDSCAPE_RECLINING_MODE == grip_info->touch_reclining_mode) {
 		transform_reclining_para(grip_info);
 		grip_info->grip_moni_data.landscape_reclining_mode_times++;
-		if (ts->health_monitor_support) {
-			reset_healthinfo_time_counter(&grip_info->reclining_start_time);
-		}
 	} else {
 		transform_normal_para(grip_info);
-		if (ts->health_monitor_support) {
-			tp_healthinfo_report(&ts->monitor_data, HEALTH_GRIP_RECLINING, grip_info);
-			grip_info->reclining_start_time = 0;
-		}
 	}
 	return;
 }
@@ -4932,13 +4833,6 @@ static int kernel_grip_init_V2(struct kernel_grip_info *grip_info, struct device
 		touch_report_work6, touch_report_work7, touch_report_work8,
 		touch_report_work9
 	};
-	enum hrtimer_restart(*p_touch_up_timer_func[TOUCH_MAX_NUM])(
-	struct hrtimer * hrtimer) = {
-		touch_up_timer_func0, touch_up_timer_func1, touch_up_timer_func2,
-		touch_up_timer_func3, touch_up_timer_func4, touch_up_timer_func5,
-		touch_up_timer_func6, touch_up_timer_func7, touch_up_timer_func8,
-		touch_up_timer_func9
-	};
 
 	if (grip_info == NULL) {
 		return -1;
@@ -5222,7 +5116,7 @@ static int kernel_grip_init_V2(struct kernel_grip_info *grip_info, struct device
 		return -1;
 	}
 	for (i_index = 0; i_index < TOUCH_MAX_NUM; i_index++) {
-		hrtimer_setup(&grip_info->grip_up_timer[i_index], p_touch_up_timer_func[i_index], CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+		hrtimer_setup(&grip_info->grip_up_timer[i_index], grip_info->grip_up_timer[i_index].function, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 		INIT_WORK(&grip_info->grip_up_work[i_index], p_touch_report_work[i_index]);
 	}
 	grip_info->grip_up_handle_wq = create_singlethread_workqueue("touch_up_wq");
@@ -5254,13 +5148,6 @@ struct kernel_grip_info *kernel_grip_init(struct device *dev)
 		touch_report_work3, touch_report_work4, touch_report_work5,
 		touch_report_work6, touch_report_work7, touch_report_work8,
 		touch_report_work9
-	};
-	enum hrtimer_restart(*p_touch_up_timer_func[TOUCH_MAX_NUM])(
-	struct hrtimer * hrtimer) = {
-		touch_up_timer_func0, touch_up_timer_func1, touch_up_timer_func2,
-		touch_up_timer_func3, touch_up_timer_func4, touch_up_timer_func5,
-		touch_up_timer_func6, touch_up_timer_func7, touch_up_timer_func8,
-		touch_up_timer_func9
 	};
 	struct touchpanel_data *ts = dev_get_drvdata(dev);
 
@@ -5957,7 +5844,7 @@ struct kernel_grip_info *kernel_grip_init(struct device *dev)
 	}
 
 	for (i = 0; i < TOUCH_MAX_NUM; i++) {
-		hrtimer_setup(&grip_info->grip_up_timer[i], p_touch_up_timer_func[i], CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+		hrtimer_setup(&grip_info->grip_up_timer[i], grip_info->grip_up_timer[i].function, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 		INIT_WORK(&grip_info->grip_up_work[i], p_touch_report_work[i]);
 	}
 
