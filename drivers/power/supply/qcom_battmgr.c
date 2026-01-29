@@ -38,6 +38,29 @@ enum qcom_battmgr_variant {
 #define NOTIF_BAT_INFO			0x81
 #define NOTIF_BAT_CHARGING_STATE	0x83
 
+#define BC_VOOC_STATUS_GET			0X48
+#define BC_VOOC_STATUS_SET			0X49
+#define BC_OTG_ENABLE					0x50
+#define BC_OTG_DISABLE					0x51
+#define BC_VOOC_VBUS_ADC_ENABLE		0x52
+#define BC_CID_DETECT					0x53
+#define BC_QC_DETECT					0x54
+#define BC_TYPEC_STATE_CHANGE			0x55
+#define BC_PD_SVOOC					0x56
+#define BC_PLUGIN_IRQ					0x57
+#define BC_APSD_DONE					0x58
+#define BC_CHG_STATUS_GET				0x59
+#define BC_PD_SOFT_RESET				0x5A
+#define BC_CHG_STATUS_SET				0x60
+#define BC_ADSP_NOTIFY_AP_SUSPEND_CHG 0X61
+#define BC_ADSP_NOTIFY_AP_CP_BYPASS_INIT                         0x0062
+#define BC_ADSP_NOTIFY_AP_CP_MOS_ENABLE                          0x0063
+#define BC_ADSP_NOTIFY_AP_CP_MOS_DISABLE                         0x0064
+#define BC_PPS_OPLUS                    0x65
+#define BC_ADSP_NOTIFY_TRACK				0x66
+#define BC_ABNORMAL_PD_SVOOC_ADAPTER 0x67
+#define BC_PD_SOURCECAP_DONE 0x79
+
 #define BATTMGR_BAT_INFO		0x9
 
 #define BATTMGR_BAT_DISCHARGE_TIME	0xc
@@ -1215,6 +1238,18 @@ static void qcom_battmgr_notification(struct qcom_battmgr *battmgr,
 		break;
 	case NOTIF_WLS_PROPERTY:
 		power_supply_changed(battmgr->wls_psy);
+		break;
+	case BC_CID_DETECT:
+		dev_warn(battmgr->dev, "BC_CID_DETECT notification curenly is not supported\n");
+		break;
+	case BC_TYPEC_STATE_CHANGE:
+		dev_warn(battmgr->dev, "BC_TYPEC_STATE_CHANGE notification curenly is not supported\n");
+		break;
+	case BC_PLUGIN_IRQ:
+		dev_warn(battmgr->dev, "BC_PLUGIN_IRQ notification curenly is not supported\n");
+		break;
+	case BC_ADSP_NOTIFY_AP_CP_MOS_DISABLE:
+		dev_warn(battmgr->dev, "BC_ADSP_NOTIFY_AP_CP_MOS_DISABLE notification curenly is not supported\n");
 		break;
 	default:
 		dev_err(battmgr->dev, "unknown notification: %#x\n", notification);

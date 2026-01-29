@@ -513,6 +513,13 @@ config CHARGER_CPCAP
 	  Say Y to enable support for CPCAP PMIC charger driver for Motorola
 	  mobile devices such as Droid 4.
 
+config CHARGER_HL7227
+	tristate "HL7227 charger"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Say Y to include support for the HL7227 battery charger connected to I2C.
+
 config CHARGER_ISP1704
 	tristate "ISP1704 USB Charger Detection"
 	depends on USB_PHY
