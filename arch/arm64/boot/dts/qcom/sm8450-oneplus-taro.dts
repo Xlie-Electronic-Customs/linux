@@ -787,6 +787,52 @@
 
 	};
 
+	nfc_default: nfc-default-state {
+		nfc_int_active: nfc_int_active-state {
+			pins = "gpio46";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+
+		nfc_enable_active: nfc_enable_active-state {
+			pins = "gpio34";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+
+		nfc_clk_req_active: nfc_clk_req_active-state {
+			pins = "gpio35";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+	};
+
+	nfc_sleep: nfc-sleep-state {
+		nfc_int_suspend: nfc_int_suspend-state {
+			pins = "gpio46";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+
+		nfc_enable_suspend: nfc_enable_suspend-state {
+			pins = "gpio34";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-disable;
+		};
+
+		nfc_clk_req_suspend: nfc_clk_req_suspend-state {
+			pins = "gpio35";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-disable;
+		};
+	};
+
 	cp_en_active: cp_en_active {
 		pins = "gpio70";
 		function = "gpio";
@@ -961,92 +1007,92 @@
 	/* for hl7227 charger and p9415 wireless charger  */
 };
 
-// &i2c4 {
-// 	clock-frequency = <400000>;
-// 	status = "okay";
-//
-// 	synaptics20031@4b {
-// 		compatible = "synaptics-s3908";
-// 		reg = <0x4b>;
-// 		chip-name = "S3908";
-//
-// 		/* Interrupt && Irq-gpio */
-// 		interrupt-parent = <&tlmm>;
-// 		interrupts = <15 0x2008>;
-//
-// 		/* Power Config */
-// 		//enable2v8_gpio = <&tlmm 26 0x1>;
-// 		enable1v8_gpio = <&tlmm 186 0x1>;
-// 		vdd_2v8-supply = <&pm8350c_l3>;
-// 		vcc_1v8-supply = <&pm8350c_l6>;
-// 		vdd_2v8_volt = <3008000>;
-//
-// 		/* Other HW Resource */
-// 		irq-gpio = <&tlmm 15 0x2008>;
-// 		reset-gpio = <&tlmm 14 GPIO_ACTIVE_HIGH>;
-// 		pinctrl-names = "default";
-// 		pinctrl-0 = <&ts_int_active &ts_reset_active>;
-//
-// 		touchpanel,max-num-support = <10>;
-// 		touchpanel,tx-rx-num = <17 38>;
-// 		earsense,tx-rx-num = <17 18>;
-// 		touchpanel,panel-coords = <5760 12864>;
-// 		touchpanel,display-coords = <1440 3216>;
-// 		touchpanel,touchmajor-limit = <256 256>;
-// 		touchpanel,int-mode = <1>; /*0: interrupt and disable, 1:interrupt and not disable*/
-// 		touchpanel,curved-size = <45>;
-//
-// 		prevention,curved_screen_V2;
-// 		prevention,grip_disable_level = <6>;
-// 		prevention,updelay_time_ms = <30>;
-// 		prevention,makeup_cnt_weight = <4 1 2 2 2>;
-// 		prevention,large_corner_range = <600 1400>;
-// 		prevention,large_corner_judge_condition = <500 100 600 4 4>;
-// 		prevention,trx_reject_condition = <8 7 7>;
-// 		prevention,trx_strict_reject_condition = <8 5 5>;
-// 		prevention,large_judge_time_ms = <500 50 40>;
-// 		prevention,large_exit_condition = <8 8 2>;
-// 		prevention,single_channel_width = <160 160>;
-// 		prevention,normal_tap_condition = <10 300>;
-// 		prevention,long_edge_condition = <230 90 180 80>;
-// 		prevention,long_strict_edge_condition = <160 60>;
-// 		prevention,long_fingerhold_condition = <50 6 4 4>;
-// 		prevention,short_edge_condition = <200 90 180 80>;
-// 		prevention,short_strict_edge_condition = <160 60>;
-// 		prevention,large_strict_exit_condition = <2 2>;
-// 		prevention,top_corner_config = <280 800 240>;
-// 		prevention,edge_swipe_config = <150 400>;
-//
-// 		touchpanel,smooth-level = <0 1 2 4 7 9>;
-// 		touchpanel,smooth-level-charging = <0 2 4 7 8 9>;
-// 		touchpanel,sensitive-level = <0 70 55 40 25 10>;
-// 		touchpanel,single-optimized-time = <8>;
-// 		touchpanel,high-frame-rate-time = <60>;
-//
-// 		end_stretch_value = <480 250 16 16>;
-//
-// 		touchpanel,tp_ic_type = <2>;
-// 		panel_type = <8>;
-// 		tp_type = <8>;
-// 		// type of tp_dev ,TP-SAMSUNG = 8;
-// 		project_id = <0x2084A>;
-// 		firmware_name = "SS";
-// 		platform_support_project = <0x2084A>;
-// 		platform_support_project_dir = <21001>;
-// 		platform_support_project_commandline = "mdss_dsi_panel_samsung_amb670yf07_1440_3216_dsc_cmd";
-//
-// 		touchpanel,button-type = <4>;
-// 		touchpanel.button-TRx = <0 0>;
-//
-// 		S3908 {
-// 			report_rate_default = <60>;
-// 			report_rate_game_value = <2>;
-// 			default_gesture_mask = <8191>;
-// 			fwupdate_bootloader = <1>;
-// 		};
-//
-// 	};
-// };
+&i2c4 {
+	clock-frequency = <400000>;
+	status = "disabled";
+
+	synaptics20031@4b {
+		compatible = "synaptics-s3908";
+		reg = <0x4b>;
+		chip-name = "S3908";
+
+		/* Interrupt && Irq-gpio */
+		interrupt-parent = <&tlmm>;
+		interrupts = <21 0x2008>;
+
+		/* Power Config */
+		//enable2v8_gpio = <&tlmm 26 0x1>;
+		enable1v8_gpio = <&tlmm 186 0x1>;
+		vdd_2v8-supply = <&pm8350c_l3>;
+		vcc_1v8-supply = <&pm8350c_l6>;
+		vdd_2v8_volt = <3008000>;
+
+		/* Other HW Resource */
+		irq-gpio = <&tlmm 21 0x2008>;
+		reset-gpio = <&tlmm 20 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&ts_int_active &ts_reset_active>;
+
+		touchpanel,max-num-support = <10>;
+		touchpanel,tx-rx-num = <17 38>;
+		earsense,tx-rx-num = <17 18>;
+		touchpanel,panel-coords = <5760 12864>;
+		touchpanel,display-coords = <1440 3216>;
+		touchpanel,touchmajor-limit = <256 256>;
+		touchpanel,int-mode = <1>; /*0: interrupt and disable, 1:interrupt and not disable*/
+		touchpanel,curved-size = <45>;
+
+		prevention,curved_screen_V2;
+		prevention,grip_disable_level = <6>;
+		prevention,updelay_time_ms = <30>;
+		prevention,makeup_cnt_weight = <4 1 2 2 2>;
+		prevention,large_corner_range = <600 1400>;
+		prevention,large_corner_judge_condition = <500 100 600 4 4>;
+		prevention,trx_reject_condition = <8 7 7>;
+		prevention,trx_strict_reject_condition = <8 5 5>;
+		prevention,large_judge_time_ms = <500 50 40>;
+		prevention,large_exit_condition = <8 8 2>;
+		prevention,single_channel_width = <160 160>;
+		prevention,normal_tap_condition = <10 300>;
+		prevention,long_edge_condition = <230 90 180 80>;
+		prevention,long_strict_edge_condition = <160 60>;
+		prevention,long_fingerhold_condition = <50 6 4 4>;
+		prevention,short_edge_condition = <200 90 180 80>;
+		prevention,short_strict_edge_condition = <160 60>;
+		prevention,large_strict_exit_condition = <2 2>;
+		prevention,top_corner_config = <280 800 240>;
+		prevention,edge_swipe_config = <150 400>;
+
+		touchpanel,smooth-level = <0 1 2 4 7 9>;
+		touchpanel,smooth-level-charging = <0 2 4 7 8 9>;
+		touchpanel,sensitive-level = <0 70 55 40 25 10>;
+		touchpanel,single-optimized-time = <8>;
+		touchpanel,high-frame-rate-time = <60>;
+
+		end_stretch_value = <480 250 16 16>;
+
+		touchpanel,tp_ic_type = <2>;
+		panel_type = <8>;
+		tp_type = <8>;
+		// type of tp_dev ,TP-SAMSUNG = 8;
+		project_id = <0x2084A>;
+		firmware_name = "SS";
+		platform_support_project = <0x2084A>;
+		platform_support_project_dir = <21001>;
+		platform_support_project_commandline = "mdss_dsi_panel_samsung_amb670yf07_1440_3216_dsc_cmd";
+
+		touchpanel,button-type = <4>;
+		touchpanel.button-TRx = <0 0>;
+
+		S3908 {
+			report_rate_default = <60>;
+			report_rate_game_value = <2>;
+			default_gesture_mask = <8191>;
+			fwupdate_bootloader = <1>;
+		};
+
+	};
+};
 
 // &i2c5 {
 // 	clock-frequency = <100000>;
@@ -1073,6 +1119,25 @@
 // 	/* pm8008j @ c */
 // 	/* pm8008j @ d */
 // };
+
+&i2c9 {
+	clock-frequency = <100000>;
+	status = "okay";
+
+	nfc: sn-nci@28 {
+		compatible = "qcom,sn-nci", "nxp,nxp-nci-i2c";
+		reg = <0x28>;
+		qcom,sn-irq = <&tlmm 46 GPIO_ACTIVE_LOW>;
+		enable-gpios = <&tlmm 34 GPIO_ACTIVE_LOW>;
+		qcom,sn-clkreq = <&tlmm 35 GPIO_ACTIVE_LOW>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <46 0>;
+		interrupt-names = "nfc_irq";
+		pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&nfc_default>;
+		pinctrl-1 = <&nfc_sleep>;
+	};
+};
 
 
 &uart7 {
@@ -1118,7 +1183,6 @@
 };
 
 &usb_1 {
-	dr_mode = "otg";
 	maximum-speed = "super-speed";
 	status = "okay";
 };
