@@ -77,7 +77,6 @@ extern unsigned int tp_debug;
 					printk(a, ##arg);\
 			}while(0)
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 #define DECLARE_PROC_OPS(name, open_func, read_func, write_func, release_func) \
 					static const struct proc_ops name = { \
 						.proc_open	= open_func,	  \
@@ -86,16 +85,6 @@ extern unsigned int tp_debug;
 						.proc_release = release_func, \
 						.proc_lseek	= default_llseek, \
 					}
-#else
-#define DECLARE_PROC_OPS(name, open_func, read_func, write_func, release_func) \
-					static const struct file_operations name = { \
-						.open  = open_func, 	 \
-						.write = write_func,	 \
-						.read  = read_func, 	 \
-						.release = release_func, \
-						.owner = THIS_MODULE,	 \
-					}
-#endif
 
 /*******Part1: common api Area********************************/
 

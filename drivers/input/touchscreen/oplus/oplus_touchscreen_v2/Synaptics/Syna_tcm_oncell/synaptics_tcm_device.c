@@ -199,16 +199,7 @@ static int device_capture_touch_report_config(struct device_hcd *device_hcd,
 	return 0;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,10,0)
 static long device_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
-#else
-#ifdef HAVE_UNLOCKED_IOCTL
-static long device_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
-#else
-static int device_ioctl(struct inode *inp, struct file *filp, unsigned int cmd,
-			unsigned long arg)
-#endif
-#endif
 {
 	int retval = 0;
 	struct device_hcd *device_hcd  = NULL;
@@ -510,18 +501,7 @@ static int device_create_class(struct device_hcd *device_hcd)
 
 static const struct file_operations device_fops = {
 	.owner = THIS_MODULE,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,10,0)
 	.unlocked_ioctl = device_ioctl,
-#else
-#ifdef HAVE_UNLOCKED_IOCTL
-	.unlocked_ioctl = device_ioctl,
-#ifdef HAVE_COMPAT_IOCTL
-	.compat_ioctl = device_ioctl,
-#endif
-#else
-	.ioctl = device_ioctl,
-#endif
-#endif
 	.llseek = device_llseek,
 	.read = device_read,
 	.write = device_write,

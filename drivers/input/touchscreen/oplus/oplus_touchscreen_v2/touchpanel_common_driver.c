@@ -1296,16 +1296,12 @@ static irqreturn_t tp_irq_thread_fn(int irq, void *dev_id)
 
 	if (ts->pm_qos_state && !ts->is_suspended && !ts->touch_count) {
 		ts->pm_qos_value = PM_QOS_TOUCH_WAKEUP_VALUE;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,10,0)
 
 		if (!cpu_latency_qos_request_active(&ts->pm_qos_req)) {
 			cpu_latency_qos_add_request(&ts->pm_qos_req, ts->pm_qos_value);
 		} else {
 			cpu_latency_qos_update_request(&ts->pm_qos_req, ts->pm_qos_value);
 		}
-#else
-		pm_qos_update_request(&ts->pm_qos_req, ts->pm_qos_value);
-#endif
 	}
 
 #endif
@@ -1364,12 +1360,8 @@ exit:
 
 	if (PM_QOS_TOUCH_WAKEUP_VALUE == ts->pm_qos_value) {
 		ts->pm_qos_value = PM_QOS_DEFAULT_VALUE;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,10,0)
 
 		cpu_latency_qos_remove_request(&ts->pm_qos_req);
-#else
-		pm_qos_update_request(&ts->pm_qos_req, ts->pm_qos_value);
-#endif
 	}
 
 #endif
@@ -1670,197 +1662,6 @@ static struct device_node* is_support_child_node (struct device *dev,  struct to
 
 	kfree(panel_node);
 	return child_node;
-}
-
-/**
- * init_panel_config - parse panel dts, get resource defined in Dts
- * If you want to configure multiple panels, you can combine them "chip_name"_"panle_name"
- */
-static void init_panel_config(struct device *dev, struct touchpanel_data *ts)
-{
-	struct device_node *chip_np;
-	int temp_array[8];
-	int tx_rx_num[2];
-	int rc = 0;
-	int i = 0;
-	int val = 0;
-	chip_np = is_support_child_node(dev, ts);
-	if (!chip_np) {
-		return;
-	}
-
-	/* irq gpio*/
-	ts->hw_res.irq_gpio = of_get_named_gpio(chip_np, "irq-gpio", 0);
-	if (gpio_is_valid(ts->hw_res.irq_gpio)) {
-		rc = gpio_request(ts->hw_res.irq_gpio, "tp_irq_gpio");
-		if (rc) {
-			TP_INFO(ts->tp_index, "unable to request gpio [%d]\n", ts->hw_res.irq_gpio);
-		}
-	} else {
-		TP_BOOT_INFO(ts->tp_index, "irq-gpio not specified in dts\n");
-	}
-
-	/* reset gpio*/
-	ts->hw_res.reset_gpio = of_get_named_gpio(chip_np, "reset-gpio", 0);
-	if (gpio_is_valid(ts->hw_res.reset_gpio)) {
-		rc = gpio_request(ts->hw_res.reset_gpio, "reset-gpio");
-		if (rc) {
-			TP_INFO(ts->tp_index, "unable to request gpio [%d]\n", ts->hw_res.reset_gpio);
-		}
-	} else {
-		TP_BOOT_INFO(ts->tp_index, "ts->reset-gpio not specified\n");
-	}
-
-	TP_BOOT_INFO(ts->tp_index, "%s : irq_gpio = %d, irq_flags = 0x%x, reset_gpio = %d\n",
-		 __func__, ts->hw_res.irq_gpio, ts->irq_flags, ts->hw_res.reset_gpio);
-		/* resolution info*/
-	rc = of_property_read_u32(chip_np, "touchpanel,max-num-support", &ts->max_num);
-
-	if (rc) {
-		TP_BOOT_INFO(ts->tp_index, "ts->max_num not specified\n");
-		ts->max_num = 10;
-	}
-
-	rc = of_property_read_u32_array(chip_np, "touchpanel,tx-rx-num", tx_rx_num, 2);
-
-	if (rc) {
-		TP_BOOT_INFO(ts->tp_index, "tx-rx-num not set\n");
-		ts->hw_res.tx_num = 0;
-		ts->hw_res.rx_num = 0;
-
-	} else {
-		ts->hw_res.tx_num = tx_rx_num[0];
-		ts->hw_res.rx_num = tx_rx_num[1];
-	}
-
-	TP_BOOT_INFO(ts->tp_index, "tx_num = %d, rx_num = %d \n", ts->hw_res.tx_num, ts->hw_res.rx_num);
-
-	rc = of_property_read_u32_array(chip_np, "touchpanel,display-coords", temp_array, 2);
-
-	if (rc) {
-		TP_BOOT_INFO(ts->tp_index, "Lcd size not set\n");
-		ts->resolution_info.LCD_WIDTH = 0;
-		ts->resolution_info.LCD_HEIGHT = 0;
-
-	} else {
-		ts->resolution_info.LCD_WIDTH = temp_array[0];
-		ts->resolution_info.LCD_HEIGHT = temp_array[1];
-	}
-
-	rc = of_property_read_u32_array(chip_np, "touchpanel,panel-coords", temp_array, 2);
-
-	if (rc) {
-		ts->resolution_info.max_x = 0;
-		ts->resolution_info.max_y = 0;
-
-	} else {
-		ts->resolution_info.max_x = temp_array[0];
-		ts->resolution_info.max_y = temp_array[1];
-	}
-
-	rc = of_property_read_u32_array(chip_np, "touchpanel,touchmajor-limit", temp_array,
-					2);
-
-	if (rc) {
-		ts->touch_major_limit.width_range = 0;
-		ts->touch_major_limit.height_range = 54;    /*set default value*/
-
-	} else {
-		ts->touch_major_limit.width_range = temp_array[0];
-		ts->touch_major_limit.height_range = temp_array[1];
-	}
-
-	TP_BOOT_INFO(ts->tp_index, "LCD_WIDTH = %d, LCD_HEIGHT = %d, max_x = %d, max_y = %d, limit_witdh = %d, limit_height = %d\n",
-		 ts->resolution_info.LCD_WIDTH, ts->resolution_info.LCD_HEIGHT,
-		 ts->resolution_info.max_x, ts->resolution_info.max_y, \
-		 ts->touch_major_limit.width_range, ts->touch_major_limit.height_range);
-	rc = of_property_read_u32_array(chip_np, "touchpanel,smooth-level", temp_array, SMOOTH_LEVEL_NUM);
-	if (rc) {
-		TP_BOOT_INFO(ts->tp_index, "smooth_level_array not specified %d\n", rc);
-	} else {
-		ts->smooth_level_array_support = true;
-		for (i=0; i < SMOOTH_LEVEL_NUM; i++) {
-			ts->smooth_level_array[i] = temp_array[i];
-		}
-
-		rc = of_property_read_u32_array(chip_np,
-						"touchpanel,smooth-level-charging",
-						temp_array,
-						SMOOTH_LEVEL_NUM);
-		if (rc) {
-			TP_BOOT_INFO(ts->tp_index, "smooth_level_charging_array not specified %d\n", rc);
-			for (i=0; i < SMOOTH_LEVEL_NUM; i++) {
-				ts->smooth_level_charging_array[i] = ts->smooth_level_array[i];
-			}
-		} else {
-			for (i=0; i < SMOOTH_LEVEL_NUM; i++) {
-				ts->smooth_level_charging_array[i] = temp_array[i];
-			}
-		}
-		ts->smooth_level_used_array = (u32 *)&(ts->smooth_level_array);
-	}
-
-	rc = of_property_read_u32_array(chip_np, "touchpanel,sensitive-level", temp_array, SENSITIVE_LEVEL_NUM);
-	if (rc) {
-		TP_BOOT_INFO(ts->tp_index, "sensitive_level_array not specified %d\n", rc);
-	} else {
-		ts->sensitive_level_array_support = true;
-		for (i=0; i < SENSITIVE_LEVEL_NUM; i++) {
-			ts->sensitive_level_array[i] = temp_array[i];
-		}
-
-		rc = of_property_read_u32_array(chip_np,
-						"touchpanel,sensitive-level-charging",
-						temp_array,
-						SENSITIVE_LEVEL_NUM);
-		if (rc) {
-			TP_BOOT_INFO(ts->tp_index, "sensitive_charging_array not specified %d\n", rc);
-			for (i=0; i < SENSITIVE_LEVEL_NUM; i++) {
-				ts->sensitive_level_charging_array[i] = ts->sensitive_level_array[i];
-			}
-		} else {
-			for (i=0; i < SENSITIVE_LEVEL_NUM; i++) {
-				ts->sensitive_level_charging_array[i] = temp_array[i];
-			}
-		}
-		ts->sensitive_level_used_array = (u32 *)&(ts->sensitive_level_array);
-	}
-
-	rc = of_property_read_u32(chip_np, "touchpanel,single-optimized-time", &ts->single_optimized_time);
-	if (rc) {
-		TP_BOOT_INFO(ts->tp_index, "ts->single_optimized_time not specified\n");
-		ts->single_optimized_time = 0;
-		ts->optimized_show_support = false;
-	} else {
-		ts->total_operate_times = 0;
-		ts->optimized_show_support = true;
-	}
-
-	rc = of_property_read_u32(chip_np, "touchpanel,high-frame-rate-time", &ts->high_frame_rate_time);
-	if (rc) {
-		TP_BOOT_INFO(ts->tp_index, "ts->high_frame_rate_time not specified or support\n");
-		ts->high_frame_rate_time = 0;
-		ts->high_frame_rate_support = false;
-	} else {
-		ts->high_frame_rate_support = true;
-	}
-
-	/*set disable suspend irq handler parameter, for of_property_read_bool return 1 when success and return 0 when item is not exist*/
-	ts->disable_suspend_irq_handler = of_property_read_bool(chip_np, "disable_suspend_irq_handler_support");
-	ts->tp_data_record_support = of_property_read_bool(chip_np, "tp_data_record_support");
-
-	/* interrupt mode*/
-	ts->int_mode = BANNABLE;
-	rc = of_property_read_u32(chip_np, "touchpanel,int-mode", &val);
-
-	if (rc) {
-		TP_BOOT_INFO(ts->tp_index, "int-mode not specified\n");
-
-	} else {
-		if (val < INTERRUPT_MODE_MAX) {
-			ts->int_mode = val;
-		}
-	}
 }
 
 /**
@@ -2623,8 +2424,6 @@ static int init_parse_dts(struct device *dev, struct touchpanel_data *ts)
 	else {
 		TPD_BOOT_INFO("touch_environment:%s\n", ts->touch_environment);
 	}
-
-	init_panel_config(dev, ts);
 
 	return ret;
 
@@ -3800,12 +3599,8 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 
 
 	/*step 23 : Other*****/
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0))
-	ts->ws = wakeup_source_register(dev_name(ts->dev));
-#else
         ts->ws = wakeup_source_register(ts->dev,dev_name(ts->dev));
 	ts->tp_wakelock = wakeup_source_register(ts->dev, "tp_wakelock");
-#endif
 	if (ts->fw_edge_limit_support) {
 		ts->limit_enable = 1;
 	}

@@ -724,7 +724,7 @@ int tp_black_screen_test(struct file *file, char __user *buffer, size_t count,
 	int msg_size = MESSAGE_SIZE;
 	int error_count = 0;
 
-	struct touchpanel_data *ts = PDE_DATA(file_inode(file));
+	struct touchpanel_data *ts = pde_data(file_inode(file));
 
 	if (!ts || !ts->gesture_test.flag) {
 		return 0;

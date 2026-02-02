@@ -4240,7 +4240,7 @@ static ssize_t kernel_grip_write(struct file *file, const char __user *buffer,
 				 size_t count, loff_t *ppos)
 {
 	char buf[PAGESIZE] = {0};
-	struct kernel_grip_info *grip_info = PDE_DATA(file_inode(file));
+	struct kernel_grip_info *grip_info = pde_data(file_inode(file));
 
 	if (!grip_info) {
 		return count;
@@ -4265,7 +4265,7 @@ static ssize_t kernel_grip_write(struct file *file, const char __user *buffer,
 
 static int kernel_grip_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, kernel_grip_read_func, PDE_DATA(inode));
+	return single_open(file, kernel_grip_read_func, pde_data(inode));
 }
 
 DECLARE_PROC_OPS(tp_kernel_grip_fops, kernel_grip_open, seq_read, kernel_grip_write, single_release);
@@ -4275,7 +4275,7 @@ static ssize_t proc_touch_dir_read(struct file *file, char __user *user_buf,
 {
 	ssize_t ret = 0;
 	char page[PAGESIZE] = {0};
-	struct kernel_grip_info *grip_info = PDE_DATA(file_inode(file));
+	struct kernel_grip_info *grip_info = pde_data(file_inode(file));
 
 	if (!grip_info) {
 		return count;
@@ -4291,7 +4291,7 @@ static ssize_t proc_touch_dir_write(struct file *file,
 {
 	char buf[8] = {0};
 	int temp = 0;
-	struct kernel_grip_info *grip_info = PDE_DATA(file_inode(file));
+	struct kernel_grip_info *grip_info = pde_data(file_inode(file));
 	struct fw_grip_operations *op;
 	struct touchpanel_data *ts = NULL;
 
@@ -4350,7 +4350,7 @@ static ssize_t proc_touch_reclining_read(struct file *file, char __user *user_bu
 {
 	ssize_t ret = 0;
 	char page[PAGESIZE] = {0};
-	struct kernel_grip_info *grip_info = PDE_DATA(file_inode(file));
+	struct kernel_grip_info *grip_info = pde_data(file_inode(file));
 
 	if (!grip_info) {
 		return count;
@@ -4435,7 +4435,7 @@ static ssize_t proc_touch_reclining_write(struct file *file,
 {
 	char buf[8] = {0};
 	int temp = 0;
-	struct kernel_grip_info *grip_info = PDE_DATA(file_inode(file));
+	struct kernel_grip_info *grip_info = pde_data(file_inode(file));
 	struct touchpanel_data *ts = NULL;
 
 	if (!grip_info) {

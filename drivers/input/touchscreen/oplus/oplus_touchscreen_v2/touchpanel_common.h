@@ -23,10 +23,6 @@
 #define PM_QOS_TOUCH_WAKEUP_VALUE 400
 #endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
-#define PDE_DATA pde_data
-#endif
-
 #define TP_SUPPORT_MAX 3
 #define TP_NAME_SIZE_MAX 25
 

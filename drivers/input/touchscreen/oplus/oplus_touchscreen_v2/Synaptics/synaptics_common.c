@@ -556,7 +556,7 @@ static int tp_RT251_read_func(struct seq_file *s, void *v)
 
 static int RT251_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, tp_RT251_read_func, PDE_DATA(inode));
+	return single_open(file, tp_RT251_read_func, pde_data(inode));
 }
 
 DECLARE_PROC_OPS(tp_RT251_proc_fops, RT251_open, seq_read, NULL, single_release);
@@ -592,7 +592,7 @@ static int tp_RT76_read_func(struct seq_file *s, void *v)
 
 static int RT76_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, tp_RT76_read_func, PDE_DATA(inode));
+	return single_open(file, tp_RT76_read_func, pde_data(inode));
 }
 
 DECLARE_PROC_OPS(tp_RT76_proc_fops, RT76_open, seq_read, NULL, single_release);
@@ -639,7 +639,7 @@ static int tp_DRT_read_func(struct seq_file *s, void *v)
 
 static int DRT_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, tp_DRT_read_func, PDE_DATA(inode));
+	return single_open(file, tp_DRT_read_func, pde_data(inode));
 }
 
 DECLARE_PROC_OPS(tp_DRT_proc_fops, DRT_open, seq_read, NULL, single_release);
@@ -649,7 +649,7 @@ static ssize_t proc_touchfilter_control_read(struct file *file,
 {
 	ssize_t ret = 0;
 	char page[PAGESIZE] = {0};
-	struct touchpanel_data *ts = PDE_DATA(file_inode(file));
+	struct touchpanel_data *ts = pde_data(file_inode(file));
 	struct synaptics_proc_operations *syn_ops;
 
 	if (!ts) {
@@ -674,7 +674,7 @@ static ssize_t proc_touchfilter_control_write(struct file *file,
 {
 	char buf[8] = {0};
 	int temp = 0;
-	struct touchpanel_data *ts = PDE_DATA(file_inode(file));
+	struct touchpanel_data *ts = pde_data(file_inode(file));
 	struct synaptics_proc_operations *syn_ops;
 
 	if (!ts) {

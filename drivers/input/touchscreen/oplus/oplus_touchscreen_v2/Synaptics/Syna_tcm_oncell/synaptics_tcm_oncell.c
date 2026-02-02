@@ -1642,6 +1642,7 @@ static int syna_tcm_read_message(struct syna_tcm_data *tcm_info,
 		TPD_INFO("wrong header marker:0x%02x\n", header->marker);
 		UNLOCK_BUFFER(tcm_info->in);
 		retval = -ENXIO;
+		ssleep(5);
 		goto exit;
 	}
 
