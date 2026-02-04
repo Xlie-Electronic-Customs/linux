@@ -35,10 +35,6 @@
 
 unsigned int tp_debug = 0;
 
-
-#if IS_ENABLED(CONFIG_TOUCHPANEL_NOTIFY)
-#include "touchpanel_notify/touchpanel_event_notify.h"
-#endif
 #define MAX_NODE_DATA_LENGTH         60
 
 
@@ -105,11 +101,6 @@ static void tp_rate_calc(struct touchpanel_data *ts, tp_rate tp_rate_type);
 
 extern int preconfig_power_control(struct touchpanel_data *ts);
 extern  int reconfig_power_control(struct touchpanel_data *ts);
-
-#if IS_ENABLED(CONFIG_TOUCHPANEL_NOTIFY)
-static int tp_gesture_enable_flag(unsigned int tp_index);
-extern int (*tp_gesture_enable_notifier)(unsigned int tp_index);
-#endif
 
 void display_esd_check_enable_bytouchpanel(bool enable);
 
@@ -318,25 +309,6 @@ void switch_headset_work(struct work_struct *work)
 	mutex_unlock(&ts->mutex);
 }
 
-static void touch_call_notifier_fp(struct fp_underscreen_info *fp_info)
-{
-#if IS_ENABLED(CONFIG_TOUCHPANEL_NOTIFY)
-	struct touchpanel_event event_data;
-
-	memset(&event_data, 0, sizeof(struct touchpanel_event));
-
-	event_data.touch_state = fp_info->touch_state;
-	event_data.area_rate = fp_info->area_rate;
-	event_data.x = fp_info->x;
-	event_data.y = fp_info->y;
-
-	touchpanel_event_call_notifier(EVENT_ACTION_FOR_FINGPRINT,
-				       (void *)&event_data);
-#else
-	TPD_INFO("%s: weak enter.\n", __func__);
-#endif
-}
-
 static inline void tp_touch_down(struct touchpanel_data *ts, struct point_info points, int touch_report_num, int id)
 {
 	int cost_time = 0;
@@ -445,7 +417,6 @@ static void tp_exception_handle(struct touchpanel_data *ts)
 
 	if (ts->fingerprint_underscreen_support) {
 		ts->fp_info.touch_state = 0;
-		touch_call_notifier_fp(&ts->fp_info);
 	}
 	if (ts->exception_upload_support) {
 		tp_exception_report(&ts->exception_data, EXCEP_IRQ, "tp_exception_handle", sizeof("tp_exception_handle"));
@@ -561,13 +532,11 @@ static void tp_gesture_handle(struct touchpanel_data *ts)
 		ts->fp_info.x = gesture_info_temp.Point_start.x;
 		ts->fp_info.y = gesture_info_temp.Point_start.y;
 		TP_INFO(ts->tp_index, "screen off down : (%d, %d)\n", ts->fp_info.x, ts->fp_info.y);
-		touch_call_notifier_fp(&ts->fp_info);
 	} else if (gesture_info_temp.gesture_type == FRINGER_PRINTUP) {
 		ts->fp_info.touch_state = 0;
 		ts->fp_info.x = gesture_info_temp.Point_start.x;
 		ts->fp_info.y = gesture_info_temp.Point_start.y;
 		TP_INFO(ts->tp_index, "screen off up : (%d, %d)\n", ts->fp_info.x, ts->fp_info.y);
-		touch_call_notifier_fp(&ts->fp_info);
 	}
 }
 
@@ -1018,13 +987,9 @@ static void tp_fingerprint_handle(struct touchpanel_data *ts)
 			ts->fp_info.y);
 
 		ts->fp_info.touch_state = 1;
-		touch_call_notifier_fp(&ts->fp_info);
 	} else if (fp_tpinfo.touch_state == FINGERPRINT_UP_DETECT) {
 		TP_INFO(ts->tp_index, "screen on up : (%d, %d)\n", ts->fp_info.x, ts->fp_info.y);
 		ts->fp_info.touch_state = 0;
-		touch_call_notifier_fp(&ts->fp_info);
-	} else if (ts->fp_info.touch_state) {
-		touch_call_notifier_fp(&ts->fp_info);
 	}
 }
 
@@ -1099,165 +1064,6 @@ static inline void tp_work_func(struct touchpanel_data *ts)
 	} else {
 		TPD_DEBUG("unknown irq trigger reason\n");
 	}
-}
-
-#define TP_FWUP_HEADER    "FwUp"
-static void tp_fw_update_work(struct work_struct *work)
-{
-	const struct firmware *fw = NULL;
-	int ret, fw_update_result = 0;
-	int count_tmp = 0, retry = 5;
-	char *p_node = NULL;
-	char *fw_name_fae = NULL;
-	char *postfix = "_FAE";
-	uint8_t copy_len = 0;
-
-	struct touchpanel_data *ts = container_of(work, struct touchpanel_data,
-				     fw_update_work);
-
-
-	if (!ts->ts_ops->fw_check || !ts->ts_ops->reset) {
-		TP_INFO(ts->tp_index, "not support ts_ops->fw_check callback\n");
-		complete(&ts->fw_complete);
-		return;
-	}
-
-	TP_INFO(ts->tp_index, "%s: fw_name = %s\n", __func__, ts->panel_data.fw_name);
-
-	mutex_lock(&ts->mutex);
-
-	if (!ts->irq_trigger_hdl_support && ts->int_mode == BANNABLE) {
-		disable_irq_nosync(ts->irq);
-	}
-
-	ts->loading_fw = true;
-
-	if (ts->esd_handle_support) {
-		esd_handle_switch(&ts->esd_info, false);
-	}
-
-	display_esd_check_enable_bytouchpanel(0);
-
-	if (ts->ts_ops->fw_update) {
-		do {
-			if (ts->firmware_update_type == 0 || ts->firmware_update_type == 1) {
-				if (ts->fw_update_app_support) {
-					fw_name_fae = devm_kzalloc(ts->dev, MAX_FW_NAME_LENGTH, GFP_KERNEL);
-
-					if (fw_name_fae == NULL) {
-						TP_INFO(ts->tp_index, "fw_name_fae kzalloc error!\n");
-						goto EXIT;
-					}
-
-					p_node  = strstr(ts->panel_data.fw_name, ".");
-
-					if (p_node == NULL) {
-						TP_INFO(ts->tp_index, "p_node strstr error!\n");
-						goto EXIT;
-					}
-
-					copy_len = p_node - ts->panel_data.fw_name;
-					memcpy(fw_name_fae, ts->panel_data.fw_name, copy_len);
-					strlcat(fw_name_fae, postfix, MAX_FW_NAME_LENGTH);
-					strlcat(fw_name_fae, p_node, MAX_FW_NAME_LENGTH);
-					TP_INFO(ts->tp_index, "fw_name_fae is %s\n", fw_name_fae);
-					ret = request_firmware(&fw, fw_name_fae, ts->dev);
-
-					if (!ret) {
-						break;
-					}
-
-				} else {
-					ret = request_firmware(&fw, ts->panel_data.fw_name, ts->dev);
-
-					if (!ret) {
-						break;
-					}
-				}
-
-			} else {
-				ret = request_firmware_select(&fw, ts->panel_data.fw_name, ts->dev);
-
-				if (!ret) {
-					if (fw->size > sizeof(TP_FWUP_HEADER)) {
-						TP_INFO(ts->tp_index, "fw_header:%*ph\n", (int)(sizeof(TP_FWUP_HEADER) - 1), fw->data);
-						if (!strncmp(fw->data, TP_FWUP_HEADER, sizeof(TP_FWUP_HEADER) - 1)) {
-							TP_INFO(ts->tp_index, "error ! fw_header is signed,do not update\n");
-						}
-					}
-					break;
-				}
-			}
-		} while ((ret < 0) && (--retry > 0));
-
-		TP_INFO(ts->tp_index, "retry times %d\n", 5 - retry);
-
-		if (!ret || ts->is_noflash_ic) {
-			do {
-				count_tmp++;
-				ret = ts->ts_ops->fw_update(ts->chip_data, fw, ts->force_update);
-				fw_update_result = ret;
-
-				if (ret == FW_NO_NEED_UPDATE) {
-					break;
-				}
-
-				if (!ts->is_noflash_ic) {       /*noflash update fw in reset and do bootloader reset in get_chip_info*/
-					ret |= ts->ts_ops->reset(ts->chip_data);
-					ret |= ts->ts_ops->get_chip_info(ts->chip_data);
-				}
-
-				ret |= ts->ts_ops->fw_check(ts->chip_data, &ts->resolution_info,
-							    &ts->panel_data);
-			} while ((count_tmp < 2) && (ret != 0));
-
-			if (fw != NULL) {
-				release_firmware(fw);
-			}
-
-		} else {
-			TP_INFO(ts->tp_index, "%s: fw_name request failed %s %d\n", __func__,
-				ts->panel_data.fw_name, ret);
-
-			if (ts->exception_upload_support) {
-				tp_exception_report(&ts->exception_data, EXCEP_FW_UPDATE, "FW_Request_Failed", sizeof("FW_Request_Failed"));
-			}
-
-			goto EXIT;
-		}
-	}
-
-	tp_touch_release(ts);
-	tp_btnkey_release(ts);
-	operate_mode_switch(ts);
-
-EXIT:
-	ts->loading_fw = false;
-
-	display_esd_check_enable_bytouchpanel(1);
-
-	if (ts->esd_handle_support) {
-		esd_handle_switch(&ts->esd_info, true);
-	}
-
-	devm_kfree(ts->dev, (void **)&fw_name_fae);
-
-	if (ts->int_mode == BANNABLE) {
-	enable_irq(ts->irq);
-	}
-
-	mutex_unlock(&ts->mutex);
-
-	if (ts->exception_upload_support) {
-		if (fw_update_result == FW_UPDATE_ERROR || fw_update_result == FW_UPDATE_FATAL) {
-			tp_exception_report(&ts->exception_data, EXCEP_FW_UPDATE, "FW_Update_Failed", sizeof("FW_Update_Failed"));
-		}
-	}
-
-	ts->force_update = 0;
-
-	complete(&ts->fw_complete); /*notify to init.rc that fw update finished*/
-	return;
 }
 
 static bool monitor_irq_bus_ready(struct touchpanel_data *ts)
@@ -3196,7 +3002,6 @@ static void tp_suspend_direct(struct touchpanel_data *ts)
 		operate_mode_switch(ts);
 		if (!ts->fingerprint_not_report_in_suspend) {
 			ts->fp_info.touch_state = 0;
-			touch_call_notifier_fp(&ts->fp_info);
 		} else {
 			TP_INFO(ts->tp_index, "%s, not report fp up for S3908 & S3910\n", __func__);
 		}
@@ -3479,7 +3284,6 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 	}
 
 	INIT_WORK(&ts->speed_up_work, speedup_resume);
-	INIT_WORK(&ts->fw_update_work, tp_fw_update_work);
 
 	if (ts->suspend_work_support) {
 		snprintf(name, TP_NAME_SIZE_MAX, "suspend_wq%d", ts->tp_index);
@@ -3641,9 +3445,6 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 	mutex_lock(&tp_core_lock);
 	g_tp[ts->tp_index] = ts;
 	mutex_unlock(&tp_core_lock);
-#if IS_ENABLED(CONFIG_TOUCHPANEL_NOTIFY)
-	tp_gesture_enable_notifier = tp_gesture_enable_flag;
-#endif
 	TP_BOOT_INFO(ts->tp_index, "Touch panel probe : normal end\n");
 	return 0;
 
@@ -3861,7 +3662,6 @@ static void speedup_resume(struct work_struct *work)
 
 	if (ts->ts_ops->specific_resume_operate && !ts->fp_info.touch_state) {
 		specific_resume_data.suspend_state = ts->suspend_state;
-		specific_resume_data.in_test_process = ts->in_test_process;
 		ret =  ts->ts_ops->specific_resume_operate(ts->chip_data,
 				&specific_resume_data);
 
@@ -4026,31 +3826,6 @@ static void lcd_trigger_load_tp_fw(struct work_struct *work)
 		}
 	}
 }
-
-/**
- * tp_gesture_enable_flag -   expose gesture control status for other module.
- * Return gesture_enable status.
- */
-#if IS_ENABLED(CONFIG_TOUCHPANEL_NOTIFY)
-static int tp_gesture_enable_flag(unsigned int tp_index)
-{
-	struct touchpanel_data *ts = NULL;
-
-	if (tp_index >= TP_SUPPORT_MAX) {
-		return LCD_POWER_OFF;
-	}
-
-	ts = get_ts_data(tp_index);
-
-	if (!ts || !ts->is_incell_panel) {
-		return LCD_POWER_OFF;
-	}
-
-	TP_INFO(ts->tp_index, "gesture_enable is %d\n", ts->gesture_enable);
-
-	return (ts->gesture_enable > 0) ? LCD_POWER_ON : LCD_POWER_OFF;
-}
-#endif
 
 static void lcd_tp_refresh_work(struct work_struct *work)
 {

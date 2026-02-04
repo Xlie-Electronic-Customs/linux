@@ -862,7 +862,6 @@ struct touchpanel_data {
 	bool in_test_process;                     /*flag whether in test process*/
 	struct black_gesture_test gesture_test;  /*screen off gesture test struct*/
 	struct com_test_data com_test_data;	/*test comon data*/
-	struct engineer_test_operations   *engineer_ops;     /*call_back function*/
 	bool auto_test_need_cal_support;
 	bool sportify_aod_gesture_support;
 	/******For button key area********/

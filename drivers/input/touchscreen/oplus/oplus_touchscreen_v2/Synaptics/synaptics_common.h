@@ -20,7 +20,6 @@
 
 #include "../touchpanel_common.h"
 #include "../touch_comon_api.h"
-#include "../touchpanel_autotest/touchpanel_autotest.h"
 #include "../touchpanel_exception.h"
 
 #include "synaptics_firmware_v2.h"
@@ -203,49 +202,6 @@ enum {
 struct synaptics_proc_operations {
 	void (*set_touchfilter_state)(void *chip_data, uint8_t range_size);
 	uint8_t (*get_touchfilter_state)(void *chip_data);
-};
-
-struct syna_auto_test_operations {
-	int (*test1)(struct seq_file *s, void *chip_data,
-		     struct auto_testdata *syna_testdata,
-		     struct test_item_info *p_test_item_info);
-	int (*test2)(struct seq_file *s, void *chip_data,
-		     struct auto_testdata *syna_testdata,
-		     struct test_item_info *p_test_item_info);
-	int (*test3)(struct seq_file *s, void *chip_data,
-		     struct auto_testdata *syna_testdata,
-		     struct test_item_info *p_test_item_info);
-	int (*test4)(struct seq_file *s, void *chip_data,
-		     struct auto_testdata *syna_testdata,
-		     struct test_item_info *p_test_item_info);
-	int (*test5)(struct seq_file *s, void *chip_data,
-		     struct auto_testdata *syna_testdata,
-		     struct test_item_info *p_test_item_info);
-	int (*test6)(struct seq_file *s, void *chip_data,
-		     struct auto_testdata *syna_testdata,
-		     struct test_item_info *p_test_item_info);
-	int (*test7)(struct seq_file *s, void *chip_data,
-		     struct auto_testdata *syna_testdata,
-		     struct test_item_info *p_test_item_info);
-	int (*test8)(struct seq_file *s, void *chip_data,
-		     struct auto_testdata *syna_testdata,
-		     struct test_item_info *p_test_item_info);
-	int (*test9)(struct seq_file *s, void *chip_data,
-		     struct auto_testdata *syna_testdata,
-		     struct test_item_info *p_test_item_info);
-	int (*test10)(struct seq_file *s, void *chip_data,
-		      struct auto_testdata *syna_testdata,
-		      struct test_item_info *p_test_item_info);
-	int (*test11)(struct seq_file *s, void *chip_data,
-		      struct auto_testdata *syna_testdata,
-		      struct test_item_info *p_test_item_info);
-	int (*syna_auto_test_enable_irq)(void *chip_data, bool enable);
-	int (*syna_auto_test_preoperation)(struct seq_file *s, void *chip_data,
-					   struct auto_testdata *syna_testdata,
-					   struct test_item_info *p_test_item_info);
-	int (*syna_auto_test_endoperation)(struct seq_file *s, void *chip_data,
-					   struct auto_testdata *syna_testdata,
-					   struct test_item_info *p_test_item_info);
 };
 
 int  synaptics_create_proc(struct touchpanel_data *ts,

@@ -19,7 +19,6 @@
 
 #include "touchpanel_common.h"
 #include "touchpanel_prevention/touchpanel_prevention.h"
-#include "touchpanel_autotest/touchpanel_autotest.h"
 #include "touch_comon_api.h"
 
 #define NORMAL_MODE  0
@@ -945,71 +944,6 @@ static ssize_t proc_noise_modetest_write(struct file *file,
 
 DECLARE_PROC_OPS(proc_noise_modetest_fops, simple_open, proc_noise_modetest_read, proc_noise_modetest_write, NULL);
 
-/*tp_fw_update - For touch panel fw update
- * Input:
- * firmware_update_type:0, fw update;
- * firmware_update_type:1, fore fw update;
- * firmware_update_type:2, app fw update;
- */
-static ssize_t proc_fw_update_write(struct file *file,
-				    const char __user *buffer, size_t count, loff_t *ppos)
-{
-	struct touchpanel_data *ts = pde_data(file_inode(file));
-	int val = 0;
-	int ret = 0;
-	char buf[4] = {0};
-
-	if (!ts) {
-		return count;
-	}
-
-	tp_copy_from_user(buf, sizeof(buf), buffer, count, 2);
-
-	if (kstrtoint(buf, 10, &val)) {
-		TP_INFO(ts->tp_index, "%s: kstrtoint error\n", __func__);
-		return count;
-	}
-
-	ts->firmware_update_type = val;
-
-	if (!ts->force_update && ts->firmware_update_type != 2) {
-		ts->force_update = !!val;
-	}
-
-	schedule_work(&ts->fw_update_work);
-
-	ret = wait_for_completion_killable_timeout(&ts->fw_complete,
-			FW_UPDATE_COMPLETE_TIMEOUT);
-
-	if (ret < 0) {
-		TP_INFO(ts->tp_index, "kill signal interrupt\n");
-	}
-
-#ifdef CONFIG_TOUCHIRQ_UPDATE_QOS
-
-	if (!ts->pm_qos_state) {
-		ts->pm_qos_value = PM_QOS_DEFAULT_VALUE;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,10,0)
-		if (!cpu_latency_qos_request_active(&ts->pm_qos_req)) {
-			cpu_latency_qos_add_request(&ts->pm_qos_req, ts->pm_qos_value);
-		} else {
-			cpu_latency_qos_update_request(&ts->pm_qos_req, ts->pm_qos_value);
-		}
-#else
-		pm_qos_add_request(&ts->pm_qos_req, PM_QOS_CPU_DMA_LATENCY, ts->pm_qos_value);
-#endif
-		TP_INFO(ts->tp_index, "add qos request in touch driver.\n");
-		ts->pm_qos_state = 1;
-	}
-
-#endif
-
-	TP_INFO(ts->tp_index, "fw update finished\n");
-	return count;
-}
-
-DECLARE_PROC_OPS(proc_fw_update_ops, simple_open, NULL, proc_fw_update_write, NULL);
-
 /*oplus_register_info - For i2c debug way
  * Output:
  *first choose register_add and lenght, example: echo 000e,1 > oplus_register_info
@@ -1332,95 +1266,6 @@ static ssize_t proc_fp_enable_read(struct file *file, char __user *buffer,
 }
 
 DECLARE_PROC_OPS(tp_fp_enable_fops, simple_open, proc_fp_enable_read, proc_fp_enable_write, NULL);
-
-/*proc/touchpanel/baseline_test*/
-static int tp_auto_test_read_func(struct seq_file *s, void *v)
-{
-	int ret = 0;
-
-	ret = tp_auto_test(s, v);
-	return ret;
-}
-
-static int baseline_autotest_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, tp_auto_test_read_func, pde_data(inode));
-}
-
-DECLARE_PROC_OPS(tp_auto_test_proc_fops, baseline_autotest_open, seq_read, NULL, single_release);
-
-
-/*black_screen_test - For incell ic black screen test*/
-static ssize_t proc_black_screen_test_read(struct file *file,
-		char __user *buffer, size_t count, loff_t *ppos)
-{
-	int ret = 0;
-
-	ret = tp_black_screen_test(file, buffer, count, ppos);
-	return ret;
-}
-
-static ssize_t proc_black_screen_test_write(struct file *file,
-		const char __user *buffer, size_t count, loff_t *ppos)
-{
-	int value = 0;
-	char buf[4] = {0};
-	struct touchpanel_data *ts = pde_data(file_inode(file));
-
-	if (!ts) {
-		return count;
-	}
-
-	tp_copy_from_user(buf, sizeof(buf), buffer, count, 2);
-
-	if (kstrtoint(buf, 10, &value)) {
-		TP_INFO(ts->tp_index, "%s: kstrtoint error\n", __func__);
-		return count;
-	}
-
-	TP_INFO(ts->tp_index, "%s %d\n", __func__, value);
-
-	ts->gesture_test.gesture_backup = ts->gesture_enable;
-	ts->gesture_enable = true;
-	ts->gesture_test.flag = !!value;
-
-	return count;
-}
-
-DECLARE_PROC_OPS(proc_black_screen_test_fops, simple_open, proc_black_screen_test_read, proc_black_screen_test_write, NULL);
-
-/*baseline_result - For GKI auto test result*/
-static int tp_auto_test_result_read(struct seq_file *s, void *v)
-{
-	int ret = 0;
-
-	ret = tp_auto_test_result(s, v);
-	return ret;
-}
-
-static int tp_auto_test_result_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, tp_auto_test_result_read, pde_data(inode));
-}
-
-DECLARE_PROC_OPS(tp_auto_test_result_fops, tp_auto_test_result_open, seq_read, NULL, single_release);
-
-
-/*baseline_result - For GKI auto test result*/
-static int tp_black_screen_result_read(struct seq_file *s, void *v)
-{
-	int ret = 0;
-
-	ret = tp_black_screen_result(s, v);
-	return ret;
-}
-
-static int tp_black_screen_result_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, tp_black_screen_result_read, pde_data(inode));
-}
-
-DECLARE_PROC_OPS(proc_black_screen_result_fops, tp_black_screen_result_open, seq_read, NULL, single_release);
 
 /*limit_enable - For touch panel direction
  * Output:
@@ -1810,11 +1655,6 @@ static ssize_t proc_aging_test_write(struct file *file,
 
 	mutex_lock(&ts->mutex);
 
-	if (AGING_TEST_MODE == val || NORMAL_TEST_MODE == val) {
-		ts->aging_mode = val;
-		goto EXIT;
-	}
-
 	ts->aging_test = !!val;
 
 	if (ts->aging_test) {
@@ -1824,10 +1664,10 @@ static ssize_t proc_aging_test_write(struct file *file,
 		ts->aging_test_ops->finish_aging_test(ts->chip_data);
 	}
 
-EXIT:
 	mutex_unlock(&ts->mutex);
 
 	return count;
+
 }
 
 DECLARE_PROC_OPS(proc_aging_test_ops, simple_open, proc_aging_test_read, proc_aging_test_write, NULL);
@@ -2612,85 +2452,6 @@ static int reserve_open(struct inode *inode, struct file *file)
 
 DECLARE_PROC_OPS(tp_reserve_proc_fops, reserve_open, seq_read, NULL, single_release);
 
-/*proc/touchpanel/debug_info/data_limit*/
-static ssize_t tp_limit_data_write_func(struct file *file,
-				    const char __user *buffer, size_t count, loff_t *ppos)
-{
-	struct touchpanel_data *ts = pde_data(file_inode(file));
-	struct debug_info_proc_operations *debug_info_ops = NULL;
-	int value = 0;
-	char buf[4] = {0};
-
-	TPD_DETAIL("%s tp_limit_data write enter\n", __func__);
-
-	if (!ts) {
-		return count;
-	}
-
-	if (!ts->tp_data_record_support) {
-		return count;
-	}
-
-	if (count > 2) {
-		return count;
-	}
-
-	tp_copy_from_user(buf, sizeof(buf), buffer, count, 2);
-
-	if (kstrtoint(buf, 10, &value)) {
-		TP_INFO(ts->tp_index, "%s: kstrtoint error\n", __func__);
-		return count;
-	}
-
-	debug_info_ops = (struct debug_info_proc_operations *)(ts->debug_info_ops);
-	if (!debug_info_ops) {
-		TPD_INFO("debug_info_ops == NULL");
-		return 0;
-	}
-	if (!debug_info_ops->tp_limit_data_write) {
-		TPD_INFO("debug_info_ops->tp_limit_data_write == NULL");
-		return 0;
-	}
-
-	TPD_DETAIL("%s tp_limit_data write :%d\n", __func__, value);
-
-	if (ts->int_mode == BANNABLE) {
-		disable_irq_nosync(ts->irq);
-	}
-	mutex_lock(&ts->mutex);
-
-	if (debug_info_ops->tp_limit_data_write) {
-		debug_info_ops->tp_limit_data_write(ts->chip_data, value);
-	}
-
-	mutex_unlock(&ts->mutex);
-	if (ts->int_mode == BANNABLE) {
-		enable_irq(ts->irq);
-	}
-
-	return count;
-}
-
-static int tp_limit_data_read_func(struct seq_file *s, void *v)
-{
-	struct touchpanel_data *ts = s->private;
-
-	if (!ts) {
-		return 0;
-	}
-
-	tp_limit_read(s, ts);
-
-	return 0;
-}
-
-static int limit_data_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, tp_limit_data_read_func, pde_data(inode));
-}
-
-DECLARE_PROC_OPS(tp_limit_data_proc_fops, limit_data_open, seq_read, tp_limit_data_write_func, single_release);
-
 /*proc/touchpanel/debug_info/abs_doze*/
 static int tp_abs_doze_read_func(struct seq_file *s, void *v)
 {
@@ -3101,7 +2862,6 @@ static int init_debug_info_proc(struct touchpanel_data *ts)
 	struct proc_dir_entry *prEntry_debug_info = NULL;
 
 	tp_proc_node proc_debug_node[] = {
-		{"data_limit", 0666, NULL, &tp_limit_data_proc_fops, ts, false, true},/* show limit data interface*/
 		{"baseline", 0666, NULL, &tp_baseline_data_proc_fops, ts, false, true},/* show baseline data interface*/
 		{"delta", 0666, NULL, &tp_delta_data_proc_fops, ts, false, true},/* show delta interface*/
 		{"self_delta", 0666, NULL, &tp_self_delta_data_proc_fops, ts, false, true},/* show self delta interface*/
@@ -3268,7 +3028,6 @@ int init_touchpanel_proc(struct touchpanel_data *ts)
 			"oplus_tp_noise_modetest", 0664, NULL, &proc_noise_modetest_fops, ts, false,
 			ts->noise_modetest_support
 		},
-		{"tp_fw_update", 0666, NULL, &proc_fw_update_ops, ts, false, true},
 		{"oplus_register_info", 0664, NULL, &proc_register_info_fops, ts, false, true},
 		{
 			"incell_panel", 0664, NULL, &proc_incell_panel_fops, ts, false,
@@ -3289,20 +3048,6 @@ int init_touchpanel_proc(struct touchpanel_data *ts)
 		{
 			"fp_enable", 0666, NULL, &tp_fp_enable_fops, ts, false,
 			ts->fingerprint_underscreen_support
-		},
-		{
-			"baseline_test", 0666, NULL, &tp_auto_test_proc_fops, ts, false, true
-		},
-		{
-			"black_screen_test", 0666, NULL, &proc_black_screen_test_fops, ts, false,
-			ts->gesture_test_support
-		},
-		{
-			"baseline_result", 0666, NULL, &tp_auto_test_result_fops, ts, false, true
-		},
-		{
-			"black_screen_result", 0666, NULL, &proc_black_screen_result_fops, ts, false,
-			ts->gesture_test_support
 		},
 		{
 			"oplus_tp_direction", 0666, NULL, &touch_dir_proc_fops, ts, false,
