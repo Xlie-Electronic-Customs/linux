@@ -620,10 +620,10 @@
 		reg = <0>;
 
 		reset-gpios = <&tlmm 0 GPIO_ACTIVE_LOW>;
-		te-gpios = <&tlmm 86 GPIO_ACTIVE_HIGH>;
+		te-gpios = <&tlmm 86 GPIO_ACTIVE_LOW>;
 
 		pinctrl-0 = <&sde_dsi_active &sde_te_active_sleep>;
-		pinctrl-1 = <&sde_dsi_suspend &sde_te_active_sleep>;
+		pinctrl-1 = <&sde_dsi_suspend &sde_te_suspend_sleep>;
 		pinctrl-names = "default", "sleep";
 
 		vddd-supply = <&pm8350c_l10>;
@@ -865,6 +865,13 @@
 		bias-pull-down;
 	};
 
+	sde_te_suspend_sleep: sde-te-suspend-sleep-state {
+		pins = "gpio86";
+		function = "mdp_vsync";
+		drive-strength = <2>;
+		bias-pull-down;
+	};
+
 	tert_tdm_clk_active: tert-tdm-clk-active-state {
 		pins = "gpio121";
 		function = "mi2s2_sck";
@@ -934,23 +941,9 @@
 	wlan_en: wlan-en-state {
 		pins = "gpio80";
 		function = "gpio";
-		drive-strength = <10>;
+		drive-strength = <16>;
 		bias-pull-up;
 		output-high;
-	};
-
-	mi_ts_active: mi-ts-active-state {
-		pins = "gpio20", "gpio21";
-		function = "gpio";
-		drive-strength = <8>;
-		bias-pull-up;
-	};
-
-	mi_ts_suspend: mi-ts-suspend-state {
-		pins = "gpio20", "gpio21";
-		function = "gpio";
-		drive-strength = <2>;
-		bias-pull-down;
 	};
 };
 
@@ -1009,7 +1002,7 @@
 
 &i2c4 {
 	clock-frequency = <400000>;
-	status = "disabled";
+	status = "okay";
 
 	synaptics20031@4b {
 		compatible = "synaptics-s3908";
@@ -1029,7 +1022,7 @@
 
 		/* Other HW Resource */
 		irq-gpio = <&tlmm 21 0x2008>;
-		reset-gpio = <&tlmm 20 GPIO_ACTIVE_HIGH>;
+		reset-gpio = <&tlmm 20 0x1>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&ts_int_active &ts_reset_active>;
 
