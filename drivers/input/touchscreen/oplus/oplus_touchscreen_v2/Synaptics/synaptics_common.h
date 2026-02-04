@@ -181,24 +181,6 @@ struct limit_block {
 	int16_t data;
 };
 
-/*test item for syna oncell ic*/
-enum {
-	TYPE_ERROR          = 0x00,
-	TYPE_TEST1            = 0x01,/*no cbc*/
-	TYPE_TEST2            = 0x02,/*with cbc*/
-	TYPE_TEST3            = 0x03,
-	TYPE_TEST4            = 0x04,
-	TYPE_TEST5            = 0x05,
-	TYPE_TEST6            = 0x06,
-	TYPE_TEST7            = 0x07,
-	TYPE_TEST8            = 0x08,
-	TYPE_TEST9            = 0x09,
-	TYPE_TEST10          = 0x0a,
-	TYPE_TEST11          = 0x0b,
-	TYPE_TEST12          = 0x0c,
-	TYPE_RT_MAX           = 0xFF,
-};
-
 struct synaptics_proc_operations {
 	void (*set_touchfilter_state)(void *chip_data, uint8_t range_size);
 	uint8_t (*get_touchfilter_state)(void *chip_data);
@@ -212,6 +194,5 @@ void synaptics_parse_header(struct image_header_data *header,
 			    const unsigned char *fw_image);
 int synaptics_parse_header_v2(struct image_info *image_info,
 			      const unsigned char *fw_image);
-int synaptics_auto_test(struct seq_file *s,  struct touchpanel_data *ts);
 
 #endif  /*SYNAPTICS_H*/

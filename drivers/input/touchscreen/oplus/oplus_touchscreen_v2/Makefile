@@ -5,8 +5,6 @@
 
 oplus_bsp_tp_comon-y := util_interface/touch_interfaces.o
 oplus_bsp_tp_comon-y += touchpanel_exception.o
-# oplus_bsp_tp_comon-y += touchpanel_autotest/touchpanel_autotest.o
-oplus_bsp_tp_comon-y += touchpanel_prevention/touchpanel_prevention.o
 
 oplus_bsp_tp_comon-y += touchpanel_common_driver.o
 oplus_bsp_tp_comon-y += touchpanel_proc.o

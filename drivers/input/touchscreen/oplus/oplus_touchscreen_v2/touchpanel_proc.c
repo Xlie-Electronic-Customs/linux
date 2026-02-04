@@ -18,7 +18,6 @@
 #include <linux/regulator/consumer.h>
 
 #include "touchpanel_common.h"
-#include "touchpanel_prevention/touchpanel_prevention.h"
 #include "touch_comon_api.h"
 
 #define NORMAL_MODE  0
@@ -480,10 +479,6 @@ static ssize_t proc_gesture_control_write(struct file *file,
 
 	if (kstrtoint(buf, 10, &value)) {
 		TP_INFO(ts->tp_index, "%s: kstrtoint error\n", __func__);
-		return count;
-	}
-
-	if (value > 3 || (ts->gesture_test_support && ts->gesture_test.flag)) {
 		return count;
 	}
 
@@ -2374,10 +2369,6 @@ static int tp_main_register_read_func(struct seq_file *s, void *v)
 	seq_printf(s, "touch_count:%d\n", ts->touch_count);
 	debug_info_ops->main_register_read(s, ts->chip_data);
 
-	if (ts->kernel_grip_support) {
-		seq_printf(s, "kernel_grip_info:\n");
-		kernel_grip_print_func(s, ts->grip_info);
-	}
 	mutex_unlock(&ts->mutex);
 
 	if (ts->int_mode == BANNABLE) {
@@ -2965,14 +2956,6 @@ static int init_touchpanel_proc_part2(struct touchpanel_data *ts, struct proc_di
 			"double_tap_enable_indep", 0666, NULL, &proc_gesture_control_indep_fops, ts, false,
 			ts->black_gesture_indep_support
 		},
-		{
-			"calibration", 0666, NULL, &proc_calibrate_fops, ts, false,
-			ts->auto_test_need_cal_support
-		},
-		{
-			"calibration_status", 0666, NULL, &proc_cal_status_fops, ts, false,
-			ts->auto_test_need_cal_support
-		},
 	};
 
 	for (i = 0; i < ARRAY_SIZE(tp_proc_node_part2); i++) {
@@ -3111,19 +3094,6 @@ int init_touchpanel_proc(struct touchpanel_data *ts)
 	init_touchpanel_proc_part2(ts, prEntry_tp);
 	/*create debug_info node*/
 	init_debug_info_proc(ts);
-
-	/*create kernel grip proc file*/
-	if (ts->kernel_grip_support) {
-		init_kernel_grip_proc(ts->prEntry_tp, ts->grip_info);
-		prEntry_tmp = proc_create_data("kernel_grip_default_para",
-					       0664,
-					       prEntry_tp,
-					       &tp_grip_default_para_fops,
-					       ts);
-		if (prEntry_tmp == NULL) {
-			TPD_INFO("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
-		}
-	}
 
 	return ret;
 }

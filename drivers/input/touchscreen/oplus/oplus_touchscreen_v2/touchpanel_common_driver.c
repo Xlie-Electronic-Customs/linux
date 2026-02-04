@@ -29,7 +29,6 @@
 #include "touchpanel_common.h"
 #include "touchpanel_proc.h"
 #include "touch_comon_api.h"
-#include "touchpanel_prevention/touchpanel_prevention.h"
 #include "touchpanel_exception.h"
 #include "touch_pen/touch_pen_core.h"
 
@@ -210,10 +209,6 @@ void operate_mode_switch(struct touchpanel_data *ts)
 
 		if (ts->headset_pump_support) {
 			mode_switch_health(ts, MODE_HEADSET, ts->is_headset_checked);
-		}
-
-		if (ts->kernel_grip_support && ts->ts_ops->enable_kernel_grip) {
-			ts->ts_ops->enable_kernel_grip(ts->chip_data, ts->grip_info);
 		}
 
 		if (ts->smooth_level_array_support && ts->ts_ops->smooth_lv_set) {
@@ -675,9 +670,6 @@ static inline void tp_touch_handle(struct touchpanel_data *ts)
 	}
 
 	mutex_lock(&ts->report_mutex);
-	if (ts->kernel_grip_support && (!ts->grip_no_driver_support)) {
-		obj_attention = notify_prevention_handle(ts->grip_info, obj_attention, points);
-	}
 
 	if (ts->major_rate_limit_support && !!(ts->noise_level)) {
 		ts->tp_ic_touch_num = 0;
@@ -735,13 +727,6 @@ static inline void tp_touch_handle(struct touchpanel_data *ts)
 			}
 			else {
 				input_mt_slot(ts->input_dev, i);
-
-				if (ts->kernel_grip_support && ts->grip_info
-				    && ts->grip_info->eli_reject_status[i]
-				    && !(ts->grip_info->grip_disable_level & (1 << GRIP_DISABLE_UP2CANCEL))) {
-					input_report_abs(ts->input_dev, ABS_MT_PRESSURE, UP2CANCEL_PRESSURE_VALUE);
-				}
-
 				input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 0);
 			}
 		}
@@ -1521,11 +1506,6 @@ static int init_parse_dts(struct device *dev, struct touchpanel_data *ts)
 
 	ts->black_gesture_indep_support = of_property_read_bool(np,
 								"black_gesture_indep_support");
-
-	ts->gesture_test_support    = of_property_read_bool(np,
-				      "black_gesture_test_support");
-	ts->fw_update_app_support   = of_property_read_bool(np,
-				      "fw_update_app_support");
 	ts->game_switch_support     = of_property_read_bool(np, "game_switch_support");
 	ts->glove_mode_support      = of_property_read_bool(np, "glove_mode_support");
 	ts->is_noflash_ic           = of_property_read_bool(np, "noflash_support");
@@ -1539,17 +1519,12 @@ static int init_parse_dts(struct device *dev, struct touchpanel_data *ts)
 	ts->fingerprint_not_report_in_suspend = of_property_read_bool(np,
 					      "fingerprint_not_report_in_suspend");
 	ts->suspend_gesture_cfg   = of_property_read_bool(np, "suspend_gesture_cfg");
-	ts->auto_test_force_pass_support = of_property_read_bool(np,
-					   "auto_test_force_pass_support");
 	ts->freq_hop_simulate_support = of_property_read_bool(np,
 					"freq_hop_simulate_support");
 	ts->irq_trigger_hdl_support = of_property_read_bool(np,
 				      "irq_trigger_hdl_support");
 	ts->noise_modetest_support = of_property_read_bool(np,
 				     "noise_modetest_support");
-	ts->fw_update_in_probe_with_headfile = of_property_read_bool(np,
-					       "fw_update_in_probe_with_headfile");
-	ts->kernel_grip_support     = of_property_read_bool(np, "kernel_grip_support");
 	ts->grip_no_driver_support = of_property_read_bool(np, "grip_no_driver_support");
 	ts->report_rate_white_list_support = of_property_read_bool(np,
 					     "report_rate_white_list_support");
@@ -1558,7 +1533,6 @@ static int init_parse_dts(struct device *dev, struct touchpanel_data *ts)
 	ts->enable_point_auto_change = of_property_read_bool(np, "enable_point_auto_change");
 	ts->temperature_detect_support = of_property_read_bool(np, "temperature_detect_support");
 	ts->temperature_detect_shellback_support = of_property_read_bool(np, "temperature_detect_shellback_support");
-	ts->auto_test_need_cal_support = of_property_read_bool(np, "auto_test_need_cal_support");
 	ts->snr_read_support = of_property_read_bool(np, "snr_read_support");
 	ts->major_rate_limit_support = of_property_read_bool(np, "major_rate_limit_support");
 	ts->palm_to_sleep_support = of_property_read_bool(np, "palm_to_sleep_support");
@@ -3355,24 +3329,6 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 		INIT_DELAYED_WORK(&ts->freq_hop_info.freq_hop_work, tp_freq_hop_work);
 		ts->freq_hop_info.freq_hop_simulating = false;
 		ts->freq_hop_info.freq_hop_freq = 0;
-	}
-
-	/*initial kernel grip parameter*/
-	if (ts->kernel_grip_support) {
-		chip_np = is_support_child_node(ts->dev, ts);
-
-		if (!chip_np) {
-			TP_INFO(ts->tp_index, "chip_np not defined.\n");
-			ts->grip_info = kernel_grip_init(ts->dev);
-		} else {
-			src_chip_np = ts->dev->of_node;
-			ts->dev->of_node = chip_np;
-			ts->grip_info = kernel_grip_init(ts->dev);
-			if (!ts->grip_info) {
-				TP_BOOT_INFO(ts->tp_index, "kernel grip init node failed.\n");
-			}
-			ts->dev->of_node = src_chip_np;
-		}
 	}
 
 	if (ts->pen_support) {	/* Default to enable pen function when boot up */

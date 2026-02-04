@@ -1035,27 +1035,6 @@
 		touchpanel,int-mode = <1>; /*0: interrupt and disable, 1:interrupt and not disable*/
 		touchpanel,curved-size = <45>;
 
-		prevention,curved_screen_V2;
-		prevention,grip_disable_level = <6>;
-		prevention,updelay_time_ms = <30>;
-		prevention,makeup_cnt_weight = <4 1 2 2 2>;
-		prevention,large_corner_range = <600 1400>;
-		prevention,large_corner_judge_condition = <500 100 600 4 4>;
-		prevention,trx_reject_condition = <8 7 7>;
-		prevention,trx_strict_reject_condition = <8 5 5>;
-		prevention,large_judge_time_ms = <500 50 40>;
-		prevention,large_exit_condition = <8 8 2>;
-		prevention,single_channel_width = <160 160>;
-		prevention,normal_tap_condition = <10 300>;
-		prevention,long_edge_condition = <230 90 180 80>;
-		prevention,long_strict_edge_condition = <160 60>;
-		prevention,long_fingerhold_condition = <50 6 4 4>;
-		prevention,short_edge_condition = <200 90 180 80>;
-		prevention,short_strict_edge_condition = <160 60>;
-		prevention,large_strict_exit_condition = <2 2>;
-		prevention,top_corner_config = <280 800 240>;
-		prevention,edge_swipe_config = <150 400>;
-
 		touchpanel,smooth-level = <0 1 2 4 7 9>;
 		touchpanel,smooth-level-charging = <0 2 4 7 8 9>;
 		touchpanel,sensitive-level = <0 70 55 40 25 10>;

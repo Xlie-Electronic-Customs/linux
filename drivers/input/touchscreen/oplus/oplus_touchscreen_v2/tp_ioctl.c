@@ -11,7 +11,6 @@
 
 #include "touchpanel_common.h"
 #include "touch_comon_api.h"
-#include "touchpanel_prevention/touchpanel_prevention.h"
 #include "tp_ioctl.h"
 #include "message_list.h"
 #include "touch_pen/touch_pen_core.h"

@@ -29,7 +29,6 @@
 #define TP_MSG_SIZE_MAX 32
 
 #define EFTM (250)
-#define FW_UPDATE_COMPLETE_TIMEOUT  msecs_to_jiffies(40*1000)
 
 /*********PART2:Define Area**********************/
 
@@ -121,8 +120,6 @@
 #define SMART_GESTURE_THRESHOLD 0x0A
 #define SMART_GESTURE_LOW_VALUE 0x05
 
-#define FW_UPDATE_DELAY        msecs_to_jiffies(2*1000)
-
 #define RECORD_POINTS_COUNT 5
 
 #define REPORT_RATE_GAME_300    300
@@ -213,13 +210,6 @@ typedef enum {
 	FW_NORMAL,     /*fw might update, depend on the fw id*/
 	FW_ABNORMAL,   /*fw abnormal, need update*/
 } fw_check_state;
-
-typedef enum {
-	FW_UPDATE_SUCCESS,
-	FW_NO_NEED_UPDATE,
-	FW_UPDATE_ERROR,
-	FW_UPDATE_FATAL,
-} fw_update_state;
 
 struct firmware_headfile {
 	const uint8_t *firmware_data;
@@ -610,13 +600,11 @@ struct monitor_data {
 	u64 probe_time;
 	u64 max_resume_time;
 	u64 max_suspend_time;
-	u64 max_fw_update_time;
 	char *fw_version;
 	const char *tp_ic;
 	char *vendor;
 
 	bool health_monitor_support;
-	bool kernel_grip_support;
 	int max_finger_support;
 	int tx_num;
 	int rx_num;
@@ -699,9 +687,6 @@ struct monitor_data {
 	u64 screenon_timer;
 	u64 total_screenon_time;
 
-	int auto_test_total_times;
-	int auto_test_failed_times;
-
 	int blackscreen_test_total_times;
 	int blackscreen_test_failed_times;
 
@@ -717,7 +702,6 @@ struct monitor_data {
 	struct list_head        bus_errs_list;
 	struct list_head        bus_errs_buff_list;
 	struct list_head        alloc_err_funcs_list;
-	struct list_head        fw_update_result_list;
 
 	unsigned char *bus_buf;
 	uint16_t bus_len;
@@ -810,27 +794,21 @@ struct touchpanel_data {
 	bool headset_pump_support;                          /*headset_pump support feature*/
 	bool fw_edge_limit_support;                         /*edge_limit by FW support feature*/
 	bool esd_handle_support;                            /*esd handle support feature*/
-	bool gesture_test_support;                          /*indicate test black gesture or not*/
 	bool game_switch_support;                           /*indicate game switch support or not*/
 	bool face_detect_support;                           /*touch porximity function*/
 	bool fingerprint_underscreen_support;               /*fingerprint underscreen support*/
 	bool fingerprint_not_report_in_suspend;
 	bool sec_long_low_trigger;                          /*samsung s6d7ate ic int feature*/
 	bool suspend_gesture_cfg;
-	bool auto_test_force_pass_support;                  /*auto test force pass in early project*/
 	bool freq_hop_simulate_support;                     /*frequency hopping simulate feature*/
 	bool lcd_trigger_load_tp_fw_support;                /*trigger load tp fw by lcd driver after lcd reset*/
-	bool fw_update_app_support;                         /*bspFwUpdate is used*/
-	bool health_monitor_support;                        /*health_monitor is used*/
 	bool irq_trigger_hdl_support;                       /*some no-flash ic (such as TD4330) need irq to trigger hdl*/
 	bool noise_modetest_support;                        /*noise mode test is used*/
-	bool fw_update_in_probe_with_headfile;
 	bool optimized_show_support;                       /*support to show total optimized time*/
 	bool regulator_count_not_support;
 	uint32_t single_optimized_time;                    /*single touch optimized time*/
 	uint32_t total_operate_times;                      /*record total touch down and up count*/
 	struct firmware                 *firmware_in_dts;
-	bool kernel_grip_support;                           /*using grip function in kernel touch driver*/
 	bool grip_no_driver_support;
 	bool high_frame_rate_support;
 	uint32_t high_frame_rate_time;
@@ -852,7 +830,6 @@ struct touchpanel_data {
 	bool loading_fw;                                    /*touchpanel FW updating*/
 	int firmware_update_type;                           /*firmware_update_type: 0=check firmware version 1=force update; 2=for FAE debug*/
 	struct completion fw_complete;						/*completion for control fw update*/
-	struct work_struct     fw_update_work;              /*using for fw update*/
 	/*trigger load tp fw by lcd driver after lcd reset*/
 	struct work_struct lcd_trigger_load_tp_fw_work;
 	/*trigger laod tp fw by lcd driver after lcd reset*/
@@ -862,7 +839,6 @@ struct touchpanel_data {
 	bool in_test_process;                     /*flag whether in test process*/
 	struct black_gesture_test gesture_test;  /*screen off gesture test struct*/
 	struct com_test_data com_test_data;	/*test comon data*/
-	bool auto_test_need_cal_support;
 	bool sportify_aod_gesture_support;
 	/******For button key area********/
 	/*every bit declear one state of key "reserve(keycode)|home(keycode)|menu(keycode)|back(keycode)"*/
@@ -1079,13 +1055,6 @@ struct touchpanel_data {
 	const char *touch_environment;
 };
 
-struct engineer_test_operations {
-	int (*black_screen_test)(struct black_gesture_test *p,
-				 struct touchpanel_data *ts);                 /*message of black gesture test*/
-	int (*auto_test)(struct seq_file *s,
-			 struct touchpanel_data *ts);         /*message of auto test*/
-};
-
 struct oplus_touchpanel_operations {
 	int (*get_chip_info)(void *chip_data);	/*return 0:success;other:failed*/
 	int (*mode_switch)(void *chip_data, work_mode mode,
@@ -1106,9 +1075,6 @@ struct oplus_touchpanel_operations {
 				  struct resolution_info *resolution_info,
 				  struct panel_info *panel_data); /*return < 0 :failed; 0 sucess*/
 
-	/*return 0 normal; return -1:update failed;*/
-	fw_update_state(*fw_update)(void *chip_data, const struct firmware *fw,
-				    bool force);
 	/*return 0:success;other:abnormal, need to jump out*/
 	int (*power_control)(void *chip_data, bool enable);
 
@@ -1146,8 +1112,6 @@ struct oplus_touchpanel_operations {
 	/*If the tp ic need do something, use this!*/
 	void (*tp_queue_work_prepare)(void *chip_data);
 
-	void (*enable_kernel_grip)(void *chip_data,
-				   struct kernel_grip_info *grip_info);          /*enable kernel grip in fw*/
 	bool (*tp_irq_throw_away)(void *chip_data);
 	void (*rate_white_list_ctrl)(void *chip_data, int value);
 	int (*smooth_lv_set)(void *chip_data, int level);

@@ -13,7 +13,6 @@
 
 #include "../../touchpanel_common.h"
 #include "../synaptics_common.h"
-#include "../../touchpanel_prevention/touchpanel_prevention.h"
 
 #ifdef TPD_DEVICE
 #undef TPD_DEVICE
@@ -684,10 +683,6 @@ int syna_tcm_rmi_write(struct syna_tcm_data *tcm_info,
 
 extern void tp_fw_auto_reset_handle(struct touchpanel_data *ts);
 
-struct syna_support_grip_zone {
-	char name[GRIP_TAG_SIZE];
-	int (*handle_func)(void *chip_data, struct grip_zone_area *grip_zone, bool enable);
-};
 
 void syna_reserve_read(struct seq_file *s, void *chip_data);
 void syna_freq_hop_trigger(void *chip_data);
