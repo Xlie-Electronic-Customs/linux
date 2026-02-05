@@ -1093,7 +1093,7 @@
 // };
 
 &i2c9 {
-	clock-frequency = <100000>;
+	clock-frequency = <1000000>;
 	status = "okay";
 
 	nfc: sn-nci@28 {
