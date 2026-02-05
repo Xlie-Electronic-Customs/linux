@@ -12,11 +12,8 @@
 #include <linux/input.h>
 
 #include "util_interface/touch_interfaces.h"
-#include "tp_devices.h"
 #include <linux/miscdevice.h>
 #include <linux/version.h>
-#include "message_list.h"
-#include "tp_ioctl.h"
 
 #ifdef CONFIG_TOUCHIRQ_UPDATE_QOS
 #include <linux/pm_qos.h>
@@ -427,7 +424,6 @@ struct panel_info {
 	char    *aging_test_limit_name;                 /*aging test limit name*/
 	char    *extra;                                 /*for some ic, may need other information*/
 	uint32_t tp_fw;                                 /*FW Version Read from IC*/
-	tp_dev  tp_type;
 	int    vid_len;                                 /*Length of tp name show in  test apk*/
 	u32    project_id;
 	int    report_rate_limit;                       /*chip report rate limit*/
@@ -888,7 +884,7 @@ struct touchpanel_data {
 	/*LCD and TP is in one chip,lcd power off in suspend at first, can not operate i2c when tp suspend*/
 	bool skip_suspend_operate;
 	/******For hw resource area********/
-	struct panel_info panel_data;	/*GPIO control(id && pinctrl && tp_type)*/
+	struct panel_info panel_data;	/*GPIO control(id && pinctrl)*/
 	struct hw_resource     hw_res;                      /*hw resourc information*/
 	struct resolution_info resolution_info;	/*resolution of touchpanel && LCD*/
 	/*used for control touch major reporting area*/

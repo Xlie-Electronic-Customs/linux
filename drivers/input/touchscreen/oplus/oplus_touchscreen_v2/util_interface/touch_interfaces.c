@@ -11,7 +11,6 @@
 #include "touch_interfaces.h"
 #include "../touchpanel_common.h"
 #include "../touch_comon_api.h"
-#include "../touchpanel_exception.h"
 
 #define FIX_I2C_LENGTH   256
 
@@ -275,16 +274,6 @@ int touch_i2c_write_block(struct i2c_client *client, u16 addr,
 	if (retry == MAX_I2C_RETRY_TIME) {
 		TPD_INFO("%s: I2C write over retry limit\n", __func__);
 		retval = -EIO;
-	}
-
-
-	if (ts->exception_upload_support) {
-		if (retry == MAX_I2C_RETRY_TIME) {
-			ts->exception_data.bus_error_count++;
-		} else {
-			ts->exception_data.bus_error_count = 0;
-		}
-		tp_exception_report(&ts->exception_data, EXCEP_BUS, "bus_failed", sizeof("bus_failed"));
 	}
 
 	mutex_unlock(&ts->interface_data.bus_mutex);
@@ -650,15 +639,6 @@ inline int touch_i2c_read(struct i2c_client *client, char *writebuf,
 	}
 
 	memcpy(readbuf, ts->interface_data.read_buf, readlen);
-
-	if (ts->exception_upload_support) {
-		if (retry == MAX_I2C_RETRY_TIME) {
-			ts->exception_data.bus_error_count++;
-		} else {
-			ts->exception_data.bus_error_count = 0;
-		}
-		tp_exception_report(&ts->exception_data, EXCEP_BUS, "bus_failed", sizeof("bus_failed"));
-	}
 
 	mutex_unlock(&ts->interface_data.bus_mutex);
 	return retval;

@@ -27,9 +27,7 @@
 #include <linux/iio/consumer.h>
 #include <linux/alarmtimer.h>
 #include "touchpanel_common.h"
-#include "touchpanel_proc.h"
 #include "touch_comon_api.h"
-#include "touchpanel_exception.h"
 
 unsigned int tp_debug = 0;
 
@@ -227,75 +225,6 @@ void operate_mode_switch(struct touchpanel_data *ts)
 }
 EXPORT_SYMBOL(operate_mode_switch);
 
-/*
- * check_usb_state----expose to be called by charger int to get usb state
- * @usb_state : 1 if usb checked, otherwise is 0
-*/
-void switch_usb_state_work(struct work_struct *work)
-{
-	struct touchpanel_data *ts = container_of(work, struct touchpanel_data,
-				     charger_pump_work);
-
-	mutex_lock(&ts->mutex);
-
-	if (ts->charger_pump_support && (ts->is_usb_checked != ts->cur_usb_state)) {
-		ts->is_usb_checked = !!ts->cur_usb_state;
-		TP_INFO(ts->tp_index, "%s: check usb state : %d, is_suspended: %d\n", __func__,
-			ts->cur_usb_state, ts->is_suspended);
-
-		if (!ts->is_suspended && (ts->suspend_state == TP_SPEEDUP_RESUME_COMPLETE)
-		    && !ts->loading_fw) {
-			mode_switch_health(ts, MODE_CHARGE, ts->is_usb_checked);
-
-			if (ts->smooth_level_array_support && ts->ts_ops->smooth_lv_set) {
-				if (ts->is_usb_checked) {
-					ts->smooth_level_used_array = (u32 *)&(ts->smooth_level_charging_array);
-				} else {
-					ts->smooth_level_used_array = (u32 *)&(ts->smooth_level_array);
-				}
-
-				ts->ts_ops->smooth_lv_set(ts->chip_data, ts->smooth_level_used_array[ts->smooth_level_chosen]);
-			}
-
-			if (ts->sensitive_level_array_support && ts->ts_ops->sensitive_lv_set) {
-				if (ts->is_usb_checked) {
-					ts->sensitive_level_used_array = (u32 *)&(ts->sensitive_level_charging_array);
-				} else {
-					ts->sensitive_level_used_array = (u32 *)&(ts->sensitive_level_array);
-				}
-				ts->ts_ops->sensitive_lv_set(ts->chip_data, ts->sensitive_level_used_array[ts->sensitive_level_chosen]);
-			}
-		}
-	}
-
-	mutex_unlock(&ts->mutex);
-}
-
-/*
- * check_headset_state----expose to be called by audio int to get headset state
- * @headset_state : 1 if headset checked, otherwise is 0
- */
-void switch_headset_work(struct work_struct *work)
-{
-	struct touchpanel_data *ts = container_of(work, struct touchpanel_data,
-				     headset_pump_work);
-
-	mutex_lock(&ts->mutex);
-
-	if (ts->headset_pump_support
-	    && (ts->is_headset_checked != ts->cur_headset_state)) {
-		ts->is_headset_checked = !!ts->cur_headset_state;
-		TP_INFO(ts->tp_index, "%s: check headset state : %d, is_suspended: %d\n",
-			__func__, ts->cur_headset_state, ts->is_suspended);
-
-		if (!ts->is_suspended && (ts->suspend_state == TP_SPEEDUP_RESUME_COMPLETE)
-		    && !ts->loading_fw) {
-			mode_switch_health(ts, MODE_HEADSET, ts->is_headset_checked);
-		}
-	}
-
-	mutex_unlock(&ts->mutex);
-}
 
 static inline void tp_touch_down(struct touchpanel_data *ts, struct point_info points, int touch_report_num, int id)
 {
@@ -405,9 +334,6 @@ static void tp_exception_handle(struct touchpanel_data *ts)
 
 	if (ts->fingerprint_underscreen_support) {
 		ts->fp_info.touch_state = 0;
-	}
-	if (ts->exception_upload_support) {
-		tp_exception_report(&ts->exception_data, EXCEP_IRQ, "tp_exception_handle", sizeof("tp_exception_handle"));
 	}
 }
 
@@ -550,9 +476,6 @@ EXPORT_SYMBOL(tp_touch_btnkey_release);
 static void tp_touch_release(struct touchpanel_data *ts)
 {
 	int i = 0;
-	if (ts->en_touch_event_helper) {
-		post_message(ts->msg_list, 0, TYPE_RESET, NULL);
-	}
 
 
 	mutex_lock(&ts->report_mutex);
@@ -581,31 +504,6 @@ static void tp_touch_release(struct touchpanel_data *ts)
 	ts->view_area_touched = 0; /*realse all touch point,must clear this flag*/
 	ts->touch_count = 0;
 	ts->irq_slot = 0;
-}
-
-static inline void tp_touch_helper_handle(struct touchpanel_data *ts)
-{
-	int obj_attention = 0;
-	struct point_info points[MAX_FINGER_NUM];
-
-	if (!ts->ts_ops->get_touch_points_help) {
-		TP_INFO(ts->tp_index, "not support ts->ts_ops->get_touch_points_help callback\n");
-		return;
-	}
-
-	memset(points, 0, sizeof(points));
-
-	obj_attention = ts->ts_ops->get_touch_points_help(ts->chip_data,
-				points,
-				ts->max_num,
-				&ts->resolution_info);
-	if (obj_attention == -EINVAL) {
-		TP_INFO(ts->tp_index, "Invalid points, ignore..\n");
-		return;
-	}
-
-	post_message(ts->msg_list,sizeof(points), TYPE_POINT, (u8*)&points);
-	return;
 }
 
 static void tp_palm_to_sleep_inScreenLock(struct touchpanel_data *ts)
@@ -949,11 +847,7 @@ static inline void tp_work_func(struct touchpanel_data *ts)
 		}
 
 		if (CHK_BIT(cur_event, IRQ_TOUCH)) {
-			if (ts->en_touch_event_helper) {
-				tp_touch_helper_handle(ts);
-			} else {
-				tp_touch_handle(ts);
-			}
+			tp_touch_handle(ts);
 		}
 
 		if (CHK_BIT(cur_event, IRQ_FACE_STATE) && ts->fd_enable) {
@@ -1394,8 +1288,6 @@ static int init_parse_dts(struct device *dev, struct touchpanel_data *ts)
 
 	ts->lcd_tp_refresh_support = of_property_read_bool(np, "lcd_tp_refresh_support");
 	ts->enable_point_auto_change = of_property_read_bool(np, "enable_point_auto_change");
-	ts->temperature_detect_support = of_property_read_bool(np, "temperature_detect_support");
-	ts->temperature_detect_shellback_support = of_property_read_bool(np, "temperature_detect_shellback_support");
 	ts->snr_read_support = of_property_read_bool(np, "snr_read_support");
 	ts->major_rate_limit_support = of_property_read_bool(np, "major_rate_limit_support");
 	ts->palm_to_sleep_support = of_property_read_bool(np, "palm_to_sleep_support");
@@ -1408,8 +1300,6 @@ static int init_parse_dts(struct device *dev, struct touchpanel_data *ts)
 
 	ts->trusted_touch_support = false;
 
-	ts->exception_upload_support = of_property_read_bool(np,
-				     "exception_upload_support");
 	ts->sportify_aod_gesture_support = of_property_read_bool(np,
 						 "sportify_aod_gesture_support");
 	if (!ts->sportify_aod_gesture_support) {
@@ -1733,12 +1623,6 @@ static int init_parse_dts(struct device *dev, struct touchpanel_data *ts)
 			TP_BOOT_INFO(ts->tp_index, "firmware_name not specified");
 			//devm_kfree(dev, ts->panel_data.firmware_name[i]);
 		}
-	}
-
-	rc = of_property_read_u32(np, "tp_type", &ts->panel_data.tp_type);
-
-	if (rc) {
-		TP_BOOT_INFO(ts->tp_index, "tp_type not specified\n");
 	}
 
 	/*firmware*/
@@ -2305,9 +2189,6 @@ static void esd_handle_func(struct work_struct *work)
 	if (ts->monitor_data.health_simulate_trigger
 		   || ret == -1) {    /*-1 means esd hanppened: handled in IC part, recovery the state here*/
 		operate_mode_switch(ts);
-		if (ts->exception_upload_support) {
-			tp_exception_report(&ts->exception_data, EXCEP_HARDWARE, "esd_handle_failed", sizeof("esd_handle_failed"));
-		}
 	}
 
 	if (!IS_ERR_OR_NULL(ts->hw_res.avdd) && (regulator_get_voltage(ts->hw_res.avdd) != -EINVAL)) {
@@ -2593,100 +2474,6 @@ static int tp_power_init(struct touchpanel_data *pdata)
 	return 0;
 }
 
-#ifndef CONFIG_ARCH_QTI_VM
-static int init_get_adc_channels(struct touchpanel_data *ts)
-{
-	int rc = -1;
-	const char *name;
-	struct device_node *node = ts->dev->of_node;
-
-	rc = of_property_read_string(node, "oplus,skin_temp_chan", &name);
-	if (rc < 0) {
-		pr_err("can't get oplus,skin_temp_chan, rc=%d\n", rc);
-		return rc;
-	}
-	rc = of_property_match_string(node, "io-channel-names", name);
-	if (rc < 0) {
-		pr_err("can't read io-channel-names, rc=%d\n", rc);
-		return rc;
-	}
-
-	ts->skin_therm_chan = iio_channel_get(ts->dev, name);
-	if (IS_ERR(ts->skin_therm_chan)) {
-		rc = PTR_ERR(ts->skin_therm_chan);
-		if (rc != -EPROBE_DEFER)
-			pr_err("%s channel unavailable, %d\n", name, rc);
-		ts->skin_therm_chan = NULL;
-	}
-	TP_INFO(ts->tp_index, "%s finished\n", __func__);
-	return rc;
-}
-
-static int pre_get_shellback(struct touchpanel_data *ts)
-{
-	int ret = 0;
-	ts->oplus_shell_themal = thermal_zone_get_zone_by_name("shell_back");
-
-	if (IS_ERR(ts->oplus_shell_themal)) {
-		TPD_INFO("%s Can't get shell_back\n", __func__);
-		ts->oplus_shell_themal = NULL;
-		ret = -1;
-	}
-
-	TPD_DEBUG("%s get shell_back ret:%d\n", __func__, ret);
-
-	return ret;
-}
-
-static void tp_get_temperature_work(struct work_struct *work)
-{
-	struct touchpanel_data *ts = container_of(work, struct touchpanel_data,
-				get_temperature_work);
-	int result = -40000;
-	int rc;
-
-
-	if (ts->temperature_detect_shellback_support) {
-		rc = pre_get_shellback(ts);
-		if (rc < 0) {
-			TPD_INFO("%s can't pre_get_shellback\n", __func__);
-			goto End;
-		}
-		rc = thermal_zone_get_temp(ts->oplus_shell_themal, &result);
-		if (rc < 0)
-			TPD_INFO("%s can't thermal_zone_get_temp, rc=%d\n", __func__, rc);
-	} else {
-		if (!ts->skin_therm_chan)
-			return;
-		rc = iio_read_channel_processed(ts->skin_therm_chan, &result);
-		if (rc < 0)
-			TPD_INFO("%s can't skin_therm_chan, rc=%d\n", __func__, rc);
-	}
-
-	result = result / 1000;
-
-	TP_DEBUG(ts->tp_index, "[oldTemp:%d][curTemp:%d]\n",
-		ts->old_temp, result);
-
-	if (ts->old_temp == result)
-		goto End;
-
-	if (result > MAX_TEMPERATURE || result < MIN_TEMPERATURE) {
-		ts->monitor_data.abnormal_temperature_count++;
-		goto End;
-	}
-
-	if (ts->is_suspended == 0 && (ts->temperature_detect_support || ts->temperature_detect_shellback_support)) {
-		mutex_lock(&ts->mutex);
-		ts->ts_ops->send_temperature(ts->chip_data, result, true);
-		mutex_unlock(&ts->mutex);
-	}
-	ts->old_temp = result;
-End:
-	hrtimer_start(&ts->temp_timer, ktime_set(10, 0), HRTIMER_MODE_REL);
-}
-#endif
-
 /**
  * touchpanel_ts_suspend - touchpanel suspend function
  * @dev: i2c_client->dev using to get touchpanel_data resource
@@ -2744,8 +2531,6 @@ static void tp_suspend_direct(struct touchpanel_data *ts)
 		TP_INFO(ts->tp_index, "%s: do not suspend twice.\n", __func__);
 		goto EXIT;
 	}
-	if ((ts->temperature_detect_support && ts->skin_therm_chan) || ts->temperature_detect_shellback_support)
-		hrtimer_cancel(&ts->temp_timer);
 
 	/*step3:Release key && touch event before suspend*/
 	tp_btnkey_release(ts);
@@ -2815,10 +2600,6 @@ static void tp_suspend_direct(struct touchpanel_data *ts)
 
 EXIT:
 
-	if (ts->en_touch_event_helper) {
-		post_message(ts->msg_list, 0, TYPE_SUSPEND, NULL);
-	}
-
 	TP_INFO(ts->tp_index, "%s: end.\n", __func__);
 	mutex_unlock(&ts->mutex);
 }
@@ -2861,10 +2642,6 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 		return -1;
 	}
 
-	if (ts->exception_upload_support) {
-		ts->exception_data.exception_upload_support = true;
-		ts->exception_data.chip_data = ts->chip_data;
-	}
 
 	/*step3 : interfaces init*/
 	init_touch_interfaces(ts->dev, ts->register_is_16bit);
@@ -3034,7 +2811,6 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 			goto error_fb_notif;
 		}
 
-		INIT_WORK(&ts->headset_pump_work, switch_headset_work);
 	}
 
 	if (ts->charger_pump_support) {
@@ -3045,8 +2821,6 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 			ret = -ENOMEM;
 			goto error_headset_pump;
 		}
-
-		INIT_WORK(&ts->charger_pump_work, switch_usb_state_work);
 	}
 
 	/*step16 : workqueue create(speedup_resume)*/
@@ -3127,31 +2901,9 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 			goto error_esd_wq;
 		}
 
-		INIT_DELAYED_WORK(&ts->freq_hop_info.freq_hop_work, tp_freq_hop_work);
 		ts->freq_hop_info.freq_hop_simulating = false;
 		ts->freq_hop_info.freq_hop_freq = 0;
 	}
-
-	/*step 22 : createproc proc files interface*/
-	init_touchpanel_proc(ts);
-	init_touch_misc_device(ts);
-#ifndef CONFIG_ARCH_QTI_VM
-	if (ts->temperature_detect_support || ts->temperature_detect_shellback_support) {
-		ts->old_temp = 0;
-		if (ts->temperature_detect_shellback_support)
-			ret = 0;
-		else
-			ret = init_get_adc_channels(ts);
-
-		if (ret < 0)
-			TP_BOOT_INFO(ts->tp_index, "init get channels failed\n");
-		else {
-			hrtimer_setup(&ts->temp_timer, ts->temp_timer.function, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-			INIT_WORK(&ts->get_temperature_work, tp_get_temperature_work);
-			hrtimer_start(&ts->temp_timer, ktime_set(15, 0), HRTIMER_MODE_REL);
-		}
-	}
-#endif
 
 
 	/*step 23 : Other*****/
@@ -3238,10 +2990,6 @@ err_check_functionality_failed:
 	if (gpio_is_valid(ts->hw_res.cs_gpio)) {
 		gpio_free(ts->hw_res.cs_gpio);
 	}
-
-	if (ts->exception_upload_support) {
-		tp_exception_report(&ts->exception_data, EXCEP_PROBE, "register_common_touch_device", sizeof("register_common_touch_device"));
-	}
 #endif
 	/*wake_lock_destroy(&ts->wakelock);*/
 	ret = -1;
@@ -3259,9 +3007,6 @@ void unregister_common_touch_device(struct touchpanel_data *pdata)
 
 	/*step1 :free irq*/
 	devm_free_irq(ts->dev, ts->irq, ts);
-	/*step2 :free proc node*/
-	remove_touchpanel_proc(ts);
-	uninit_touch_misc_device(ts);
 
 	/*step3 :free the hw resource*/
 	pdata->ts_ops->power_control(ts->chip_data, false);
@@ -3443,8 +3188,6 @@ static void speedup_resume(struct work_struct *work)
 
 EXIT:
 	ts->suspend_state = TP_SPEEDUP_RESUME_COMPLETE;
-	if ((ts->temperature_detect_support && ts->skin_therm_chan) || ts->temperature_detect_shellback_support)
-		hrtimer_start(&ts->temp_timer, ktime_set(15, 0), HRTIMER_MODE_REL);
 
 	/*step7:Unlock  && exit*/
 	TP_INFO(ts->tp_index, "%s: end!\n", __func__);

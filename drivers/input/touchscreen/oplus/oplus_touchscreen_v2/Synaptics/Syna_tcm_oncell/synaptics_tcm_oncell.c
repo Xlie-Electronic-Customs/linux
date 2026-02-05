@@ -1134,7 +1134,6 @@ static void syna_tcm_dispatch_message(struct syna_tcm_data *tcm_info)
 		if (0x0b == tcm_info->id_info.mode) {
 			tcm_info->firmware_mode_count++;
 			if (!tcm_info->upload_flag && tcm_info->firmware_mode_count >= FIRMWARE_MODE_BL_MAX) {
-				tp_exception_report(tcm_info->exception_data, EXCEP_IRQ, "firmware mode = 0x0b", sizeof("firmware mode = 0x0b"));
 				tcm_info->upload_flag = 1;
 			}
 		}
