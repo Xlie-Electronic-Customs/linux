@@ -23,7 +23,6 @@ menuconfig INPUT_TOUCHSCREEN_OPLUS
 if INPUT_TOUCHSCREEN_OPLUS
 
 source "drivers/input/touchscreen/oplus/oplus_touchscreen_v2/Kconfig"
-source "drivers/input/touchscreen/oplus/kernelFwUpdate/Kconfig"
 
 endif
 
