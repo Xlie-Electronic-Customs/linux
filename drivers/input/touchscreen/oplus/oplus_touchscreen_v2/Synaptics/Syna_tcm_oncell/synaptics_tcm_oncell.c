@@ -4653,118 +4653,6 @@ static int syna_tcm_sensitive_lv_set(void *chip_data, int level)
 	return 0;
 }
 
-/*********** Start of kernel grip callbacks*************************/
-
-static void syna_set_grip_area_disable(void *chip_data)
-{
-	struct syna_tcm_data *tcm_info = (struct syna_tcm_data *)chip_data;
-
-	CLR_BIT(tcm_info->dc_cfg.g_dark_zone_enable, 0x00FF);
-	tcm_info->dc_cfg.g_abs_dark_sel = 0;
-}
-
-static int syna_send_grip_to_chip(void *chip_data)
-{
-	struct syna_tcm_data *tcm_info = (struct syna_tcm_data *)chip_data;
-	int ret = -1;
-	unsigned short len = 0;
-
-	if (!tcm_info || *tcm_info->in_suspend) {
-		TPD_INFO("%s: set grip in TP suspend !\n", __func__);
-		return 0;
-	}
-
-	ret = syna_tcm_set_dynamic_config(tcm_info,
-					  DC_GRIP_ROATE_TO_HORIZONTAL_LEVEL,
-					  tcm_info->dc_cfg.g_roate_hori_level);
-	if (ret < 0) {
-		TPD_INFO("%s:failed to set DC_GRIP_ROATE_TO_HORIZONTAL_LEVEL\n", __func__);
-		return ret;
-	}
-
-	ret = syna_tcm_set_dynamic_config(tcm_info,
-					  DC_GRIP_ABS_DARK_X,
-					  tcm_info->dc_cfg.g_abs_dark_x);
-	if (ret < 0) {
-		TPD_INFO("%s:failed to set DC_GRIP_ABS_DARK_X\n", __func__);
-		return ret;
-	}
-	ret = syna_tcm_set_dynamic_config(tcm_info,
-					  DC_GRIP_ABS_DARK_Y,
-					  tcm_info->dc_cfg.g_abs_dark_y);
-	if (ret < 0) {
-		TPD_INFO("%s:failed to set DC_GRIP_ABS_DARK_Y\n", __func__);
-		return ret;
-	}
-
-	ret = syna_tcm_set_dynamic_config(tcm_info,
-					  DC_GRIP_ABS_DARK_U,
-					  tcm_info->dc_cfg.g_abs_dark_u);
-	if (ret < 0) {
-		TPD_INFO("%s:failed to set DC_GRIP_ABS_DARK_U\n", __func__);
-		return ret;
-	}
-	ret = syna_tcm_set_dynamic_config(tcm_info,
-					  DC_GRIP_ABS_DARK_V,
-					  tcm_info->dc_cfg.g_abs_dark_v);
-	if (ret < 0) {
-		TPD_INFO("%s:failed to set DC_GRIP_ABS_DARK_V\n", __func__);
-		return ret;
-	}
-
-	ret = syna_tcm_set_dynamic_config(tcm_info,
-					  DC_GRIP_CONDTION_ZONE,
-					  tcm_info->dc_cfg.g_condtion_zone);
-	if (ret < 0) {
-		TPD_INFO("%s:failed to set DC_GRIP_CONDTION_ZONE\n", __func__);
-		return ret;
-	}
-
-	ret = syna_tcm_set_dynamic_config(tcm_info,
-					  DC_GRIP_DARK_ZONE_X,
-					  tcm_info->dc_cfg.g_dark_zone_x);
-	if (ret < 0) {
-		TPD_INFO("%s:failed to set DC_GRIP_DARK_ZONE_X\n", __func__);
-		return ret;
-	}
-	ret = syna_tcm_set_dynamic_config(tcm_info,
-					  DC_GRIP_DARK_ZONE_Y,
-					  tcm_info->dc_cfg.g_dark_zone_y);
-	if (ret < 0) {
-		TPD_INFO("%s:failed to set DC_GRIP_DARK_ZONE_Y\n", __func__);
-		return ret;
-	}
-	ret = syna_tcm_set_dynamic_config(tcm_info,
-					  DC_GRIP_ABS_DARK_SEL,
-					  tcm_info->dc_cfg.g_abs_dark_sel);
-	if (ret < 0) {
-		TPD_INFO("%s:failed to set DC_GRIP_ABS_DARK_SEL\n", __func__);
-		return ret;
-	}
-	ret = syna_tcm_set_dynamic_config(tcm_info,
-					  DC_DARK_ZONE_ENABLE,
-					  tcm_info->dc_cfg.g_dark_zone_enable);
-	if (ret < 0) {
-		TPD_INFO("%s:failed to set DC_DARK_ZONE_ENABLE\n", __func__);
-		return ret;
-	}
-
-	len = tcm_info->dc_cfg.g_special_zone_l;
-	if (tcm_info->touch_direction != VERTICAL_SCREEN) {
-		len = 0;
-	}
-
-	ret = syna_tcm_set_dynamic_config(tcm_info,
-					  DC_GRIP_SPECIAL_ZONE_L,
-					  len);
-	if (ret < 0) {
-		TPD_INFO("%s:failed to set DC_GRIP_SPECIAL_ZONE_L\n", __func__);
-		return ret;
-	}
-
-	return ret;
-}
-
 static void syna_set_gesture_state(void *chip_data, int state)
 {
 	struct syna_tcm_data *tcm_info = (struct syna_tcm_data *)chip_data;
@@ -5331,11 +5219,6 @@ static struct i2c_driver syna_i2c_driver = {
 static int __init tp_driver_init_syna_tcm(void)
 {
 	TPD_INFO("%s is called\n", __func__);
-
-	if (!tp_judge_ic_match(TPD_DEVICE)) {
-		TPD_INFO("%s syna not match ic.\n", __func__);
-		goto OUT;
-	}
 
 	if (i2c_add_driver(&syna_i2c_driver) != 0) {
 		TPD_INFO("%s: unable to add i2c driver.\n", __func__);

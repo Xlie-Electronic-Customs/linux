@@ -3036,15 +3036,6 @@ int init_touchpanel_proc(struct touchpanel_data *ts)
 			"oplus_tp_direction", 0666, NULL, &touch_dir_proc_fops, ts, false,
 			ts->fw_edge_limit_support
 		},
-		{
-			"pencil_connected", 0666, NULL, &proc_pencil_connect_fops, ts, false,
-			ts->pen_support
-		},
-		{
-			"pencil_control", 0666, NULL, &proc_pencil_control_fops, ts, false,
-			ts->pen_support
-		},
-		{"pencil_opp", 0666, NULL, &proc_pencil_opp_fops, ts, false, ts->pen_support},
 		{"gesture_support", 0666, NULL, &tp_gesture_support_fops, ts, false, true},
 		{"palm_to_sleep", 0666, NULL, &tp_palm_to_sleep_fops, ts, false, ts->palm_to_sleep_support},
 		{"palm_to_sleep_support", 0666, NULL, &tp_palm_to_sleep_support_fops, ts, false, ts->palm_to_sleep_support},

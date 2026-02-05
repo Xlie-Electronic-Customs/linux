@@ -31,8 +31,6 @@ config TOUCHPANEL_SYNAPTICS
     Say Y to enable driver for Touchpanel using Synaptics_IC
     Say M to enable driver for Touchpanel using Synaptics_IC as module.
 
-source "drivers/input/touchscreen/oplus/oplus_touchscreen_v2/touch_custom/Kconfig"
-
 if TOUCHPANEL_SYNAPTICS
 source "drivers/input/touchscreen/oplus/oplus_touchscreen_v2/Synaptics/Kconfig"
 endif

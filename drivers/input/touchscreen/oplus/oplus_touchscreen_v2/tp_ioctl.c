@@ -13,7 +13,6 @@
 #include "touch_comon_api.h"
 #include "tp_ioctl.h"
 #include "message_list.h"
-#include "touch_pen/touch_pen_core.h"
 
 void touch_misc_state_change(void *p_device, enum IOC_STATE_TYPE type, int state)
 {
@@ -575,12 +574,6 @@ static long touch_misc_ioctl(struct file *filp,
 		TPD_DETAIL("TP_IOC_DTS  start!!!!");
 		ret = ioc_dts_read(ts, arg);
 		break;
-	case PEN_IOC_CMD_UPLK:
-		ret = touch_pen_uplink_msg_ioctl(ts, arg);
-		break;
-	case PEN_IOC_CMD_DOWNLK:
-		ret = touch_pen_downlink_msg_ioctl(ts, arg);
-		break;
 	default:
 		ret = -EOPNOTSUPP;
 		TPD_INFO("cmd not support:0x%08X\n", cmd);
@@ -630,7 +623,6 @@ void init_touch_misc_device(void *p_device)
 	ts->misc_device.fops = &touch_misc_fops;
 
 	ts->misc_device.name = namep;
-	touch_pen_init(ts);
 	TPD_INFO("%s: ts misc register ok", __func__);
 	misc_register(&ts->misc_device);
 
@@ -642,7 +634,6 @@ void uninit_touch_misc_device(void *p_device)
 
 	kfree(ts->misc_device.name);
 	delete_message_list(&ts->msg_list);
-	touch_pen_uninit(ts);
 	misc_deregister(&ts->misc_device);
 	TPD_INFO("uninit_touch_misc_device ok");
 }

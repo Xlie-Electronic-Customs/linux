@@ -30,7 +30,6 @@
 #include "touchpanel_proc.h"
 #include "touch_comon_api.h"
 #include "touchpanel_exception.h"
-#include "touch_pen/touch_pen_core.h"
 
 unsigned int tp_debug = 0;
 
@@ -98,8 +97,6 @@ static void lcd_tp_refresh_work(struct work_struct *work);
 
 static void tp_rate_calc(struct touchpanel_data *ts, tp_rate tp_rate_type);
 
-extern int preconfig_power_control(struct touchpanel_data *ts);
-extern  int reconfig_power_control(struct touchpanel_data *ts);
 
 void display_esd_check_enable_bytouchpanel(bool enable);
 
@@ -223,10 +220,6 @@ void operate_mode_switch(struct touchpanel_data *ts)
 		}
 		if (ts->lcd_tp_refresh_support && ts->ts_ops->tp_refresh_switch) {
 			ts->ts_ops->tp_refresh_switch(ts->chip_data, ts->lcd_fps);
-		}
-
-		if (ts->pen_support) {
-			mode_switch_health(ts, MODE_PEN_SCAN, ts->is_pen_connected);
 		}
 
 		mode_switch_health(ts, MODE_NORMAL, true);
@@ -890,62 +883,6 @@ static void tp_face_detect_handle(struct touchpanel_data *ts)
 	input_sync(ts->ps_input_dev);
 }
 
-static void tp_pen_handle(struct touchpanel_data *ts)
-{
-	struct pen_info pen_info;
-	static int point_num = 0;
-	static struct pen_info last_point = {.x = 0, .y = 0};
-	static bool up_status = false;
-	if (!ts->ts_ops->get_pen_points) {
-		TPD_INFO("not support get_pen_points callback.\n");
-		return;
-	}
-
-	memset(&pen_info, 0, sizeof(pen_info));
-
-	ts->ts_ops->get_pen_points(ts->chip_data, &pen_info);
-
-	if (ts->pen_support_opp) {
-		touch_pen_speed_handle(ts, pen_info.speed);
-	}
-	if (pen_info.status == 1) {
-		if (up_status == true) {
-			TPD_DETAIL("first pen point [%4d %4d %4d]\n", pen_info.x, pen_info.y, pen_info.z);
-		}
-		up_status = false;
-		input_report_abs(ts->pen_input_dev, ABS_X, pen_info.x);
-		input_report_abs(ts->pen_input_dev, ABS_Y, pen_info.y);
-		input_report_abs(ts->pen_input_dev, ABS_PRESSURE, pen_info.z);
-		input_report_abs(ts->pen_input_dev, ABS_TILT_X, pen_info.tilt_x);
-		input_report_abs(ts->pen_input_dev, ABS_TILT_Y, pen_info.tilt_y);
-		input_report_abs(ts->pen_input_dev, ABS_DISTANCE, pen_info.d);
-		input_report_key(ts->pen_input_dev, BTN_TOUCH, !!pen_info.z);
-		input_report_key(ts->pen_input_dev, BTN_TOOL_PEN, !!pen_info.z || !!pen_info.d);
-		input_report_key(ts->pen_input_dev, BTN_STYLUS, pen_info.btn1);
-		input_report_key(ts->pen_input_dev, BTN_STYLUS2, pen_info.btn2);
-
-		TPD_SPECIFIC_PRINT(point_num, "Pen Down[%4d %4d %4d %4d %4d]\n", \
-								pen_info.x, pen_info.y, pen_info.z, pen_info.tilt_x, pen_info.tilt_y);
-		/*strore  the last point data*/
-		memcpy(&last_point, &pen_info, sizeof(struct pen_info));
-	} else if ((pen_info.status == 0) && (up_status == false)) {
-		input_report_abs(ts->pen_input_dev, ABS_X, 0);
-		input_report_abs(ts->pen_input_dev, ABS_Y, 0);
-		input_report_abs(ts->pen_input_dev, ABS_PRESSURE, 0);
-		input_report_abs(ts->pen_input_dev, ABS_TILT_X, 0);
-		input_report_abs(ts->pen_input_dev, ABS_TILT_Y, 0);
-		input_report_abs(ts->pen_input_dev, ABS_DISTANCE, 0);
-		input_report_key(ts->pen_input_dev, BTN_TOUCH, 0);
-		input_report_key(ts->pen_input_dev, BTN_TOOL_PEN, 0);
-		input_report_key(ts->pen_input_dev, BTN_STYLUS, 0);
-		input_report_key(ts->pen_input_dev, BTN_STYLUS2, 0);
-		up_status = true;
-        TPD_DETAIL("Pen Up, last point x:%d y:%d\n", last_point.x, last_point.y);
-	}
-
-	input_sync(ts->pen_input_dev);
-}
-
 static void tp_fingerprint_handle(struct touchpanel_data *ts)
 {
 	struct fp_underscreen_info fp_tpinfo;
@@ -1006,10 +943,6 @@ static inline void tp_work_func(struct touchpanel_data *ts)
 			tp_btnkey_handle(ts);
 		}
 
-		if (CHK_BIT(cur_event, IRQ_PEN) && ts->pen_support) {
-			tp_pen_handle(ts);
-		}
-
 		if (CHK_BIT(cur_event, IRQ_PALM)
 			&& ts->palm_to_sleep_enable && !ts->is_suspended) {
 			tp_palm_to_sleep_inScreenLock(ts);
@@ -1021,9 +954,6 @@ static inline void tp_work_func(struct touchpanel_data *ts)
 			} else {
 				tp_touch_handle(ts);
 			}
-		}
-		if (CHK_BIT(cur_event, IRQ_PEN_REPORT)) {
-			touch_pen_uplink_msg_handle(ts);
 		}
 
 		if (CHK_BIT(cur_event, IRQ_FACE_STATE) && ts->fd_enable) {
@@ -1269,30 +1199,6 @@ static int init_input_device(struct touchpanel_data *ts)
 		set_bit(MSC_RAW, ts->ps_input_dev->mscbit);
 	}
 
-	if (ts->pen_support) {
-			ts->pen_input_dev = input_allocate_device();
-			if (ts->pen_input_dev == NULL) {
-				ret = -ENOMEM;
-				TPD_INFO("Failed to allocate pen input device\n");
-				return ret;
-			}
-			if (!ts->tp_index) {
-				ts->pen_input_dev->name = TPD_DEVICE"_pen";
-				ts->pen_input_dev->phys = TPD_DEVICE"_pen_phys_main";
-			} else {
-				ts->pen_input_dev->name = TPD_DEVICE"_pen1";
-				ts->pen_input_dev->phys =  TPD_DEVICE"_pen_phys_secondary";
-			}
-			set_bit(EV_SYN, ts->pen_input_dev->evbit);
-			set_bit(EV_ABS, ts->pen_input_dev->evbit);
-			set_bit(EV_KEY, ts->pen_input_dev->evbit);
-			set_bit(BTN_TOUCH, ts->pen_input_dev->keybit);
-			set_bit(BTN_TOOL_PEN, ts->pen_input_dev->keybit);
-			set_bit(BTN_STYLUS, ts->pen_input_dev->keybit);
-			set_bit(BTN_STYLUS2, ts->pen_input_dev->keybit);
-			set_bit(INPUT_PROP_DIRECT, ts->pen_input_dev->propbit);
-	}
-
 	if (!ts->tp_index) {
 		ts->input_dev->name = TPD_DEVICE;
 	} else {
@@ -1409,50 +1315,7 @@ static int init_input_device(struct touchpanel_data *ts)
 		}
 	}
 
-	if(ts->pen_support) {
-			input_set_abs_params(ts->pen_input_dev, ABS_X, 0, ts->pen_config.max_x - 1, 0, 0);
-			input_set_abs_params(ts->pen_input_dev, ABS_Y, 0, ts->pen_config.max_y - 1, 0, 0);
-			input_set_abs_params(ts->pen_input_dev, ABS_PRESSURE, 0, ts->pen_config.max_pressure - 1, 0, 0);
-			input_set_abs_params(ts->pen_input_dev, ABS_DISTANCE, 0, 1, 0, 0);
-			input_set_abs_params(ts->pen_input_dev, ABS_TILT_X, -(ts->pen_config.tilt_x_max), ts->pen_config.tilt_x_max, 0, 0);
-			input_set_abs_params(ts->pen_input_dev, ABS_TILT_Y, -(ts->pen_config.tilt_y_max), ts->pen_config.tilt_y_max, 0, 0);
-			if (input_register_device(ts->pen_input_dev)) {
-				TPD_INFO("%s: Failed to register pen input device\n", __func__);
-				input_free_device(ts->pen_input_dev);
-				return -1;
-			}
-	}
-
 	return 0;
-}
-
-static struct device_node* is_support_child_node (struct device *dev,  struct touchpanel_data *ts)
-{
-	struct device_node *child_node = NULL;
-	char *chip_name = NULL;
-	char *panel_node = kzalloc(MAX_NODE_DATA_LENGTH, GFP_KERNEL|GFP_DMA);
-	struct device_node *np = NULL;
-	if (!ts || !dev) {
-	    kfree(panel_node);
-	    return child_node;
-	}
-
-	np = dev->of_node;
-	if (ts->chip_index > 0 && ts->chip_index <= ts->panel_data.chip_num) {
-		chip_name = ts->panel_data.chip_name[ts->chip_index];
-	} else {
-		chip_name = ts->panel_data.chip_name[0];
-	}
-	snprintf(panel_node, MAX_NODE_DATA_LENGTH, "%s_PANEL%d", chip_name, ts->panel_data.tp_type);
-	TPD_INFO("%s: panel_node = %s.\n", __func__, panel_node);
-	child_node = of_get_child_by_name(np, panel_node);
-
-	if (!child_node) {
-		TP_INFO(ts->tp_index, "child_node not defined.\n");
-	}
-
-	kfree(panel_node);
-	return child_node;
 }
 
 /**
@@ -1872,15 +1735,6 @@ static int init_parse_dts(struct device *dev, struct touchpanel_data *ts)
 		}
 	}
 
-	rc = tp_judge_ic_match_commandline(&ts->panel_data);
-	snprintf(data_buf, 32, "firmware-data-%d", rc);
-	ts->chip_index = rc;
-
-	if (rc < 0) {
-		TP_INFO(ts->tp_index, "commandline not match, please update dts");
-		goto dts_match_error;
-	}
-
 	rc = of_property_read_u32(np, "tp_type", &ts->panel_data.tp_type);
 
 	if (rc) {
@@ -2152,48 +2006,6 @@ static int init_parse_dts(struct device *dev, struct touchpanel_data *ts)
     } else {
         ts->monitor_data.RATE_MIN = ts->panel_data.report_rate_limit;
     }
-
-	if (ts->pen_support) {
-		rc = of_property_read_u32_array(np, "touchpanel,pen-tx-rx-num", tx_rx_num, 2);
-		if (rc) {
-			TPD_BOOT_INFO("pen-tx-rx-num not set\n");
-			ts->hw_res.pen_tx_num = 0;
-			ts->hw_res.pen_rx_num = 0;
-		} else {
-			ts->hw_res.pen_tx_num = tx_rx_num[0];
-			ts->hw_res.pen_rx_num = tx_rx_num[1];
-		}
-		TPD_BOOT_INFO("pen_tx_num = %d, pen_rx_num = %d \n", ts->hw_res.pen_tx_num, ts->hw_res.pen_rx_num);
-
-		rc = of_property_read_u32_array(np, "touchpanel,pen-panel-coords", temp_array, 2);
-		if (rc) {
-			TPD_BOOT_INFO("panel for pen coords not set\n");
-			ts->pen_config.max_x = 0;
-			ts->pen_config.max_y = 0;
-		} else {
-			ts->pen_config.max_x = temp_array[0];
-			ts->pen_config.max_y = temp_array[1];
-		}
-		TPD_BOOT_INFO("pen_max_x = %d, pen_max_y = %d \n", ts->pen_config.max_x, ts->pen_config.max_y);
-
-		rc = of_property_read_u32(np, "touchpanel,pen-max-pressure", &(ts->pen_config.max_pressure));
-		if (rc) {
-			TPD_BOOT_INFO("pen pressure config not specified\n");
-			ts->pen_config.max_pressure = 1023;
-		}
-		TPD_BOOT_INFO("pen_max_pressure = %d.\n", ts->pen_config.max_pressure);
-
-		rc = of_property_read_u32_array(np, "touchpanel,pen-max-tilt", temp_array, 2);
-		if (rc) {
-			TPD_BOOT_INFO("panel for pen tilt not set\n");
-			ts->pen_config.tilt_x_max = 90;
-			ts->pen_config.tilt_y_max = 90;
-		} else {
-			ts->pen_config.tilt_x_max = temp_array[0];
-			ts->pen_config.tilt_y_max = temp_array[1];
-		}
-		TPD_BOOT_INFO("pen_tilt_x = %d, pen_tilt_y = %d \n", ts->pen_config.tilt_x_max, ts->pen_config.tilt_y_max);
-	}
 
 	rc = of_property_read_string(np, "touchpanel,touch-environment", (char const **)&ts->touch_environment);
 	if (rc) {
@@ -2756,20 +2568,11 @@ static int tp_power_init(struct touchpanel_data *pdata)
 		return ret;
 	}
 
-	preconfig_power_control(ts);
 	ret = init_power_control(ts);
 
 	if (ret) {
 		ret = -EINVAL;
 		TP_INFO(ts->tp_index, "%s: tp power init failed.\n", __func__);
-		return ret;
-	}
-
-	ret = reconfig_power_control(ts);
-
-	if (ret) {
-		ret = -EINVAL;
-		TP_INFO(ts->tp_index, "%s: reconfig power failed.\n", __func__);
 		return ret;
 	}
 
@@ -3042,8 +2845,6 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 {
 	struct touchpanel_data *ts = pdata;
 	char name[TP_NAME_SIZE_MAX];
-	struct device_node *chip_np = NULL;
-	struct device_node *src_chip_np = NULL;
 	int ret = -1;
 	int i = 0;
 	TPD_BOOT_INFO("%s  is called\n", __func__);
@@ -3329,11 +3130,6 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 		INIT_DELAYED_WORK(&ts->freq_hop_info.freq_hop_work, tp_freq_hop_work);
 		ts->freq_hop_info.freq_hop_simulating = false;
 		ts->freq_hop_info.freq_hop_freq = 0;
-	}
-
-	if (ts->pen_support) {	/* Default to enable pen function when boot up */
-			ts->is_pen_connected = 1;
-			ts->is_pen_attracted = 0;
 	}
 
 	/*step 22 : createproc proc files interface*/
