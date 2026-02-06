@@ -49,6 +49,9 @@
 
 #define MAX_READ_LENGTH 64*1024
 
+#define MAX_I2C_RETRY_TIME 2
+#define FIX_I2C_LENGTH   256
+
 #define INIT_BUFFER(buffer, is_clone) \
 	mutex_init(&buffer.buf_mutex); \
 	buffer.clone = is_clone

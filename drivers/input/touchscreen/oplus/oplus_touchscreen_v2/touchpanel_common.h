@@ -11,7 +11,6 @@
 #include <linux/firmware.h>
 #include <linux/input.h>
 
-#include "util_interface/touch_interfaces.h"
 #include <linux/miscdevice.h>
 #include <linux/version.h>
 
@@ -775,6 +774,19 @@ struct touchpanel_snr {
 struct touchpanel_last_x_y_point {
 	uint16_t x;
 	uint16_t y;
+};
+
+struct interface_data {
+	bool register_is_16bit;
+	struct mutex bus_mutex;
+	/****i2c write**/
+	unsigned int write_buf_size;
+	unsigned char *write_buf;
+	/****i2c read**/
+	unsigned char *read_buf;
+	unsigned int read_buf_size;
+	unsigned char *read_w_buffer;
+	unsigned int read_w_buf_size;
 };
 
 struct aging_test_proc_operations;

@@ -26,6 +26,7 @@
 #include <linux/version.h>
 #include <linux/iio/consumer.h>
 #include <linux/alarmtimer.h>
+#include <linux/spi/spi.h>
 #include "touchpanel_common.h"
 #include "touch_comon_api.h"
 
@@ -2612,6 +2613,28 @@ static void tp_suspend_work(struct work_struct *work)
 	TP_INFO(ts->tp_index, "%s: start.\n", __func__);
 
 	tp_suspend_direct(ts);
+}
+
+/**
+ * init_touch_interfaces - Using for Register IIC interface
+ * @dev: i2c_client->dev using to alloc memory for dma transfer
+ * @flag_register_16bit: bool param to detect whether this device using 16bit IIC address or 8bit address
+ *
+ * Actully, This function don't have many operation, we just detect device address length && alloc DMA memory for MTK platform
+ * Returning zero(sucess) or -ENOMEM(memory alloc failed)
+ */
+static int init_touch_interfaces(struct device *dev, bool flag_register_16bit)
+{
+	struct touchpanel_data *ts = dev_get_drvdata(dev);
+
+	if (!ts) {
+		return -1;
+	}
+
+	ts->interface_data.register_is_16bit = flag_register_16bit;
+	mutex_init(&ts->interface_data.bus_mutex);
+
+	return 0;
 }
 
 

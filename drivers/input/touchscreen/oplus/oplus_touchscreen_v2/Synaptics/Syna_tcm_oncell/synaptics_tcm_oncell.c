@@ -62,6 +62,475 @@ exit:
 	return;
 }
 
+/**
+ * touch_i2c_continue_read - Using for "read sequence bytes" through IIC
+ * @client: Handle to slave device
+ * @length: data size we want to read
+ * @data: data read from IIC
+ *
+ * Actully, This function call i2c_transfer for IIC transfer,
+ * Returning transfer length(transfer success) or most likely negative errno(transfer error)
+ */
+static int touch_i2c_continue_read(struct i2c_client *client, unsigned short length,
+			    unsigned char *data)
+{
+	int retval = 0;
+	unsigned char retry;
+	struct i2c_msg msg;
+	struct touchpanel_data *ts;
+	ts = i2c_get_clientdata(client);
+
+	msg.addr = client->addr;
+	msg.flags = I2C_M_RD;
+	msg.len = length;
+	msg.buf = data;
+
+	for (retry = 0; retry < MAX_I2C_RETRY_TIME; retry++) {
+		if (i2c_transfer(client->adapter, &msg, 1) == 1) {
+			retval = length;
+			break;
+		}
+		msleep(20);
+	}
+
+	if (retry == MAX_I2C_RETRY_TIME) {
+		TPD_INFO("%s: I2C read over retry limit\n", __func__);
+		retval = -EIO;
+	}
+
+	return retval;
+}
+
+/**
+ * touch_i2c_read - Using for "read data from ic after writing or not" through IIC
+ * @client: Handle to slave device
+ * @writebuf: buf to write
+ * @writelen: data size we want to send
+ * @readbuf:  buf we want save data
+ * @readlen:  data size we want to receive
+ *
+ * Actully, This function call i2c_transfer for IIC transfer,
+ * Returning transfer msg length(transfer success) or most likely negative errno(transfer EIO error)
+ */
+static inline int touch_i2c_read(struct i2c_client *client, char *writebuf,
+			  unsigned short writelen, char *readbuf, unsigned short readlen)
+{
+	int retval;
+	unsigned char retry;
+	struct i2c_msg msg[2];
+	struct i2c_msg message;
+	struct touchpanel_data *ts = NULL;
+
+	if (!client) {
+		dump_stack();
+		return -1;
+	}
+
+	ts = i2c_get_clientdata(client);
+	if (!ts) {
+		dump_stack();
+		return -1;
+	}
+
+	mutex_lock(&ts->interface_data.bus_mutex);
+
+	/*for writebuf buffer min is  FIX_I2C_LENGTH*/
+	if (writelen > FIX_I2C_LENGTH) {
+		if (ts->interface_data.read_w_buf_size < writelen) {
+			if (ts->interface_data.read_w_buffer) {
+				devm_kfree(&client->dev, (void **)&ts->interface_data.read_w_buffer);
+				TPD_INFO("read w block_1, free once.\n");
+			}
+
+			ts->interface_data.read_w_buffer = devm_kzalloc(&client->dev, writelen,
+							   GFP_KERNEL | GFP_DMA);
+
+			if (!ts->interface_data.read_w_buffer) {
+				ts->interface_data.read_w_buf_size = 0;
+				TPD_INFO("read w block_1, kzalloc failed(len:%d, buf_size:%d).\n", writelen,
+					 ts->interface_data.read_w_buf_size);
+				mutex_unlock(&ts->interface_data.bus_mutex);
+				return -ENOMEM;
+			}
+
+			ts->interface_data.read_w_buf_size = writelen;
+			TPD_INFO("read w block_1, kzalloc success(len:%d, buf_size:%d).\n", writelen,
+				 ts->interface_data.read_w_buf_size);
+
+		} else {
+			memset(ts->interface_data.read_w_buffer, 0, writelen);
+		}
+
+	} else {
+		if (ts->interface_data.read_w_buf_size > FIX_I2C_LENGTH) {
+			devm_kfree(&client->dev, (void **)&ts->interface_data.read_w_buffer);
+			ts->interface_data.read_w_buffer = devm_kzalloc(&client->dev, FIX_I2C_LENGTH,
+							   GFP_KERNEL | GFP_DMA);
+
+			if (!ts->interface_data.read_w_buffer) {
+				ts->interface_data.read_w_buf_size = 0;
+				TPD_INFO("read w block_2, kzalloc failed(len:%d, buf_size:%d).\n", writelen,
+					 ts->interface_data.read_w_buf_size);
+				mutex_unlock(&ts->interface_data.bus_mutex);
+				return -ENOMEM;
+			}
+
+			ts->interface_data.read_w_buf_size = FIX_I2C_LENGTH;
+			TPD_INFO("read w block_2, kzalloc success(len:%d, buf_size:%d).\n", writelen,
+				 ts->interface_data.read_w_buf_size);
+
+		} else {
+			if (!ts->interface_data.read_w_buffer) {
+				ts->interface_data.read_w_buffer = devm_kzalloc(&client->dev, FIX_I2C_LENGTH,
+								   GFP_KERNEL | GFP_DMA);
+
+				if (!ts->interface_data.read_w_buffer) {
+					ts->interface_data.read_w_buf_size = 0;
+					TPD_INFO("read w block_3, kzalloc failed(len:%d, buf_size:%d).\n", writelen,
+						 ts->interface_data.read_w_buf_size);
+					mutex_unlock(&ts->interface_data.bus_mutex);
+					return -ENOMEM;
+				}
+
+				ts->interface_data.read_w_buf_size = FIX_I2C_LENGTH;
+				TPD_INFO("read w block_3, kzalloc success(len:%d, buf_size:%d).\n", writelen,
+					 ts->interface_data.read_w_buf_size);
+
+			} else {
+				memset(ts->interface_data.read_w_buffer, 0, writelen);
+			}
+		}
+	}
+
+	memcpy(ts->interface_data.read_w_buffer, writebuf, writelen);
+
+	/*for readbuf buffer min is  FIX_I2C_LENGTH*/
+	if (readlen > FIX_I2C_LENGTH) {
+		if (ts->interface_data.read_buf_size < readlen) {
+			if (ts->interface_data.read_buf) {
+				devm_kfree(&client->dev, (void **)&ts->interface_data.read_buf);
+				TPD_INFO("read block_1, free once.\n");
+			}
+
+			ts->interface_data.read_buf = devm_kzalloc(&client->dev, readlen,
+						      GFP_KERNEL | GFP_DMA);
+
+			if (!ts->interface_data.read_buf) {
+				ts->interface_data.read_buf_size = 0;
+				TPD_INFO("read block_1, kzalloc failed(len:%d, buf_size:%d).\n", readlen,
+					 ts->interface_data.read_buf_size);
+				mutex_unlock(&ts->interface_data.bus_mutex);
+				return -ENOMEM;
+			}
+
+			ts->interface_data.read_buf_size = readlen;
+			TPD_INFO("read block_1, kzalloc success(len:%d, buf_size:%d).\n", readlen,
+				 ts->interface_data.read_buf_size);
+
+		} else {
+			memset(ts->interface_data.read_buf, 0, readlen);
+		}
+
+	} else {
+		if (ts->interface_data.read_buf_size > FIX_I2C_LENGTH) {
+			devm_kfree(&client->dev, (void **)&ts->interface_data.read_buf);
+			ts->interface_data.read_buf = devm_kzalloc(&client->dev, FIX_I2C_LENGTH,
+						      GFP_KERNEL | GFP_DMA);
+
+			if (!ts->interface_data.read_buf) {
+				ts->interface_data.read_buf_size = 0;
+				TPD_INFO("read block_2, kzalloc failed(len:%d, buf_size:%d).\n", readlen,
+					 ts->interface_data.read_buf_size);
+				mutex_unlock(&ts->interface_data.bus_mutex);
+				return -ENOMEM;
+			}
+
+			ts->interface_data.read_buf_size = FIX_I2C_LENGTH;
+			TPD_INFO("read block_2, kzalloc success(len:%d, buf_size:%d).\n", readlen,
+				 ts->interface_data.read_buf_size);
+
+		} else {
+			if (!ts->interface_data.read_buf) {
+				ts->interface_data.read_buf = devm_kzalloc(&client->dev, FIX_I2C_LENGTH,
+							      GFP_KERNEL | GFP_DMA);
+
+				if (!ts->interface_data.read_buf) {
+					ts->interface_data.read_buf_size = 0;
+					TPD_INFO("read block_3, kzalloc failed(len:%d, buf_size:%d).\n", readlen,
+						 ts->interface_data.read_buf_size);
+					mutex_unlock(&ts->interface_data.bus_mutex);
+					return -ENOMEM;
+				}
+
+				ts->interface_data.read_buf_size = FIX_I2C_LENGTH;
+				TPD_INFO("read block_3, kzalloc success(len:%d, buf_size:%d).\n", readlen,
+					 ts->interface_data.read_buf_size);
+
+			} else {
+				memset(ts->interface_data.read_buf, 0, readlen);
+			}
+		}
+	}
+	if (writelen > 0) {
+		msg[0].addr = client->addr;
+		msg[0].flags = 0;
+		msg[0].buf = ts->interface_data.read_w_buffer;
+		msg[0].len = writelen;
+
+		msg[1].addr = client->addr;
+		msg[1].flags = I2C_M_RD;
+		msg[1].len = readlen;
+		msg[1].buf = ts->interface_data.read_buf;
+
+		for (retry = 0; retry < MAX_I2C_RETRY_TIME; retry++) {
+			if (i2c_transfer(client->adapter, msg, 2) == 2) {
+				retval = readlen;
+				break;
+			}
+
+			msleep(20);
+		}
+	} else {
+		message.addr = client->addr;
+		message.flags = I2C_M_RD;
+		message.len = readlen;
+		message.buf = ts->interface_data.read_buf;
+		for (retry = 0; retry < MAX_I2C_RETRY_TIME; retry++) {
+			if (i2c_transfer(client->adapter, &message, 1) == 1) {
+				retval = 1;
+				break;
+			}
+
+			msleep(20);
+		}
+	}
+
+	if (retry == MAX_I2C_RETRY_TIME) {
+		TPD_INFO("%s: I2C read over retry limit\n", __func__);
+		retval = -EIO;
+	}
+
+	memcpy(readbuf, ts->interface_data.read_buf, readlen);
+
+	mutex_unlock(&ts->interface_data.bus_mutex);
+	return retval;
+}
+
+/**
+ * touch_i2c_read_block - Using for "read word" through IIC
+ * @client: Handle to slave device
+ * @addr: addr to write
+ * @length: data size we want to send
+ * @data: data we want to send
+ *
+ * Actully, This function call i2c_transfer for IIC transfer,
+ * Returning transfer length(transfer success) or most likely negative errno(transfer error)
+ */
+static int touch_i2c_read_block(struct i2c_client *client, u16 addr,
+			 unsigned short length, unsigned char *data)
+{
+	int retval = 0;
+	unsigned char buffer[2] = {(addr >> 8) & 0xff, addr & 0xff};
+	struct touchpanel_data *ts = NULL;
+
+	if (!client) {
+		dump_stack();
+		return -1;
+	}
+
+	ts = i2c_get_clientdata(client);
+	if (!ts) {
+		dump_stack();
+		return -1;
+	}
+
+	if (!ts->interface_data.register_is_16bit) { /* if register is 8bit*/
+		retval = touch_i2c_read(client, &buffer[1], 1, data, length);
+
+	} else {
+		retval = touch_i2c_read(client, buffer, 2, data, length);
+	}
+
+	return retval;
+}
+
+/**
+ * touch_i2c_write_block - Using for "read word" through IIC
+ * @client: Handle to slave device
+ * @addr: addr to write
+ * @length: data size we want to send
+ * @data: data we want to send
+ *
+ * Actully, This function call i2c_transfer for IIC transfer,
+ * Returning transfer length(transfer success) or most likely negative errno(transfer error)
+ */
+static int touch_i2c_write_block(struct i2c_client *client, u16 addr,
+			  unsigned short length, unsigned char const *data)
+{
+	int retval = 0;
+	unsigned char retry;
+	unsigned int total_length = 0;
+	struct i2c_msg msg[1];
+	struct touchpanel_data *ts = NULL;
+
+	if (!client) {
+		dump_stack();
+		return -1;
+	}
+
+	ts = i2c_get_clientdata(client);
+	if (!ts) {
+		dump_stack();
+		return -1;
+	}
+
+	mutex_lock(&ts->interface_data.bus_mutex);
+
+	total_length = length + (ts->interface_data.register_is_16bit ? 2 : 1);
+
+	if (total_length > FIX_I2C_LENGTH) {
+		if (ts->interface_data.write_buf_size < total_length) {
+			if (ts->interface_data.write_buf) {
+				devm_kfree(&client->dev, (void **)&ts->interface_data.write_buf);
+				TPD_INFO("write block_1, free once.\n");
+			}
+
+			ts->interface_data.write_buf = devm_kzalloc(&client->dev, total_length,
+						       GFP_KERNEL | GFP_DMA);
+
+			if (!ts->interface_data.write_buf) {
+				ts->interface_data.write_buf_size = 0;
+				TPD_INFO("write block_1, kzalloc failed(len:%d, buf_size:%d).\n", total_length,
+					 ts->interface_data.write_buf_size);
+				mutex_unlock(&ts->interface_data.bus_mutex);
+				return -ENOMEM;
+			}
+
+			ts->interface_data.write_buf_size = total_length;
+			TPD_INFO("write block_1, kzalloc success(len:%d, buf_size:%d).\n", total_length,
+				 ts->interface_data.write_buf_size);
+
+		} else {
+			memset(ts->interface_data.write_buf, 0, total_length);
+		}
+
+	} else {
+		if (ts->interface_data.write_buf_size > FIX_I2C_LENGTH) {
+			devm_kfree(&client->dev, (void **)&ts->interface_data.write_buf);
+			ts->interface_data.write_buf = devm_kzalloc(&client->dev, FIX_I2C_LENGTH,
+						       GFP_KERNEL | GFP_DMA);
+
+			if (!ts->interface_data.write_buf) {
+				ts->interface_data.write_buf_size = 0;
+				TPD_INFO("write block_2, kzalloc failed(len:%d, buf_size:%d).\n", total_length,
+					 ts->interface_data.write_buf_size);
+				mutex_unlock(&ts->interface_data.bus_mutex);
+				return -ENOMEM;
+			}
+
+			ts->interface_data.write_buf_size = FIX_I2C_LENGTH;
+			TPD_INFO("write block_2, kzalloc success(len:%d, buf_size:%d).\n", total_length,
+				 ts->interface_data.write_buf_size);
+
+		} else {
+			if (!ts->interface_data.write_buf) {
+				ts->interface_data.write_buf = devm_kzalloc(&client->dev, FIX_I2C_LENGTH,
+							       GFP_KERNEL | GFP_DMA);
+
+				if (!ts->interface_data.write_buf) {
+					ts->interface_data.write_buf_size = 0;
+					TPD_INFO("write block_3, kzalloc failed(len:%d, buf_size:%d).\n", total_length,
+						 ts->interface_data.write_buf_size);
+					mutex_unlock(&ts->interface_data.bus_mutex);
+					return -ENOMEM;
+				}
+
+				ts->interface_data.write_buf_size = FIX_I2C_LENGTH;
+				TPD_INFO("write block_3, kzalloc success(len:%d, buf_size:%d).\n", total_length,
+					 ts->interface_data.write_buf_size);
+
+			} else {
+				memset(ts->interface_data.write_buf, 0, total_length);
+			}
+		}
+	}
+
+	msg[0].addr = client->addr;
+	msg[0].flags = 0;
+	msg[0].buf = ts->interface_data.write_buf;
+
+	if (!ts->interface_data.register_is_16bit) { /* if register is 8bit*/
+		msg[0].len = length + 1;
+		msg[0].buf[0] = addr & 0xff;
+
+		memcpy(&ts->interface_data.write_buf[1], &data[0], length);
+
+	} else {
+		msg[0].len = length + 2;
+		msg[0].buf[0] = (addr >> 8) & 0xff;
+		msg[0].buf[1] = addr & 0xff;
+
+		memcpy(&ts->interface_data.write_buf[2], &data[0], length);
+	}
+
+	for (retry = 0; retry < MAX_I2C_RETRY_TIME; retry++) {
+		if (i2c_transfer(client->adapter, msg, 1) == 1) {
+			retval = length;
+			break;
+		}
+
+		msleep(20);
+	}
+
+	if (retry == MAX_I2C_RETRY_TIME) {
+		TPD_INFO("%s: I2C write over retry limit\n", __func__);
+		retval = -EIO;
+	}
+
+	mutex_unlock(&ts->interface_data.bus_mutex);
+	return retval;
+}
+
+/**
+ * touch_i2c_continue_write - Using for "write sequence bytes" through IIC
+ * @client: Handle to slave device
+ * @length: data size we want to write
+ * @data: data write to IIC
+ *
+ * Actully, This function call i2c_transfer for IIC transfer,
+ * Returning transfer length(transfer success) or most likely negative errno(transfer error)
+ */
+static int touch_i2c_continue_write(struct i2c_client *client, unsigned short length,
+			     unsigned char *data)
+{
+	int retval = 0;
+	unsigned char retry;
+	struct i2c_msg msg;
+	struct touchpanel_data *ts;
+	ts = i2c_get_clientdata(client);
+
+	msg.addr = client->addr;
+	msg.flags = 0;
+	msg.buf = data;
+	msg.len = length;
+
+	for (retry = 0; retry < MAX_I2C_RETRY_TIME; retry++) {
+		if (i2c_transfer(client->adapter, &msg, 1) == 1) {
+			retval = length;
+			break;
+		}
+
+		msleep(20);
+	}
+
+	if (retry == MAX_I2C_RETRY_TIME) {
+		TPD_INFO("%s: I2C write over retry limit\n", __func__);
+		retval = -EIO;
+	}
+
+	return retval;
+}
+
 inline int syna_tcm_rmi_read(struct syna_tcm_data *tcm_info,
 			     unsigned short addr, unsigned char *data, unsigned int length)
 {
