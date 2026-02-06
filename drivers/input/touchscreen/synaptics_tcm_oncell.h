@@ -10,9 +10,10 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/delay.h>
+#include <linux/vmalloc.h>
 
-#include "../../touchpanel_common.h"
-#include "../synaptics_common.h"
+#include "touchpanel_common.h"
+#include "synaptics_common.h"
 
 #ifdef TPD_DEVICE
 #undef TPD_DEVICE
@@ -615,6 +616,63 @@ struct device_hcd {
 	int tp_index;
 	int rmidev_major_num;
 };
+
+/**
+ * kzalloc - allocate memory. The memory is set to zero.
+ * @size: how many bytes of memory are required.
+ * @flags: the type of memory to allocate (see kmalloc).
+ */
+
+static inline void *tp_kzalloc(size_t size, gfp_t flags)
+{
+	void *p;
+
+	p = kzalloc(size, flags);
+
+	if (!p) {
+		TPD_INFO("%s: Failed to allocate memory\n", __func__);
+		/*add for health monitor*/
+	}
+
+	return p;
+}
+
+/**
+ * tp_memcpy - tp secure memcpy
+ * @dest: Where to copy to
+ * @dest_size: sizeof dest space size
+ * @src: Where to copy from
+ * @src_size: sizeof src space size
+ * @count: The size of the area.
+ * we can using this function to memcpy some buffer more secureful
+ * Returning zero(success) or negative errno(failed)
+ */
+static inline int tp_memcpy(void *dest, unsigned int dest_size,
+			    void *src, unsigned int src_size,
+			    unsigned int count)
+{
+	if (dest == NULL || src == NULL) {
+		return -EINVAL;
+	}
+
+	if (count > dest_size || count > src_size) {
+		TPD_INFO("%s: src_size = %d, dest_size = %d, count = %d\n",
+			 __func__, src_size, dest_size, count);
+		return -EINVAL;
+	}
+
+	memcpy((void *)dest, (void *)src, count);
+
+	return 0;
+}
+
+static inline void tp_kfree(void **mem)
+{
+	if (*mem != NULL) {
+		kfree(*mem);
+		*mem = NULL;
+	}
+}
 
 static inline int syna_tcm_realloc_mem(struct syna_tcm_buffer *buffer,
 				       unsigned int size)

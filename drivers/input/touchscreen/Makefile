@@ -8,8 +8,7 @@
 wm97xx-ts-y := wm97xx-core.o
 goodix_ts-y := goodix.o goodix_fwupload.o
 
-obj-$(CONFIG_INPUT_TOUCHSCREEN_OPLUS)	+= oplus/oplus_touchscreen_v2/
-obj-$(CONFIG_OPLUS_FW_UPDATE)	+= oplus/kernelFwUpdate/
+obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_TCM_ONCELL)	+= synaptics_tcm_oncell.o synaptics_common.o
 obj-$(CONFIG_TOUCHSCREEN_88PM860X)	+= 88pm860x-ts.o
 obj-$(CONFIG_TOUCHSCREEN_AD7877)	+= ad7877.o
 obj-$(CONFIG_TOUCHSCREEN_AD7879)	+= ad7879.o

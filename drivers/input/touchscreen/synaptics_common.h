@@ -18,10 +18,7 @@
 #include <linux/delay.h>
 #include <linux/seq_file.h>
 
-#include "../touchpanel_common.h"
-#include "../touch_comon_api.h"
-
-#include "synaptics_firmware_v2.h"
+extern unsigned int tp_debug;
 
 /*********PART2:Define Area**********************/
 #define SYNAPTICS_RMI4_PRODUCT_ID_SIZE 10
@@ -32,6 +29,49 @@
 
 #define MAX_RESERVE_SIZE 4
 #define MAX_LIMIT_NAME_SIZE 16
+
+#define IMAGE_FILE_MAGIC_VALUE 0x4818472b
+#define FLASH_AREA_MAGIC_VALUE 0x7c05e516
+
+#define BOOT_CONFIG_ID "BOOT_CONFIG"
+#define APP_CODE_ID "APP_CODE"
+#define APP_CONFIG_ID "APP_CONFIG"
+#define DISP_CONFIG_ID "DISPLAY"
+
+#define TPD_DEVICE "touchpanel"
+
+#define TPD_BOOT_INFO(a, arg...)  pr_info("[TP]"TPD_DEVICE ": " a, ##arg)
+#define TP_BOOT_INFO(index, a, arg...)  pr_info("[TP""%x""]"TPD_DEVICE": " a, index, ##arg)
+
+#define TPD_INFO(a, arg...)  pr_err("[TP]"TPD_DEVICE ": " a, ##arg)
+#define TP_INFO(index, a, arg...)  pr_err("[TP""%x""]"TPD_DEVICE": " a, index, ##arg)
+
+#define TPD_DEBUG(a, arg...)\
+do{\
+	if (LEVEL_DEBUG == tp_debug)\
+		pr_err("[TP]"TPD_DEVICE ": " a, ##arg);\
+}while(0)
+
+#define TP_DETAIL(index, a, arg...)\
+do{\
+	if (LEVEL_BASIC != tp_debug)\
+		pr_err("[TP""%x""]"TPD_DEVICE": " a, index, ##arg);\
+}while(0)
+
+#define TP_DEBUG(index, a, arg...)\
+do{\
+	if (LEVEL_DEBUG == tp_debug)\
+		pr_err("[TP""%x""]"TPD_DEVICE": " a, index, ##arg);\
+}while(0)
+
+#define TP_SPECIFIC_PRINT(index, count, a, arg...)\
+do{\
+	if (count++ == 150 || LEVEL_DEBUG == tp_debug) {\
+		TPD_INFO(TPD_DEVICE"%x"": " a, index, ##arg);\
+		count = 0;\
+	}\
+}while(0)
+
 
 /*********PART3:Struct Area**********************/
 #define SIMULATE_DEBUG_INFO 0xff
@@ -180,15 +220,48 @@ struct limit_block {
 	int16_t data;
 };
 
-struct synaptics_proc_operations {
-	void (*set_touchfilter_state)(void *chip_data, uint8_t range_size);
-	uint8_t (*get_touchfilter_state)(void *chip_data);
+struct area_descriptor {
+	unsigned char magic_value[4];
+	unsigned char id_string[16];
+	unsigned char flags[4];
+	unsigned char flash_addr_words[4];
+	unsigned char length[4];
+	unsigned char checksum[4];
 };
 
-int  synaptics_create_proc(struct touchpanel_data *ts,
-			   struct synaptics_proc_operations *syna_ops);
-int synaptics_remove_proc(struct touchpanel_data *ts,
-			  struct synaptics_proc_operations *syna_ops);
+struct block_data_v2 {
+	const unsigned char *data;
+	unsigned int size;
+	unsigned int flash_addr;
+};
+
+struct image_info {
+	unsigned int packrat_number;
+	struct block_data_v2 boot_config;
+	struct block_data_v2 app_firmware;
+	struct block_data_v2 app_config;
+	struct block_data_v2 disp_config;
+};
+
+struct image_header_v2 {
+	unsigned char magic_value[4];
+	unsigned char num_of_areas[4];
+};
+
+static inline unsigned int le2_to_uint(const unsigned char *src)
+{
+	return (unsigned int)src[0] +
+	       (unsigned int)src[1] * 0x100;
+}
+
+static inline unsigned int le4_to_uint(const unsigned char *src)
+{
+	return (unsigned int)src[0] +
+	       (unsigned int)src[1] * 0x100 +
+	       (unsigned int)src[2] * 0x10000 +
+	       (unsigned int)src[3] * 0x1000000;
+}
+
 void synaptics_parse_header(struct image_header_data *header,
 			    const unsigned char *fw_image);
 int synaptics_parse_header_v2(struct image_info *image_info,
