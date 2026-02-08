@@ -18,6 +18,7 @@
 /delete-node/ &video_mem;
 /delete-node/ &adsp_mem;
 /delete-node/ &slpi_mem;
+/delete-node/ &mte_mem;
 
 / {
 	model = "OnePlus 10 Pro 5G";
@@ -66,7 +67,8 @@
 		compatible = "qcom,wcn6855-pmu";
 
 		pinctrl-0 = <&wlan_en>;
-		pinctrl-names = "default";
+		pinctrl-1 = <&wlan_en_sleep>;
+		pinctrl-names = "default", "sleep";
 
 		wlan-enable-gpios = <&tlmm 80 GPIO_ACTIVE_HIGH>;
 		bt-enable-gpios = <&tlmm 81 GPIO_ACTIVE_HIGH>;
@@ -136,8 +138,8 @@
 		};
 
 		adsp_mem: adsp_region@85e00000 {
-			no-map;
 			reg = <0x0 0x85700000 0x0 0x2800000>;
+			no-map;
 		};
 
 		slpi_mem: memory@87f00000 {
@@ -145,14 +147,27 @@
 			no-map;
 		};
 
+		dump_device_info_mem: memory@a4f00000 {
+			reg = <0x0 0xa4f00000 0x0 0x8000>;
+			no-map;
+		};
 
+		bootloader_log_mem: memory@a4f00000 {
+			reg = <0x0 0xa4f00000 0x0 0x8000>;
+			no-map;
+		};
+
+		mte_mem: memory@c0000000 {
+			reg = <0x0 0xc0000000 0x0 0x20000000>;
+			no-map;
+		};
 
 		/*
 		 * The bootloader will only keep display hardware enabled
 		 * if this memory region is named exactly 'splash_region'
 		 */
 
-		splash_region@b8000000 {
+		splash_memory: splash_region@b8000000 {
 			reg = <0x0 0xb8000000 0x0 0x2b00000>;
 			no-map;
 		};
@@ -213,7 +228,7 @@
 					reg = <2>;
 
 					pmic_glink_sbu: endpoint {
-						// remote-endpoint = <&fsa4480_sbu_mux>;
+						remote-endpoint = <&fsa4480_sbu_mux>;
 					};
 				};
 
@@ -375,7 +390,7 @@
 
 		vreg_bob: bob {
 			regulator-name = "vreg_bob";
-			regulator-min-microvolt = <3400000>;
+			regulator-min-microvolt = <3008000>;
 			regulator-max-microvolt = <3960000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_AUTO>;
 		};
@@ -418,7 +433,6 @@
 		pm8350c_l6: ldo6 {
 			regulator-name = "pm8350c_l6";
 			regulator-min-microvolt = <1800000>;
-			/* Originally max = 3008000 but SDHCI expects 2960000 */
 			regulator-max-microvolt = <1800000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
@@ -440,8 +454,7 @@
 		pm8350c_l9: ldo9 {
 			regulator-name = "pm8350c_l9";
 			regulator-min-microvolt = <2960000>;
-			/* Originally max = 3008000 but SDHCI expects 2960000 */
-			regulator-max-microvolt = <2960000>;
+			regulator-max-microvolt = <3008000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
 
@@ -452,10 +465,17 @@
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
 
+		pm8350c_l11: ldo11 {
+			regulator-name = "pm8350c_l11";
+			regulator-min-microvolt = <2400000>;
+			regulator-max-microvolt = <3008000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
 		pm8350c_l12: ldo12 {
 			regulator-name = "pm8350c_l12";
 			regulator-min-microvolt = <1800000>;
-			regulator-max-microvolt = <1968000>;
+			regulator-max-microvolt = <1800000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
 
@@ -770,21 +790,20 @@
 		bias-pull-down;
 	};
 
-	ts_int_active: ts_int_active {
+	touch_irq_active: touch-irq-state {
 		pins = "gpio21";
 		function = "gpio";
 		drive-strength = <8>;
-		bias-disable;
+		bias-pull-up;
+		output-disable;
 		input-enable;
 	};
 
-	ts_reset_active: ts_reset_active {
+	touch_rst_active: touch-rst-state {
 		pins = "gpio20";
 		function = "gpio";
 		drive-strength = <8>;
-		output-low;
-		bias-disable;
-
+		bias-pull-up;
 	};
 
 	nfc_default: nfc-default-state {
@@ -945,6 +964,14 @@
 		bias-pull-up;
 		output-high;
 	};
+
+	wlan_en_sleep: wlan-en-sleep {
+		pins = "gpio80";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		output-low;
+	};
 };
 
 &pm8350_gpios {
@@ -1004,93 +1031,41 @@
 	clock-frequency = <400000>;
 	status = "okay";
 
-	synaptics20031@4b {
-		compatible = "synaptics-s3908";
-		reg = <0x4b>;
-		chip-name = "S3908";
+	touchscreen@4b {
+		compatible = "syna,s3908";
+		reg = <0x4B>;
 
-		/* Interrupt && Irq-gpio */
-		interrupt-parent = <&tlmm>;
-		interrupts = <21 0x2008>;
-
-		/* Power Config */
-		//enable2v8_gpio = <&tlmm 26 0x1>;
-		enable1v8_gpio = <&tlmm 186 0x1>;
-		vdd_2v8-supply = <&pm8350c_l3>;
-		vcc_1v8-supply = <&pm8350c_l6>;
-		vdd_2v8_volt = <3008000>;
-
-		/* Other HW Resource */
-		irq-gpio = <&tlmm 21 0x2008>;
-		reset-gpio = <&tlmm 20 0x1>;
+		pinctrl-0 = <&touch_irq_active &touch_rst_active>;
 		pinctrl-names = "default";
-		pinctrl-0 = <&ts_int_active &ts_reset_active>;
 
-		touchpanel,max-num-support = <10>;
-		touchpanel,tx-rx-num = <17 38>;
-		earsense,tx-rx-num = <17 18>;
-		touchpanel,panel-coords = <5760 12864>;
-		touchpanel,display-coords = <1440 3216>;
-		touchpanel,touchmajor-limit = <256 256>;
-		touchpanel,int-mode = <1>; /*0: interrupt and disable, 1:interrupt and not disable*/
-		touchpanel,curved-size = <45>;
+		interrupts-extended = <&tlmm 21 0x2008>;
 
-		touchpanel,smooth-level = <0 1 2 4 7 9>;
-		touchpanel,smooth-level-charging = <0 2 4 7 8 9>;
-		touchpanel,sensitive-level = <0 70 55 40 25 10>;
-		touchpanel,single-optimized-time = <8>;
-		touchpanel,high-frame-rate-time = <60>;
+		reset-gpios = <&tlmm 20 GPIO_ACTIVE_LOW>;
 
-		end_stretch_value = <480 250 16 16>;
-
-		touchpanel,tp_ic_type = <2>;
-		panel_type = <8>;
-		tp_type = <8>;
-		// type of tp_dev ,TP-SAMSUNG = 8;
-		project_id = <0x2084A>;
-		firmware_name = "SS";
-		platform_support_project = <0x2084A>;
-		platform_support_project_dir = <21001>;
-		platform_support_project_commandline = "mdss_dsi_panel_samsung_amb670yf07_1440_3216_dsc_cmd";
-
-		touchpanel,button-type = <4>;
-		touchpanel.button-TRx = <0 0>;
-
-		S3908 {
-			report_rate_default = <60>;
-			report_rate_game_value = <2>;
-			default_gesture_mask = <8191>;
-			fwupdate_bootloader = <1>;
-		};
-
+		vdd-supply = <&pm8350c_l3>;
+		vcc-supply = <&pm8350c_l6>;
 	};
 };
 
-// &i2c5 {
-// 	clock-frequency = <100000>;
-// 	status = "okay";
-//
-// 	typec-mux@42 {
-// 		compatible = "fcs,fsa4480";
-// 		reg = <0x42>;
-//
-// 		interrupts-extended = <&tlmm 2 IRQ_TYPE_LEVEL_LOW>;
-//
-// 		vcc-supply = <&vreg_bob>;
-// 		mode-switch;
-// 		orientation-switch;
-//
-// 		port {
-// 			fsa4480_sbu_mux: endpoint {
-// 				remote-endpoint = <&pmic_glink_sbu>;
-// 			};
-// 		};
-// 	};
-//
-// 	/* nq @ 64 */
-// 	/* pm8008j @ c */
-// 	/* pm8008j @ d */
-// };
+&i2c5 {
+	clock-frequency = <100000>;
+	status = "okay";
+
+	nq@64 {
+		compatible = "rtc6226";
+		reg = <0x64>;
+		fmint-gpio = <&tlmm 12 0>;
+		vdd-supply = <&pmr735a_l7>;
+		rtc6226,vdd-supply-voltage = <2800000 2800000>;
+		rtc6226,vdd-load = <15000>;
+		vio-supply = <&pm8350_s10>;
+		rtc6226,vio-supply-voltage = <1800000 1800000>;
+	};
+
+	/* nq @ 64 */
+	/* pm8008j @ c */
+	/* pm8008j @ d */
+};
 
 &i2c9 {
 	clock-frequency = <1000000>;
@@ -1108,6 +1083,26 @@
 		pinctrl-names = "default", "sleep";
 		pinctrl-0 = <&nfc_default>;
 		pinctrl-1 = <&nfc_sleep>;
+	};
+};
+
+&i2c14 {
+	clock-frequency = <100000>;
+	status = "okay";
+
+	typec-mux@42 {
+		compatible = "fcs,fsa4480";
+		reg = <0x42>;
+
+		vcc-supply = <&vreg_bob>;
+		mode-switch;
+		orientation-switch;
+
+		port {
+			fsa4480_sbu_mux: endpoint {
+				remote-endpoint = <&pmic_glink_sbu>;
+			};
+		};
 	};
 };
 
