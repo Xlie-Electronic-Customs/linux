@@ -243,10 +243,6 @@
 		voltage-max-design-microvolt = <4435000>;
 	};
 
-	oplus,dsi-display-dev {
-		oplus,dsi-panel-primary = <&panel>;
-	};
-
 };
 
 &apps_rsc {
@@ -412,7 +408,7 @@
 		pm8350c_l3: ldo3 {
 			regulator-name = "pm8350c_l3";
 			regulator-min-microvolt = <2800000>;
-			regulator-max-microvolt = <3304000>;
+			regulator-max-microvolt = <3008000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
 
@@ -790,20 +786,21 @@
 		bias-pull-down;
 	};
 
-	touch_irq_active: touch-irq-state {
+	ts_int_active: ts_int_active {
 		pins = "gpio21";
 		function = "gpio";
 		drive-strength = <8>;
-		bias-pull-up;
-		output-disable;
+		bias-disable;
 		input-enable;
 	};
 
-	touch_rst_active: touch-rst-state {
+	ts_reset_active: ts_reset_active {
 		pins = "gpio20";
 		function = "gpio";
 		drive-strength = <8>;
-		bias-pull-up;
+		output-low;
+		bias-disable;
+
 	};
 
 	nfc_default: nfc-default-state {
@@ -1031,25 +1028,61 @@
 	clock-frequency = <400000>;
 	status = "okay";
 
-	touchscreen@4b {
-		compatible = "syna,s3908";
-		reg = <0x4B>;
+	synaptics20031@4b {
+		compatible = "synaptics-s3908";
+		reg = <0x4b>;
+		chip-name = "S3908";
 
-		pinctrl-0 = <&touch_irq_active &touch_rst_active>;
+		/* Interrupt && Irq-gpio */
+		interrupt-parent = <&tlmm>;
+		interrupts = <21 0x2008>;
+
+		/* Power Config */
+		//enable2v8_gpio = <&tlmm 26 0x1>;
+		enable1v8_gpio = <&tlmm 186 GPIO_ACTIVE_LOW>;
+		vdd_2v8-supply = <&pm8350c_l3>;
+		vcc_1v8-supply = <&pm8350c_l6>;
+		vdd_2v8_volt = <3008000>;
+
+		/* Other HW Resource */
+		irq-gpio = <&tlmm 21 0x2008>;
+		reset-gpio = <&tlmm 20 GPIO_ACTIVE_LOW>;
 		pinctrl-names = "default";
+		pinctrl-0 = <&ts_int_active &ts_reset_active>;
 
-		interrupts-extended = <&tlmm 21 0x2008>;
+		touchpanel,max-num-support = <10>;
+		touchpanel,tx-rx-num = <17 38>;
+		earsense,tx-rx-num = <17 18>;
+		touchpanel,panel-coords = <5760 12864>;
+		touchpanel,display-coords = <1440 3216>;
+		touchpanel,touchmajor-limit = <256 256>;
+		touchpanel,int-mode = <1>; /*0: interrupt and disable, 1:interrupt and not disable*/
+		touchpanel,curved-size = <45>;
 
-		reset-gpios = <&tlmm 20 GPIO_ACTIVE_LOW>;
+		touchpanel,smooth-level = <0 1 2 4 7 9>;
+		touchpanel,smooth-level-charging = <0 2 4 7 8 9>;
+		touchpanel,sensitive-level = <0 70 55 40 25 10>;
+		touchpanel,single-optimized-time = <8>;
+		touchpanel,high-frame-rate-time = <60>;
 
-		vdd-supply = <&pm8350c_l3>;
-		vcc-supply = <&pm8350c_l6>;
+		end_stretch_value = <480 250 16 16>;
+		touchpanel,tp_ic_type = <2>;
+
+		touchpanel,button-type = <4>;
+		touchpanel.button-TRx = <0 0>;
+
+		S3908 {
+			report_rate_default = <60>;
+			report_rate_game_value = <2>;
+			default_gesture_mask = <8191>;
+		};
+
 	};
 };
 
 &i2c5 {
-	clock-frequency = <100000>;
-	status = "okay";
+	clock-frequency = <400000>;
+	status = "disabled";
 
 	nq@64 {
 		compatible = "rtc6226";
@@ -1087,7 +1120,7 @@
 };
 
 &i2c14 {
-	clock-frequency = <100000>;
+	clock-frequency = <400000>;
 	status = "okay";
 
 	typec-mux@42 {
