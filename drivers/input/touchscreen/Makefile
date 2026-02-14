@@ -124,3 +124,4 @@ obj-$(CONFIG_TOUCHSCREEN_HIMAX_HX83112B)	+= himax_hx83112b.o
 syna_tcm2-y := syna_tcm2.o
 syna_tcm2-y += syna_tcm2_spi.o
 obj-$(CONFIG_TOUCHSCREEN_SYNA_TCM2) += syna_tcm2.o
+obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_TCM_ONCELL)	+= synaptics_tcm_oncell.o synaptics_common.o
