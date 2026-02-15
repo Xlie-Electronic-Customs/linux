@@ -128,6 +128,33 @@
 		};
 	};
 
+	wcd938x: audio-codec {
+		compatible = "qcom,wcd9385-codec";
+
+		pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&wcd_default>;
+		pinctrl-1 = <&wcd_sleep>;
+
+		qcom,micbias1-microvolt = <1800000>;
+		qcom,micbias2-microvolt = <2700000>;
+		qcom,micbias3-microvolt = <1800000>;
+		qcom,micbias4-microvolt = <1800000>;
+		qcom,mbhc-buttons-vthreshold-microvolt = <75000 150000 237000 500000 500000 500000 500000 500000>;
+		qcom,mbhc-headset-vthreshold-microvolt = <1700000>;
+		qcom,mbhc-headphone-vthreshold-microvolt = <50000>;
+		qcom,rx-device = <&wcd_rx>;
+		qcom,tx-device = <&wcd_tx>;
+
+		reset-gpios = <&tlmm 43 GPIO_ACTIVE_LOW>;
+
+		vdd-buck-supply = <&pm8350_s10>;
+		vdd-rxtx-supply = <&pm8350_s10>;
+		vdd-io-supply = <&pm8350_s10>;
+		vdd-mic-bias-supply = <&vreg_bob>;
+
+		#sound-dai-cells = <1>;
+	};
+
 	reserved-memory {
 
 		cdsp_secure_heap: memory@80c00000 {
@@ -955,6 +982,14 @@
 		function = "gpio";
 		drive-strength = <16>;
 		bias-disable;
+		output-high;
+	};
+
+	wcd_sleep: wcd-reset-n-active-state {
+		pins = "gpio43";
+		function = "gpio";
+		drive-strength = <16>;
+		bias-disable;
 		output-low;
 	};
 
@@ -1097,6 +1132,29 @@
 	};
 };
 
+&i2c13 {
+	clock-frequency = <400000>;
+	status = "okay";
+
+	tfa9874_l: codec@34 { /* Top Speaker */
+		compatible = "nxp,tfa9874";
+		reg = <0x34>;
+		reset-gpio = <&tlmm 50 GPIO_ACTIVE_HIGH>;
+		sound-name-prefix = "Speaker Left";
+		#sound-dai-cells = <1>;
+		sound-channel = <0>;
+	};
+
+	tfa9874_r: codec@35 { /* Bottom Speaker */
+		compatible = "nxp,tfa9874";
+		reg = <0x35>;
+		reset-gpio = <&tlmm 51 GPIO_ACTIVE_HIGH>;
+		sound-name-prefix = "Speaker Right";
+		#sound-dai-cells = <1>;
+		sound-channel = <1>;
+	};
+};
+
 &i2c14 {
 	clock-frequency = <400000>;
 	status = "okay";
@@ -1117,6 +1175,152 @@
 	};
 };
 
+&sound {
+	compatible = "qcom,sm8450-sndcard";
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&tert_tdm_clk_active &tert_tdm_ws_active
+			&tert_tdm_din_active &tert_tdm_dout_active>;
+	pinctrl-1 = <&tert_tdm_clk_sleep &tert_tdm_ws_sleep
+			&tert_tdm_din_sleep &tert_tdm_dout_sleep>;
+	model = "OnePlus-10-Pro";
+	/*
+	audio-routing = "AMIC1", "Analog Mic1",
+		"AMIC1", "MIC BIAS1",
+		"AMIC2", "Analog Mic2",
+		"AMIC2", "MIC BIAS2",
+		"AMIC3", "Analog Mic3",
+		"AMIC3", "MIC BIAS3",
+		"AMIC4", "Analog Mic4",
+		"AMIC4", "MIC BIAS3",
+		"AMIC5", "Analog Mic5",
+		"AMIC5", "MIC BIAS4",
+		"VA AMIC1", "Analog Mic1",
+		"VA AMIC1", "VA MIC BIAS1",
+		"VA AMIC2", "Analog Mic2",
+		"VA AMIC2", "VA MIC BIAS2",
+		"VA AMIC3", "Analog Mic3",
+		"VA AMIC3", "VA MIC BIAS3",
+		"VA AMIC4", "Analog Mic4",
+		"VA AMIC4", "VA MIC BIAS3",
+		"VA AMIC5", "Analog Mic5",
+		"VA AMIC5", "VA MIC BIAS4",
+		"TX DMIC0", "Digital Mic0",
+		"Digital Mic0", "MIC BIAS3",
+		"TX DMIC1", "Digital Mic1",
+		"Digital Mic1", "MIC BIAS3",
+		"TX DMIC2", "Digital Mic2",
+		"Digital Mic2", "MIC BIAS1",
+		"TX DMIC3", "Digital Mic3",
+		"Digital Mic3", "MIC BIAS1",
+		"IN1_HPHL", "HPHL_OUT",
+		"IN2_HPHR", "HPHR_OUT",
+		"IN3_AUX", "AUX_OUT",
+		"RX_TX DEC0_INP", "TX DEC0 MUX",
+		"RX_TX DEC1_INP", "TX DEC1 MUX",
+		"RX_TX DEC2_INP", "TX DEC2 MUX",
+		"RX_TX DEC3_INP", "TX DEC3 MUX",
+		"TX SWR_INPUT", "WCD_TX_OUTPUT",
+		"VA SWR_INPUT", "VA_SWR_CLK",
+		"VA SWR_INPUT", "WCD_TX_OUTPUT",
+		"VA_AIF1 CAP", "VA_SWR_CLK",
+		"VA_AIF2 CAP", "VA_SWR_CLK",
+		"VA_AIF3 CAP", "VA_SWR_CLK",
+		"VA DMIC0", "Digital Mic0",
+		"VA DMIC1", "Digital Mic1",
+		"VA DMIC2", "Digital Mic2",
+		"VA DMIC3", "Digital Mic3",
+		"Digital Mic0", "VA MIC BIAS3",
+		"Digital Mic1", "VA MIC BIAS3",
+		"Digital Mic2", "VA MIC BIAS1",
+		"Digital Mic3", "VA MIC BIAS1";
+	*/
+
+	wcd-playback-dai-link {
+		link-name = "WCD Playback";
+
+		cpu {
+			sound-dai = <&q6apmbedai RX_CODEC_DMA_RX_0>;
+		};
+
+		codec {
+			sound-dai = <&wcd938x 0>, <&swr1 0>, <&rxmacro 0>;
+		};
+
+		platform {
+			sound-dai = <&q6apm>;
+		};
+	};
+
+	wcd-capture-dai-link {
+		link-name = "WCD Capture";
+
+		cpu {
+			sound-dai = <&q6apmbedai TX_CODEC_DMA_TX_3>;
+		};
+
+		codec {
+			sound-dai = <&wcd938x 1>, <&swr2 0>, <&txmacro 0>;
+		};
+
+		platform {
+			sound-dai = <&q6apm>;
+		};
+	};
+
+	speaker-playback-dai-link {
+		link-name = "Primary Spkr Playback";
+
+		cpu {
+			sound-dai = <&q6apmbedai TERTIARY_TDM_RX_0>;
+		};
+
+		codec {
+			sound-dai = <&tfa9874_l 0>, <&tfa9874_r 0>;
+		};
+
+		platform {
+			sound-dai = <&q6apm>;
+		};
+	};
+
+	va-dai-link {
+		link-name = "VA Capture";
+
+		cpu {
+			sound-dai = <&q6apmbedai TX_CODEC_DMA_TX_3>;
+		};
+
+		codec {
+			sound-dai = <&vamacro 0>;
+		};
+
+		platform {
+			sound-dai = <&q6apm>;
+		};
+	};
+};
+
+&swr1 {
+	status = "okay";
+
+	/* WCD9380 RX */
+	wcd_rx: codec@0,4 {
+		compatible = "sdw20217010d00";
+		reg = <0 4>;
+		qcom,rx-port-mapping = <1 2 3 4 5>;
+	};
+};
+
+&swr2 {
+	status = "okay";
+
+	/* WCD9380 TX */
+	wcd_tx: codec@0,3 {
+		compatible = "sdw20217010d00";
+		reg = <0 3>;
+		qcom,tx-port-mapping = <1 1 2 3>;
+	};
+};
 
 &uart7 {
 	status = "okay";
