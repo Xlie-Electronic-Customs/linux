@@ -75,6 +75,7 @@
 
 		wlan-enable-gpios = <&tlmm 80 GPIO_ACTIVE_HIGH>;
 		bt-enable-gpios = <&tlmm 81 GPIO_ACTIVE_HIGH>;
+		swctrl-gpios = <&tlmm 82 GPIO_ACTIVE_HIGH>;
 
 		vddio-supply = <&pm8350_s10>;
 		vddaon-supply = <&pmr735a_s2>;
@@ -713,6 +714,8 @@
 
 &pcie0 {
 	status = "okay";
+	// vddpe-3v3-supply = <&wcn6855_pmu>;
+	vdda-supply = <&pm8350_l5>;
 };
 
 &pcieport0 {
@@ -820,17 +823,15 @@
 	ts_int_active: ts_int_active {
 		pins = "gpio21";
 		function = "gpio";
-		drive-strength = <8>;
-		bias-disable;
-		input-enable;
+		drive-strength = <2>;
+		bias-pull-up;
 	};
 
 	ts_reset_active: ts_reset_active {
 		pins = "gpio20";
 		function = "gpio";
-		drive-strength = <8>;
-		output-low;
-		bias-disable;
+		drive-strength = <2>;
+		bias-pull-up;
 
 	};
 
@@ -1031,14 +1032,13 @@
 	status = "okay";
 };
 
-&qup_spi4_data_clk {
-	drive-strength = <6>;
-	bias-disable;
+&qup_i2c4_data_clk {
+	drive-strength = <2>;
+	bias-pull-up;
 };
 
-&qup_spi4_cs {
-	drive-strength = <16>;
-	/delete-property/ bias-disable;
+&qup_i2c6_data_clk {
+	drive-strength = <2>;
 	bias-pull-up;
 };
 
