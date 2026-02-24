@@ -1046,12 +1046,6 @@
 	clock-frequency = <400000>;
  	status = "okay";
 
-	bq28z610: fuel-gauge@51 {
-		compatible = "ti,bq27541";
-		reg = <0x51>;
-		monitored-battery = <&bat>;
-	};
-
 	/* for hl7227 charger and p9415 wireless charger  */
 };
 
