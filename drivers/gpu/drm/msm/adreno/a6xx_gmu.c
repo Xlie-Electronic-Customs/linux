@@ -2157,6 +2157,11 @@ int a6xx_gmu_init(struct a6xx_gpu *a6xx_gpu, struct device_node *node)
 	if (ret)
 		return ret;
 
+	if (adreno_is_a730(adreno_gpu) ||
+		adreno_is_a740_family(adreno_gpu))
+		#undef GMU_STATUS_OOB_PERF_SET
+		#define GMU_STATUS_OOB_PERF_SET 0
+
 	/* Set GMU idle level */
 	gmu->idle_level = (adreno_gpu->info->quirks & ADRENO_QUIRK_IFPC) ?
 		GMU_IDLE_STATE_IFPC : GMU_IDLE_STATE_ACTIVE;
