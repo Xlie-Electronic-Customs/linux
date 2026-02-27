@@ -22,6 +22,7 @@
 /delete-node/ &adsp_mem;
 /delete-node/ &slpi_mem;
 /delete-node/ &mte_mem;
+/delete-node/ &rmtfs_mem;
 
 / {
 	model = "OnePlus 10 Pro 5G";
@@ -203,6 +204,19 @@
 			no-map;
 		};
 
+		/*
+		 * The rmtfs memory region in downstream is 'dynamically allocated'
+		 * but given the same address every time. Hard code it as this address is
+		 * where the modem firmware expects it to be.
+		 */
+		rmtfs_mem: memory@e6f00000 {
+			compatible = "qcom,rmtfs-mem";
+			reg = <0x0 0xe6f00000 0x0 0x280000>;
+			no-map;
+
+			qcom,client-id = <1>;
+			qcom,vmid = <QCOM_SCM_VMID_MSS_MSA>;
+		};
 
 	};
 
@@ -823,15 +837,17 @@
 	ts_int_active: ts_int_active {
 		pins = "gpio21";
 		function = "gpio";
-		drive-strength = <2>;
-		bias-pull-up;
+		drive-strength = <8>;
+		bias-disable;
+		input-enable;
 	};
 
 	ts_reset_active: ts_reset_active {
 		pins = "gpio20";
 		function = "gpio";
-		drive-strength = <2>;
-		bias-pull-up;
+		drive-strength = <8>;
+		output-low;
+		bias-disable;
 
 	};
 
@@ -1183,7 +1199,7 @@
 	pinctrl-1 = <&tert_tdm_clk_sleep &tert_tdm_ws_sleep
 			&tert_tdm_din_sleep &tert_tdm_dout_sleep>;
 	model = "OnePlus-10-Pro";
-	/*
+
 	audio-routing = "AMIC1", "Analog Mic1",
 		"AMIC1", "MIC BIAS1",
 		"AMIC2", "Analog Mic2",
@@ -1233,7 +1249,7 @@
 		"Digital Mic1", "VA MIC BIAS3",
 		"Digital Mic2", "VA MIC BIAS1",
 		"Digital Mic3", "VA MIC BIAS1";
-	*/
+
 
 	wcd-playback-dai-link {
 		link-name = "WCD Playback";
@@ -1320,6 +1336,31 @@
 		reg = <0 3>;
 		qcom,tx-port-mapping = <1 1 2 3>;
 	};
+};
+
+&vamacro {
+	//pinctrl-0 = <&dmic01_default>, <&dmic02_default>;
+	//pinctrl-names = "default";
+	vdd-micb-supply = <&pm8350_s10>;
+	qcom,dmic-sample-rate = <600000>;
+
+	status = "okay";
+};
+
+&wsamacro {
+	status = "disabled";
+};
+
+&wsa2macro {
+	status = "disabled";
+};
+
+&wsa_swr_active {
+	status = "disabled";
+};
+
+&wsa2_swr_active {
+	status = "disabled";
 };
 
 &uart7 {
