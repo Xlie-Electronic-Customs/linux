@@ -191,9 +191,8 @@
 			no-map;
 		};
 
-		bootloader_log_mem: memory@a4f00000 {
-			reg = <0x0 0xa4f00000 0x0 0x8000>;
-			no-map;
+		bootloader_log_mem: memory@a7605000 {
+			reg = <0x0 0xa7605000 0x0 0x8000>;
 		};
 
 		mte_mem: memory@c0000000 {
