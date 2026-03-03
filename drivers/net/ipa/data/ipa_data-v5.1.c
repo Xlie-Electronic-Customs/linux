@@ -378,15 +378,9 @@ static const struct ipa_mem ipa_mem_local_data[] = {
 		.canary_count	= 0,
 	},
 	{
-		.id		= IPA_MEM_AP_V4_FILTER,
-		.offset		= 0x2918,
-		.size		= 0x0118,
-		.canary_count	= 2,
-	},
-	{
-		.id		= IPA_MEM_AP_V6_FILTER,
-		.offset		= 0x2aa0,
-		.size		= 0x0228,
+		.id		= IPA_MEM_STATS_TETHERING,
+		.offset		= 0x2910,
+		.size		= 0x03c0,
 		.canary_count	= 0,
 	},
 	{
