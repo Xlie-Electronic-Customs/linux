@@ -3073,7 +3073,7 @@
 		};
 
 		ipa: ipa@3f40000 {
-			compatible = "qcom,sdx65-ipa";
+			compatible = "qcom,sm8450-ipa";
 
 			iommus = <&apps_smmu 0x5c0 0x0>,
 				 <&apps_smmu 0x5c2 0x0>;
