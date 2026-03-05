@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
-/* Copyright (C) 2023-2024 Linaro Ltd. */
+/* Copyright (C) 2026 Nazar Kompanets */
 
 #include <linux/array_size.h>
 #include <linux/log2.h>
