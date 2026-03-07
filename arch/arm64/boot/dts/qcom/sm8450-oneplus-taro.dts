@@ -246,7 +246,6 @@
 		compatible = "qcom,sm8450-pmic-glink", "qcom,pmic-glink";
 		#address-cells = <1>;
 		#size-cells = <0>;
-		qcom,protection-domain = "tms/servreg", "msm/adsp/charger_pd";
 		orientation-gpios = <&tlmm 91 GPIO_ACTIVE_HIGH>;
 
 		connector@0 {
