@@ -583,6 +583,7 @@ config TC9564_PCI
 	  quirk causes the ranges property in the endpoint's devicetree
 	  node to be updated dynamically.
 
+source "drivers/misc/tri_state_key/Kconfig"
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
