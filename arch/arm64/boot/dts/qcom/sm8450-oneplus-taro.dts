@@ -926,6 +926,19 @@
 		input-enable;
 	};
 
+	uphall_tri_state_key_active: uphall_tri_state_key_active {
+		pins = "gpio71";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-up;
+	};
+
+	downhall_tri_state_key_active: downhall_tri_state_key_active {
+		pins = "gpio117";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-up;
+	};
 
 	sde_te_active_sleep: sde-te-active-sleep-state {
 		pins = "gpio86";
@@ -1151,11 +1164,37 @@
 		pinctrl-0 = <&nfc_default>;
 		pinctrl-1 = <&nfc_sleep>;
 	};
+
+	magnachip@d {
+		compatible = "oplus,hall-mxm1120,up";
+		reg = <0xD>;
+		vdd-supply = <&pm8350c_l7>;
+		vio-supply = <&pm8350_s10>;
+		magnachip,init-interval = <200>;
+		interrupt-parent = <&tlmm>;
+		interrups = <117 0x2>;
+		dhall,irq-gpio = <&tlmm 117 0x2008>;
+		pinctrl-names = "uphall_tri_state_key_active";
+		pinctrl-0 = <&uphall_tri_state_key_active>;
+	};
+	magnachip@c {
+		compatible = "oplus,hall-mxm1120,down";
+		reg = <0xC>;
+		vdd-supply = <&pm8350c_l7>;
+		vio-supply = <&pm8350_s10>;
+		magnachip,init-interval = <200>;
+		interrupt-parent = <&tlmm>;
+		interrups = <71 0x2>;
+		dhall,irq-gpio = <&tlmm 71 0x2008>;
+		pinctrl-names = "downhall_tri_state_key_active";
+		pinctrl-0 = <&downhall_tri_state_key_active>;
+	};
 };
 
 &i2c13 {
 	clock-frequency = <400000>;
 	status = "okay";
+
 
 	tfa9874_l: codec@34 { /* Top Speaker */
 		compatible = "nxp,tfa9874";
