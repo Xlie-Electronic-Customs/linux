@@ -51,7 +51,7 @@
 			compatible = "simple-framebuffer";
 			reg = <0x0 0xb8000000 0x0 0x2b00000>;
 			width = <1080>;
-			height = <2340>;
+			height = <2412>;
 			stride = <(1080 * 4)>;
 			format = "a8r8g8b8";
 		};
