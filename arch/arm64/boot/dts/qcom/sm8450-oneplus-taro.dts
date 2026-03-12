@@ -1085,7 +1085,10 @@
 
 &i2c4 {
 	clock-frequency = <400000>;
-	status = "disabled";
+	status = "okay";
+        
+        /delete-property/ dmas;
+        /delete-property/ dma-names;
 
 	synaptics20031@4b {
 		compatible = "synaptics-s3908";
