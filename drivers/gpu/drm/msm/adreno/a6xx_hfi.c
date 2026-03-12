@@ -107,11 +107,16 @@ static int a6xx_hfi_wait_for_msg_interrupt(struct a6xx_gmu *gmu, u32 id, u32 seq
 	int ret;
 	u32 val;
 	struct a6xx_gpu *a6xx_gpu = container_of(gmu, struct a6xx_gpu, gmu);
+	struct adreno_gpu *adreno_gpu = &a6xx_gpu->base;
 
 	do {
 		/* Wait for a response */
-		ret = gmu_poll_timeout(gmu, REG_A6XX_GMU_GMU2HOST_INTR_INFO, val,
-			val & A6XX_GMU_GMU2HOST_INTR_INFO_MSGQ, 100, 1000000);
+		if (adreno_is_a730(adreno_gpu) || adreno_is_a740_family(adreno_gpu))
+			ret = gmu_poll_timeout(gmu, REG_A6XX_GMU_GMU2HOST_INTR_INFO, val,
+					       val & A6XX_GMU_GMU2HOST_INTR_INFO_MSGQ, 1, 1000000);
+		else
+			ret = gmu_poll_timeout(gmu, REG_A6XX_GMU_GMU2HOST_INTR_INFO, val,
+						val & A6XX_GMU_GMU2HOST_INTR_INFO_MSGQ, 100, 1000000);
 
 		if (!ret)
 			break;
