@@ -117,6 +117,7 @@ struct geni_i2c_dev {
 	struct dma_chan *tx_c;
 	struct dma_chan *rx_c;
 	bool no_dma;
+        bool fifo_disable;
 	bool gpi_mode;
 	bool abort_done;
 	bool is_tx_multi_desc_xfer;
@@ -448,7 +449,7 @@ static int geni_i2c_rx_one_msg(struct geni_i2c_dev *gi2c, struct i2c_msg *msg,
 	size_t len = msg->len;
 	struct i2c_msg *cur;
 
-	dma_buf = gi2c->no_dma ? NULL : i2c_get_dma_safe_msg_buf(msg, 32);
+	dma_buf = gi2c->no_dma ? NULL : i2c_get_dma_safe_msg_buf(msg, gi2c->fifo_disable ? 0 : 32);
 	if (dma_buf)
 		geni_se_select_mode(se, GENI_SE_DMA);
 	else
@@ -487,7 +488,7 @@ static int geni_i2c_tx_one_msg(struct geni_i2c_dev *gi2c, struct i2c_msg *msg,
 	size_t len = msg->len;
 	struct i2c_msg *cur;
 
-	dma_buf = gi2c->no_dma ? NULL : i2c_get_dma_safe_msg_buf(msg, 32);
+	dma_buf = gi2c->no_dma ? NULL : i2c_get_dma_safe_msg_buf(msg, gi2c->fifo_disable ? 0 : 32);
 	if (dma_buf)
 		geni_se_select_mode(se, GENI_SE_DMA);
 	else
@@ -1088,16 +1089,29 @@ static int geni_i2c_probe(struct platform_device *pdev)
 		fifo_disable = readl_relaxed(gi2c->se.base + GENI_IF_DISABLE_RO) & FIFO_IF_DISABLE;
 	}
 
+	gi2c->fifo_disable = fifo_disable;
+
 	if (fifo_disable) {
 		/* FIFO is disabled, so we can only use GPI DMA */
 		gi2c->gpi_mode = true;
 		ret = setup_gpi_dma(gi2c);
-		if (ret)
-			goto err_resources;
+		
+		if (ret) {
+                       /*
+                        * GPI DMA failed (e.g. no DMA channels or SMMU issues).
+                        * Fall back to SE-DMA mode which uses the QUP wrapper's
+                        * own IOMMU mapping instead of the GPI DMA controller.
+                        * This matches the stock vendor kernel behavior.
+                        */
+                       dev_warn(dev, "GPI DMA setup failed (%d), falling back to SE-DMA mode\n", ret);
+                       gi2c->gpi_mode = false;
+                       fifo_disable = false;
+                } else {
+                        dev_dbg(dev, "Using GPI DMA mode for I2C\n");
+                }
+        }
 
-		dev_dbg(dev, "Using GPI DMA mode for I2C\n");
-	} else {
-		gi2c->gpi_mode = false;
+	if (!gi2c->gpi_mode) {
 		tx_depth = geni_se_get_tx_fifo_depth(&gi2c->se);
 
 		/* I2C Master Hub Serial Elements doesn't have the HW_PARAM_0 register */
