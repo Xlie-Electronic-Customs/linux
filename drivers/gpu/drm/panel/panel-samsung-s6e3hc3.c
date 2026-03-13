@@ -161,6 +161,8 @@ static int panel_samsung_amb670yf07_1440_3216_dsc_on(struct panel_samsung_amb670
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x1f, 0x00);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0xa5, 0xa5);
 
+	mipi_dsi_dcs_set_display_on_multi(&dsi_ctx);
+
 	return dsi_ctx.accum_err;
 }
 
