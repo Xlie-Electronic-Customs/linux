@@ -393,7 +393,7 @@ int a6xx_gmu_set_oob(struct a6xx_gmu *gmu, enum a6xx_gmu_oob_state state)
 		/* Wait for the acknowledge interrupt */
 		if (adreno_is_a730(adreno_gpu) || adreno_is_a740_family(adreno_gpu))
 			ret = gmu_poll_timeout(gmu, REG_A6XX_GMU_GMU2HOST_INTR_INFO, val,
-					       val & (1 << ack), 1, 10000);
+					       val & (1 << ack), 2, 10000);
 		else
 			ret = gmu_poll_timeout(gmu, REG_A6XX_GMU_GMU2HOST_INTR_INFO, val,
 						val & (1 << ack), 100, 10000);
