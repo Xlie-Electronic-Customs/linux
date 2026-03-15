@@ -2087,13 +2087,6 @@ static void tp_rate_calc(struct touchpanel_data *ts, tp_rate tp_rate_type)
 		}
 		ts->irq_interval = ts->curr_time - ts->irq_interval;
 		ts->irq_handle_time = ktime_to_ms(ktime_get()) - ts->curr_time;
-		if(ts->irq_num > 0 && ts->monitor_data.in_game_mode && ts->irq_num % 10 == 0) {
-			TPD_INFO("rate = %llu,ts->irq_handle_time =%llu,curr_time = %llu\n", 1000/ts->irq_interval, ts->irq_handle_time, ts->curr_time);
-		} else {
-			if (ts->irq_num > 0 && ts->irq_num % 100 == 0) {
-				TPD_INFO("rate = %llu,ts->irq_handle_time =%llu,curr_time = %llu\n", 1000/ts->irq_interval, ts->irq_handle_time, ts->curr_time);
-			}
-		}
 
 		ts->irq_interval = ts->curr_time;
 		ts->irq_num++;
@@ -2161,8 +2154,6 @@ static inline void tp_touch_down(struct touchpanel_data *ts, struct point_info p
 	}
 
 	if (!CHK_BIT(ts->irq_slot, (1 << id))) {
-		TP_INFO(ts->tp_index, "first touch point id %d [%4d %4d %4d %4d %4d %4d %4d]\n", id, points.x, points.y, points.z,
-					points.rx_press, points.tx_press, points.rx_er, points.tx_er);
 		if(id == 0 && tp_debug == 1 && ts->monitor_data.RATE_MIN) {
 			tp_rate_calc(ts, TP_RATE_CLEAR);
 		}
@@ -2180,8 +2171,6 @@ static inline void tp_touch_down(struct touchpanel_data *ts, struct point_info p
 	ts->last_x_y_point[id].x = points.x;
 	ts->last_x_y_point[id].y = points.y;
 
-	TP_SPECIFIC_PRINT(ts->tp_index, ts->point_num, "Touchpanel id %d :Down[%4d %4d %4d %4d %4d %4d %4d] %d\n", id, points.x, points.y, points.z,
-						points.rx_press, points.tx_press, points.rx_er, points.tx_er, cost_time);
 }
 
 static inline void tp_touch_up(struct touchpanel_data *ts)
@@ -2334,10 +2323,6 @@ static inline void tp_touch_handle(struct touchpanel_data *ts)
 		ts->view_area_touched = 0;
 		ts->irq_slot = 0;
 		ts->up_status = true;
-		TP_DETAIL(ts->tp_index, "all touch up,view_area_touched=%d finger_num=%d\n",
-			  ts->view_area_touched, finger_num);
-		TP_DETAIL(ts->tp_index, "last point x:%d y:%d\n", ts->last_point.x,
-			  ts->last_point.y);
 	}
 
 	input_sync(ts->input_dev);
