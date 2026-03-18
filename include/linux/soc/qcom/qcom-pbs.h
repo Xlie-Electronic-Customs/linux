@@ -14,9 +14,15 @@ struct pbs_dev;
 
 #if IS_ENABLED(CONFIG_QCOM_PBS)
 int qcom_pbs_trigger_event(struct pbs_dev *pbs, u8 bitmap);
+int qcom_pbs_trigger_single_event(struct pbs_dev *pbs);
 struct pbs_dev *get_pbs_client_device(struct device *client_dev);
 #else
 static inline int qcom_pbs_trigger_event(struct pbs_dev *pbs, u8 bitmap)
+{
+	return -ENODEV;
+}
+
+static inline int qcom_pbs_trigger_single_event(struct pbs_dev *pbs)
 {
 	return -ENODEV;
 }
