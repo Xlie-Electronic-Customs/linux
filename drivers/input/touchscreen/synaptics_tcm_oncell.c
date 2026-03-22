@@ -852,7 +852,7 @@ static int syna_parse_report(struct syna_tcm_data *tcm_info)
 			object_data[obj].y_width = data;
 			offset += bits;
 			break;
-		case  TOUCH_REPORT_CUSTOMER_GRIP_INFO:
+		case TOUCH_REPORT_CUSTOMER_GRIP_INFO:
 			bits = config_data[idx++];
 			retval = syna_get_report_data(tcm_info, offset, bits, (unsigned int *)(&grip_data[0]));
 			if (retval < 0) {
@@ -2071,8 +2071,6 @@ static int syna_tcm_read_message(struct syna_tcm_data *tcm_info,
 
 	total_length = MESSAGE_HEADER_SIZE + tcm_info->payload_length + 1;
 
-#ifdef PREDICTIVE_READING
-
 	if (total_length <= tcm_info->read_length) {
 		goto check_padding;
 
@@ -2080,15 +2078,6 @@ static int syna_tcm_read_message(struct syna_tcm_data *tcm_info,
 		tcm_info->in.buf[total_length - 1] = MESSAGE_PADDING;
 		goto check_padding;
 	}
-
-#else
-
-	if (tcm_info->payload_length == 0) {
-		tcm_info->in.buf[total_length - 1] = MESSAGE_PADDING;
-		goto check_padding;
-	}
-
-#endif
 
 	UNLOCK_BUFFER(tcm_info->in);
 
@@ -2120,7 +2109,6 @@ check_padding:
 
 	UNLOCK_BUFFER(tcm_info->in);
 
-#ifdef PREDICTIVE_READING
 	total_length = MAX(total_length, MIN_READ_LENGTH);
 	tcm_info->read_length = MIN(total_length, tcm_info->rd_chunk_size);
 
@@ -2128,7 +2116,6 @@ check_padding:
 		tcm_info->read_length = total_length;
 	}
 
-#endif
 
 	/*add for debug, remove before pvt*/
 	/*if (LEVEL_BASIC != tp_debug) {*/
@@ -2772,7 +2759,6 @@ static int syna_tcm_reset(void *chip_data)
 
 	mutex_lock(&tcm_info->reset_mutex);
 
-#ifndef CONFIG_ARCH_QTI_VM
 	TPD_INFO("start hd reset...\n");
 	synaptics_resetgpio_set(tcm_info->hw_res, false);
 	msleep(POWEWRUP_TO_RESET_TIME);
@@ -2781,9 +2767,6 @@ static int syna_tcm_reset(void *chip_data)
         TPD_INFO("End hd reset...\n");
 
 	retval = syna_tcm_identify(tcm_info, false);
-#else
-	retval = syna_tcm_identify(tcm_info, true);
-#endif
 
 	if (retval < 0) {
 		TPD_INFO("Failed to do identification\n");
@@ -2846,16 +2829,6 @@ static int syna_get_chip_info(void *chip_data)
 	if (ret < 0) {
 		TPD_INFO("failed to get default report config\n");
 	}
-#ifdef CONFIG_ARCH_QTI_VM
-	ret = syna_set_normal_report_config(tcm_info);
-	if (ret < 0) {
-		TPD_INFO("failed to set normal report config\n");
-	}
-	ret = syna_get_input_params(tcm_info);
-	if (ret < 0) {
-		TPD_INFO("Failed to get input parameters\n");
-	}
-#endif
 
 	return 0;
 }
@@ -3121,7 +3094,7 @@ static int syna_tcm_set_gesture_mode(struct syna_tcm_data *tcm_info, int enable)
 			return retval;
 		}
 
-		if (tp_debug != LEVEL_DEBUG) {
+		if (tp_debug != 1) {
 			retval = syna_tcm_enable_report(tcm_info, REPORT_LOG, false);
 
 			if (retval < 0) {
@@ -4900,23 +4873,21 @@ static void syna_tcm_remove(struct i2c_client *client)
 
 static int syna_i2c_suspend(struct device *dev)
 {
-#ifndef CONFIG_ARCH_QTI_VM
 	struct touchpanel_data *ts = dev_get_drvdata(dev);
 
 	TPD_INFO("%s: is called\n", __func__);
 	tp_pm_suspend(ts);
-#endif
+
 	return 0;
 }
 
 static int syna_i2c_resume(struct device *dev)
 {
-#ifndef CONFIG_ARCH_QTI_VM
 	struct touchpanel_data *ts = dev_get_drvdata(dev);
 
 	TPD_INFO("%s is called\n", __func__);
 	tp_pm_resume(ts);
-#endif
+
 	return 0;
 }
 
