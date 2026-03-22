@@ -40,164 +40,6 @@ unsigned int tp_debug = 1;
 struct touchpanel_data *g_tp[TP_SUPPORT_MAX] = {NULL};
 static DEFINE_MUTEX(tp_core_lock);
 
-/*******Part1:Call Back Function implement*******/
-
-static unsigned int extract_uint_le(const unsigned char *ptr)
-{
-	return (unsigned int)ptr[0] +
-	       (unsigned int)ptr[1] * 0x100 +
-	       (unsigned int)ptr[2] * 0x10000 +
-	       (unsigned int)ptr[3] * 0x1000000;
-}
-
-/*************************************auto test Funtion**************************************/
-
-/*************************************TCM Firmware Parse Funtion**************************************/
-int synaptics_parse_header_v2(struct image_info *image_info,
-			      const unsigned char *fw_image)
-{
-	struct image_header_v2 *header;
-	unsigned int magic_value;
-	unsigned int number_of_areas;
-	unsigned int i = 0;
-	unsigned int addr;
-	unsigned int length;
-	unsigned int checksum;
-	unsigned int flash_addr;
-	const unsigned char *content;
-	struct area_descriptor *descriptor;
-	int offset = sizeof(struct image_header_v2);
-
-	header = (struct image_header_v2 *)fw_image;
-	magic_value = le4_to_uint(header->magic_value);
-
-	if (magic_value != IMAGE_FILE_MAGIC_VALUE) {
-		pr_err("invalid magic number %d\n", magic_value);
-		return -EINVAL;
-	}
-
-	number_of_areas = le4_to_uint(header->num_of_areas);
-
-	for (i = 0; i < number_of_areas; i++) {
-		addr = le4_to_uint(fw_image + offset);
-		descriptor = (struct area_descriptor *)(fw_image + addr);
-		offset += 4;
-
-		magic_value =  le4_to_uint(descriptor->magic_value);
-
-		if (magic_value != FLASH_AREA_MAGIC_VALUE) {
-			continue;
-		}
-
-		length = le4_to_uint(descriptor->length);
-		content = (unsigned char *)descriptor + sizeof(*descriptor);
-		flash_addr = le4_to_uint(descriptor->flash_addr_words) * 2;
-		checksum = le4_to_uint(descriptor->checksum);
-
-		if (0 == strncmp((char *)descriptor->id_string,
-				 BOOT_CONFIG_ID,
-				 strlen(BOOT_CONFIG_ID))) {
-			if (checksum != (crc32(~0, content, length) ^ ~0)) {
-				pr_err("Boot config checksum error\n");
-				return -EINVAL;
-			}
-
-			image_info->boot_config.size = length;
-			image_info->boot_config.data = content;
-			image_info->boot_config.flash_addr = flash_addr;
-			pr_info("Boot config size = %d, address = 0x%08x\n", length, flash_addr);
-
-		} else if (0 == strncmp((char *)descriptor->id_string,
-					APP_CODE_ID,
-					strlen(APP_CODE_ID))) {
-			if (checksum != (crc32(~0, content, length) ^ ~0)) {
-				pr_err("Application firmware checksum error\n");
-				return -EINVAL;
-			}
-
-			image_info->app_firmware.size = length;
-			image_info->app_firmware.data = content;
-			image_info->app_firmware.flash_addr = flash_addr;
-			pr_info("Application firmware size = %d address = 0x%08x\n", length,
-				flash_addr);
-
-		} else if (0 == strncmp((char *)descriptor->id_string,
-					APP_CONFIG_ID,
-					strlen(APP_CONFIG_ID))) {
-			if (checksum != (crc32(~0, content, length) ^ ~0)) {
-				pr_err("Application config checksum error\n");
-				return -EINVAL;
-			}
-
-			image_info->app_config.size = length;
-			image_info->app_config.data = content;
-			image_info->app_config.flash_addr = flash_addr;
-			pr_info("Application config size = %d address = 0x%08x\n", length, flash_addr);
-
-		} else if (0 == strncmp((char *)descriptor->id_string,
-					DISP_CONFIG_ID,
-					strlen(DISP_CONFIG_ID))) {
-			if (checksum != (crc32(~0, content, length) ^ ~0)) {
-				pr_err("Display config checksum error\n");
-				return -EINVAL;
-			}
-
-			image_info->disp_config.size = length;
-			image_info->disp_config.data = content;
-			image_info->disp_config.flash_addr = flash_addr;
-			pr_info("Display config size = %d address = 0x%08x\n", length, flash_addr);
-		}
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL(synaptics_parse_header_v2);
-/**********************************RMI Firmware Parse Funtion*****************************************/
-void synaptics_parse_header(struct image_header_data *header,
-			    const unsigned char *fw_image)
-{
-	struct image_header *data = (struct image_header *)fw_image;
-
-	header->checksum = extract_uint_le(data->checksum);
-	TPD_DEBUG(" checksume is %x", header->checksum);
-
-	header->bootloader_version = data->bootloader_version;
-	TPD_DEBUG(" bootloader_version is %d\n", header->bootloader_version);
-
-	header->firmware_size = extract_uint_le(data->firmware_size);
-	TPD_DEBUG(" firmware_size is %x\n", header->firmware_size);
-
-	header->config_size = extract_uint_le(data->config_size);
-	TPD_DEBUG(" header->config_size is %x\n", header->config_size);
-
-	/* only available in s4322 , reserved in other, begin*/
-	header->bootloader_offset = extract_uint_le(data->bootloader_addr);
-	header->bootloader_size = extract_uint_le(data->bootloader_size);
-	TPD_DEBUG(" header->bootloader_offset is %x\n", header->bootloader_offset);
-	TPD_DEBUG(" header->bootloader_size is %x\n", header->bootloader_size);
-
-	header->disp_config_offset = extract_uint_le(data->dsp_cfg_addr);
-	header->disp_config_size = extract_uint_le(data->dsp_cfg_size);
-	TPD_DEBUG(" header->disp_config_offset is %x\n", header->disp_config_offset);
-	TPD_DEBUG(" header->disp_config_size is %x\n", header->disp_config_size);
-	/* only available in s4322 , reserved in other ,  end*/
-
-	memcpy(header->product_id, data->product_id, sizeof(data->product_id));
-	header->product_id[sizeof(data->product_id)] = 0;
-
-	memcpy(header->product_info, data->product_info, sizeof(data->product_info));
-
-	header->contains_firmware_id = data->options_firmware_id;
-	TPD_DEBUG(" header->contains_firmware_id is %x\n",
-		  header->contains_firmware_id);
-
-	if (header->contains_firmware_id) {
-		header->firmware_id = extract_uint_le(data->firmware_id);
-	}
-
-	return;
-}
-
 static struct device_hcd *g_device_hcd[TP_SUPPORT_MAX] = {NULL};
 
 static void device_capture_touch_report(struct device_hcd *device_hcd,
@@ -1007,15 +849,6 @@ static int init_parse_dts(struct device *dev, struct touchpanel_data *ts)
 
 		if (IS_ERR_OR_NULL(ts->hw_res.pin_set_nopull)) {
 			TP_BOOT_INFO(ts->tp_index, "Failed to get the input state pinctrl handle\n");
-		}
-
-		/* active spi mode */
-		ts->hw_res.pin_spi_mode_active = pinctrl_lookup_state(ts->hw_res.pinctrl, PINCTRL_STATE_SPI_ACTIVE);
-		if (IS_ERR_OR_NULL(ts->hw_res.pin_spi_mode_active)) {
-			rc = PTR_ERR(ts->hw_res.pin_spi_mode_active);
-			TPD_BOOT_INFO("Failed to get pinctrl state:%s, r:%d",
-					PINCTRL_STATE_SPI_ACTIVE, rc);
-			ts->hw_res.pin_spi_mode_active = NULL;
 		}
 
 		/* int active state */
@@ -2660,15 +2493,6 @@ int tp_register_irq_func(struct touchpanel_data *ts)
 {
 	int ret = 0;
 
-/* Avoid setting up hardware for TVM during probe */
-#ifdef CONFIG_ARCH_QTI_VM
-	if (!atomic_read(&ts->delayed_vm_probe_pending)) {
-		atomic_set(&ts->delayed_vm_probe_pending, 1);
-		return 0;
-	}
-	goto tvm_setup;
-#endif
-
 	if (gpio_is_valid(ts->hw_res.irq_gpio)) {
 	TP_DEBUG(ts->tp_index, "%s, irq_gpio is %d, ts->irq is %d\n", __func__,
 	ts->hw_res.irq_gpio, ts->irq);
@@ -2699,16 +2523,6 @@ int tp_register_irq_func(struct touchpanel_data *ts)
 		ret = -1;
 	}
 	return ret;
-#ifdef CONFIG_ARCH_QTI_VM
-tvm_setup:
-	TP_INFO(ts->tp_index, "%s ts->irq is %d\n", __func__, ts->irq);
-	snprintf(ts->irq_name, sizeof(ts->irq_name), "touch-%02d", ts->irq);
-	ret = devm_request_threaded_irq(ts->dev, ts->irq, NULL,
-				tp_irq_thread_fn,
-				ts->irq_tui_flags | IRQF_ONESHOT,
-				ts->irq_name, ts);
-	return 0;
-#endif
 }
 
 /**
@@ -2824,19 +2638,8 @@ static void tp_suspend_direct(struct touchpanel_data *ts)
 	}
 
 	/* release all complete first */
-	if (!ts->skip_reinit_device_support) {
-		if (ts->tp_ic_type == TYPE_TDDI_TCM) {
-			if (ts->ts_ops->reinit_device) {
-				if (ts->bus_type != TP_BUS_I2C) {
-					if (!ts->is_suspended) {
-						ts->ts_ops->reinit_device(ts->chip_data);
-					}
-				} else {
-					ts->ts_ops->reinit_device(ts->chip_data);
-				}
-			}
-		}
-	}
+	if (!ts->skip_reinit_device_support && ts->tp_ic_type == TYPE_TDDI_TCM && ts->ts_ops->reinit_device)
+		ts->ts_ops->reinit_device(ts->chip_data);
 
 	/*step2:get mutex && start process suspend flow*/
 	mutex_lock(&ts->mutex);
@@ -3110,7 +2913,7 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 		}
 
 		/*step6 : I2C function check*/
-		if ((!ts->is_noflash_ic) && (ts->bus_type == TP_BUS_I2C)) {
+		if (!ts->is_noflash_ic) {
 				if (!i2c_check_functionality(ts->client->adapter, I2C_FUNC_I2C)) {
 					TP_INFO(ts->tp_index, "%s: need I2C_FUNC_I2C\n", __func__);
 					ret = -ENODEV;
@@ -3202,25 +3005,6 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 		if (ret < 0) {
 			goto err_check_functionality_failed;
 		}
-	}
-
-	/*step15 : suspend && resume fuction register*/
-
-	if (strcmp(ts->touch_environment, "tvm") != 0) {
-#if IS_ENABLED(CONFIG_QCOM_PANEL_EVENT_NOTIFIER)
-		if (ts->active_panel) {
-			cookie = panel_event_notifier_register(GET_INDEX(ts->tp_index),
-					GET_TOUCH(ts->tp_index), ts->active_panel,
-					&ts_panel_notifier_callback, ts);
-
-			if (!cookie) {
-				TP_INFO(ts->tp_index, "Unable to register fb_notifier: %d\n", ret);
-				goto err_check_functionality_failed;
-			}
-			ts->notifier_cookie = cookie;
-		}
-#endif
-
 	}
 
 	/*step16 : workqueue create(speedup_resume)*/
@@ -3321,11 +3105,7 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 		ts->last_x_y_point[i].y = 0;
 	}
 
-	if (ts->is_noflash_ic || ts->bus_type == TP_BUS_SPI) {
-		ts->irq = ts->s_client->irq;
-	} else {
-		ts->irq = ts->client->irq;
-	}
+	ts->irq = ts->client->irq;
 
 
 	mutex_lock(&tp_core_lock);
@@ -3351,12 +3131,10 @@ error_speedup_resume_wq:
 
 
 err_check_functionality_failed:
-#ifndef CONFIG_ARCH_QTI_VM
 	ts->ts_ops->power_control(ts->chip_data, false);
 	if (gpio_is_valid(ts->hw_res.cs_gpio)) {
 		gpio_free(ts->hw_res.cs_gpio);
 	}
-#endif
 	/*wake_lock_destroy(&ts->wakelock);*/
 	ret = -1;
 	return ret;
@@ -3426,13 +3204,6 @@ void unregister_common_touch_device(struct touchpanel_data *pdata)
 		flush_workqueue(ts->lcd_trigger_load_tp_fw_wq);
 		destroy_workqueue(ts->lcd_trigger_load_tp_fw_wq);
 	}
-
-	/*step7 : suspend && resume fuction register*/
-#if IS_ENABLED(CONFIG_QCOM_PANEL_EVENT_NOTIFIER)
-	if (ts->active_panel && ts->notifier_cookie) {
-		panel_event_notifier_unregister(ts->notifier_cookie);
-	}
-#endif/*CONFIG_FB*/
 
 	/*free regulator*/
 	if (!IS_ERR_OR_NULL(ts->hw_res.avdd)) {
@@ -3669,13 +3440,6 @@ void tp_shutdown(struct touchpanel_data *ts)
 		return;
 	}
 
-
-#ifdef CONFIG_QCOM_PANEL_EVENT_NOTIFIER
-	TPD_INFO("qcom gki2.0 need to unregister notifier");
-	if (ts->active_panel && ts->notifier_cookie) {
-		panel_event_notifier_unregister(ts->notifier_cookie);
-	}
-#endif
 	/*step0 :close esd*/
 	if (ts->esd_handle_support) {
 		esd_handle_switch(&ts->esd_info, false);
