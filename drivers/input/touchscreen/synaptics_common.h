@@ -48,13 +48,13 @@ extern unsigned int tp_debug;
 
 #define TPD_DEBUG(a, arg...)\
 do{\
-	if (LEVEL_DEBUG == tp_debug)\
+	if (tp_debug == 1)\
 		pr_err("[TP]"TPD_DEVICE ": " a, ##arg);\
 }while(0)
 
 #define TP_DEBUG(index, a, arg...)\
 do{\
-	if (LEVEL_DEBUG == tp_debug)\
+	if (tp_debug == 1)\
 		pr_err("[TP""%x""]"TPD_DEVICE": " a, index, ##arg);\
 }while(0)
 
@@ -247,10 +247,5 @@ static inline unsigned int le4_to_uint(const unsigned char *src)
 	       (unsigned int)src[2] * 0x10000 +
 	       (unsigned int)src[3] * 0x1000000;
 }
-
-void synaptics_parse_header(struct image_header_data *header,
-			    const unsigned char *fw_image);
-int synaptics_parse_header_v2(struct image_info *image_info,
-			      const unsigned char *fw_image);
 
 #endif  /*SYNAPTICS_H*/
