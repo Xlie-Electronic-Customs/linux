@@ -17,12 +17,15 @@
 #include <drm/drm_modes.h>
 #include <drm/drm_panel.h>
 #include <drm/drm_probe_helper.h>
+#include <drm/drm_crtc.h>
 
 struct panel_samsung_amb670yf07_1440_3216_dsc {
 	struct drm_panel panel;
 	struct mipi_dsi_device *dsi;
 	struct drm_dsc_config dsc;
 	struct gpio_desc *reset_gpio;
+	struct drm_connector *connector;
+	struct drm_display_mode *current_mode;
 };
 
 static inline
@@ -44,21 +47,39 @@ static void panel_samsung_amb670yf07_1440_3216_dsc_reset(struct panel_samsung_am
 static int panel_samsung_amb670yf07_1440_3216_dsc_on(struct panel_samsung_amb670yf07_1440_3216_dsc *ctx)
 {
 	struct mipi_dsi_multi_context dsi_ctx = { .dsi = ctx->dsi };
+	struct drm_display_mode *mode = &ctx->connector->state->crtc->state->mode;
+	int vrefresh = drm_mode_vrefresh(mode);
 
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x9e,
-				     0x12, 0x00, 0x00, 0xab, 0x30, 0x80, 0x09,
-				     0x6c, 0x04, 0x38, 0x00, 0x24, 0x02, 0x1c,
-				     0x02, 0x1c, 0x02, 0x00, 0x02, 0x3b, 0x00,
-				     0x20, 0x03, 0x35, 0x00, 0x07, 0x00, 0x0e,
-				     0x03, 0x34, 0x02, 0xd4, 0x18, 0x00, 0x10,
-				     0xf0, 0x07, 0x10, 0x20, 0x00, 0x06, 0x0f,
-				     0x0f, 0x33, 0x0e, 0x1c, 0x2a, 0x38, 0x46,
-				     0x54, 0x62, 0x69, 0x70, 0x77, 0x79, 0x7b,
-				     0x7d, 0x7e, 0x02, 0x02, 0x22, 0x00, 0x2a,
-				     0x40, 0x2a, 0xbe, 0x3a, 0xfc, 0x3a, 0xfa,
-				     0x3a, 0xf8, 0x3b, 0x38, 0x3b, 0x78, 0x3b,
-				     0xb6, 0x4b, 0xb6, 0x4b, 0xf4, 0x4b, 0xf4,
-				     0x6c, 0x34, 0x84, 0x74, 0x00);
+	if (mode->hdisplay == 1080 && mode->vdisplay == 2412)
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x9e,
+					     0x12, 0x00, 0x00, 0xab, 0x30, 0x80, 0x09,
+			       0x6c, 0x04, 0x38, 0x00, 0x24, 0x02, 0x1c,
+			       0x02, 0x1c, 0x02, 0x00, 0x02, 0x3b, 0x00,
+			       0x20, 0x03, 0x35, 0x00, 0x07, 0x00, 0x0e,
+			       0x03, 0x34, 0x02, 0xd4, 0x18, 0x00, 0x10,
+			       0xf0, 0x07, 0x10, 0x20, 0x00, 0x06, 0x0f,
+			       0x0f, 0x33, 0x0e, 0x1c, 0x2a, 0x38, 0x46,
+			       0x54, 0x62, 0x69, 0x70, 0x77, 0x79, 0x7b,
+			       0x7d, 0x7e, 0x02, 0x02, 0x22, 0x00, 0x2a,
+			       0x40, 0x2a, 0xbe, 0x3a, 0xfc, 0x3a, 0xfa,
+			       0x3a, 0xf8, 0x3b, 0x38, 0x3b, 0x78, 0x3b,
+			       0xb6, 0x4b, 0xb6, 0x4b, 0xf4, 0x4b, 0xf4,
+			       0x6c, 0x34, 0x84, 0x74, 0x00);
+	else if (mode->hdisplay == 1440 && mode->vdisplay == 3216)
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x9e,
+					     0x12, 0x00, 0x00, 0xab, 0x30, 0x80, 0x0c,
+			       0x90, 0x05, 0xa0, 0x00, 0x18, 0x02, 0xd0,
+			       0x02, 0xd0, 0x02, 0x00, 0x02, 0x86, 0x00,
+			       0x20, 0x02, 0x83, 0x00, 0x0a, 0x00, 0x0d,
+			       0x04, 0x86, 0x03, 0x2e, 0x18, 0x00, 0x10,
+			       0xf0, 0x07, 0x10, 0x20, 0x00, 0x06, 0x0f,
+			       0x0f, 0x33, 0x0e, 0x1c, 0x2a, 0x38, 0x46,
+			       0x54, 0x62, 0x69, 0x70, 0x77, 0x79, 0x7b,
+			       0x7d, 0x7e, 0x02, 0x02, 0x22, 0x00, 0x2a,
+			       0x40, 0x2a, 0xbe, 0x3a, 0xfc, 0x3a, 0xfa,
+			       0x3a, 0xf8, 0x3b, 0x38, 0x3b, 0x78, 0x3b,
+			       0xb6, 0x4b, 0xb6, 0x4b, 0xf4, 0x4b, 0xf4,
+			       0x6c, 0x34, 0x84, 0x74, 0x00);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x9d, 0x01);
 	mipi_dsi_dcs_exit_sleep_mode_multi(&dsi_ctx);
 	mipi_dsi_usleep_range(&dsi_ctx, 6000, 7000);
@@ -66,7 +87,12 @@ static int panel_samsung_amb670yf07_1440_3216_dsc_on(struct panel_samsung_amb670
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x22, 0xb9);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb9, 0xa1, 0xb1);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x3a, 0xb9);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb9, 0x02);
+	if (vrefresh == 120)
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb9, 0x02);
+	else if (vrefresh == 90)
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb9, 0x03);
+	else if (vrefresh == 60)
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb9, 0x05);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x26, 0xb9);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb9, 0x00, 0x00);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf7, 0x0f);
@@ -85,15 +111,32 @@ static int panel_samsung_amb670yf07_1440_3216_dsc_on(struct panel_samsung_amb670
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x16, 0xf2);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf2, 0x1b, 0x50);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x08, 0xcb);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xcb, 0x24);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x60, 0x00);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbd, 0x23, 0x02);
+	if (vrefresh == 120) {
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xcb, 0x24);
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x60, 0x00);
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbd, 0x23, 0x02);
+	}
+	else if (vrefresh == 90) {
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xcb, 0xa4);
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbd, 0x21, 0x82);
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x60, 0x09);
+	}
+	else if (vrefresh == 60) {
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xcb, 0x24);
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x60, 0x01);
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbd, 0x23, 0x02);
+	}
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x10, 0xbd);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbd, 0x00);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x16, 0xbd);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbd, 0x77);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x14, 0xbd);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbd, 0x00);
+	if (vrefresh != 90) {
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x16, 0xbd);
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbd, 0x77);
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x14, 0xbd);
+	}
+	if (vrefresh == 120)
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbd, 0x00);
+	else if (vrefresh == 60)
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbd, 0x01);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf7, 0x0f);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0xa5, 0xa5);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0x5a, 0x5a);
@@ -103,31 +146,39 @@ static int panel_samsung_amb670yf07_1440_3216_dsc_on(struct panel_samsung_amb670
 	mipi_dsi_dcs_set_tear_on_multi(&dsi_ctx, MIPI_DSI_DCS_TEAR_MODE_VBLANK);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb9, 0x00);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0xa5, 0xa5);
-	mipi_dsi_dcs_set_column_address_multi(&dsi_ctx, 0x0000, 0x0437);
-	mipi_dsi_dcs_set_page_address_multi(&dsi_ctx, 0x0000, 0x096b);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0x5a, 0x5a);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc3, 0x89);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x24, 0xc3);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc3,
-				     0xfd, 0x00, 0xfd, 0x00, 0xfd, 0x00, 0xfd,
-				     0x00, 0xfd, 0x00, 0xfd, 0x00, 0xfd, 0x00,
-				     0xfd, 0x00, 0xfd);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x3a, 0xc3);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc3,
-				     0xb0, 0x00, 0xb0, 0x00, 0xb0, 0x00, 0xb0,
-				     0x00, 0xb0, 0x00, 0xb0, 0x00, 0xb0, 0x00,
-				     0xb0, 0x00, 0xb0);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x50, 0xc3);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc3,
-				     0x43, 0x00, 0x43, 0x00, 0x43, 0x00, 0x43,
-				     0x00, 0x43, 0x00, 0x43, 0x00, 0x43, 0x00,
-				     0x43, 0x00, 0x43);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x61, 0xc3);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc3,
-				     0xcc, 0xcc, 0xcc, 0xcc, 0xc0, 0xfe, 0x00,
-				     0xfe, 0x00, 0xfe, 0x00, 0xfe, 0x00, 0xfe,
-				     0x00, 0xfe, 0x00, 0xfe, 0x00, 0xfe, 0x00,
-				     0xfe);
+	if (mode->hdisplay == 1080 && mode->vdisplay == 2412) {
+		mipi_dsi_dcs_set_column_address_multi(&dsi_ctx, 0x0000, 0x0437);
+		mipi_dsi_dcs_set_page_address_multi(&dsi_ctx, 0x0000, 0x096b);
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0x5a, 0x5a);
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc3, 0x89);
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x24, 0xc3);
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc3,
+					0xfd, 0x00, 0xfd, 0x00, 0xfd, 0x00, 0xfd,
+					0x00, 0xfd, 0x00, 0xfd, 0x00, 0xfd, 0x00,
+					0xfd, 0x00, 0xfd);
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x3a, 0xc3);
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc3,
+					0xb0, 0x00, 0xb0, 0x00, 0xb0, 0x00, 0xb0,
+					0x00, 0xb0, 0x00, 0xb0, 0x00, 0xb0, 0x00,
+					0xb0, 0x00, 0xb0);
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x50, 0xc3);
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc3,
+					0x43, 0x00, 0x43, 0x00, 0x43, 0x00, 0x43,
+					0x00, 0x43, 0x00, 0x43, 0x00, 0x43, 0x00,
+					0x43, 0x00, 0x43);
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x61, 0xc3);
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc3,
+					0xcc, 0xcc, 0xcc, 0xcc, 0xc0, 0xfe, 0x00,
+					0xfe, 0x00, 0xfe, 0x00, 0xfe, 0x00, 0xfe,
+					0x00, 0xfe, 0x00, 0xfe, 0x00, 0xfe, 0x00,
+					0xfe);
+	}
+	else if (mode->hdisplay == 1440 && mode->vdisplay == 3216) {
+		mipi_dsi_dcs_set_column_address_multi(&dsi_ctx, 0x0000, 0x059f);
+		mipi_dsi_dcs_set_page_address_multi(&dsi_ctx, 0x0000, 0x0c8f);
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0x5a, 0x5a);
+		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc3, 0x00);
+	}
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0xa5, 0xa5);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0x5a, 0x5a);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x2b, 0xf6);
@@ -229,12 +280,12 @@ static int panel_samsung_amb670yf07_1440_3216_dsc_unprepare(struct drm_panel *pa
 }
 
 static const struct drm_display_mode panel_samsung_amb670yf07_1440_3216_dsc_modes[] = {
-	{ /* 120Hz mode */
-		.clock = (1080 + 64 + 8 + 54) * (2412 + 2 + 2 + 8) * 120 / 1000,
+	{ /* FHD 120Hz mode */
+		.clock = (1080 + 64 + 8 + 50) * (2412 + 2 + 2 + 8) * 120 / 1000,
 		.hdisplay = 1080,
 		.hsync_start = 1080 + 64,
 		.hsync_end = 1080 + 64 + 8,
-		.htotal = 1080 + 64 + 8 + 54,
+		.htotal = 1080 + 64 + 8 + 50,
 		.vdisplay = 2412,
 		.vsync_start = 2412 + 2,
 		.vsync_end = 2412 + 2 + 2,
@@ -243,12 +294,12 @@ static const struct drm_display_mode panel_samsung_amb670yf07_1440_3216_dsc_mode
 		.height_mm = 156,
 		.type = DRM_MODE_TYPE_DRIVER,
 	},
-	{ /* 90Hz mode */
-		.clock = (1080 + 64 + 8 + 54) * (2412 + 2 + 2 + 8) * 90 / 1000,
+	{ /* FHD 90Hz mode */
+		.clock = (1080 + 64 + 8 + 49) * (2412 + 2 + 2 + 8) * 90 / 1000,
 		.hdisplay = 1080,
 		.hsync_start = 1080 + 64,
 		.hsync_end = 1080 + 64 + 8,
-		.htotal = 1080 + 64 + 8 + 54,
+		.htotal = 1080 + 64 + 8 + 49,
 		.vdisplay = 2412,
 		.vsync_start = 2412 + 2,
 		.vsync_end = 2412 + 2 + 2,
@@ -257,16 +308,58 @@ static const struct drm_display_mode panel_samsung_amb670yf07_1440_3216_dsc_mode
 		.height_mm = 156,
 		.type = DRM_MODE_TYPE_DRIVER,
 	},
-	{ /* 60Hz mode */
-		.clock = (1080 + 64 + 8 + 54) * (2412 + 2 + 2 + 8) * 60 / 1000,
+	{ /* FHD 60Hz mode */
+		.clock = (1080 + 64 + 8 + 48) * (2412 + 2 + 2 + 8) * 60 / 1000,
 		.hdisplay = 1080,
 		.hsync_start = 1080 + 64,
 		.hsync_end = 1080 + 64 + 8,
-		.htotal = 1080 + 64 + 8 + 54,
+		.htotal = 1080 + 64 + 8 + 48,
 		.vdisplay = 2412,
 		.vsync_start = 2412 + 2,
 		.vsync_end = 2412 + 2 + 2,
 		.vtotal = 2412 + 2 + 2 + 8,
+		.width_mm = 70,
+		.height_mm = 156,
+		.type = DRM_MODE_TYPE_DRIVER,
+	},
+	{ /* WQHD 120Hz mode */
+		.clock = (1440 + 88 + 8 + 57) * (3216 + 8 + 8 + 8) * 120 / 1000,
+		.hdisplay = 1440,
+		.hsync_start = 1440 + 88,
+		.hsync_end = 1440 + 88 + 8,
+		.htotal = 1440 + 88 + 8 + 57,
+		.vdisplay = 3216,
+		.vsync_start = 3216 + 8,
+		.vsync_end = 3216 + 8 + 8,
+		.vtotal = 3216 + 8 + 8 + 8,
+		.width_mm = 70,
+		.height_mm = 156,
+		.type = DRM_MODE_TYPE_DRIVER,
+	},
+	{ /* WQHD 90Hz mode */
+		.clock = (1440 + 88 + 8 + 58) * (3216 + 8 + 8 + 8) * 90 / 1000,
+		.hdisplay = 1440,
+		.hsync_start = 1440 + 88,
+		.hsync_end = 1440 + 88 + 8,
+		.htotal = 1440 + 88 + 8 + 58,
+		.vdisplay = 3216,
+		.vsync_start = 3216 + 8,
+		.vsync_end = 3216 + 8 + 8,
+		.vtotal = 3216 + 8 + 8 + 8,
+		.width_mm = 70,
+		.height_mm = 156,
+		.type = DRM_MODE_TYPE_DRIVER,
+	},
+	{ /* WQHD 60Hz mode */
+		.clock = (1440 + 88 + 8 + 56) * (3216 + 8 + 8 + 8) * 60 / 1000,
+		.hdisplay = 1440,
+		.hsync_start = 1440 + 88,
+		.hsync_end = 1440 + 88 + 8,
+		.htotal = 1440 + 88 + 8 + 56,
+		.vdisplay = 3216,
+		.vsync_start = 3216 + 8,
+		.vsync_end = 3216 + 8 + 8,
+		.vtotal = 3216 + 8 + 8 + 8,
 		.width_mm = 70,
 		.height_mm = 156,
 		.type = DRM_MODE_TYPE_DRIVER,
@@ -276,6 +369,9 @@ static const struct drm_display_mode panel_samsung_amb670yf07_1440_3216_dsc_mode
 static int panel_samsung_amb670yf07_1440_3216_dsc_get_modes(struct drm_panel *panel,
 							    struct drm_connector *connector)
 {
+	struct panel_samsung_amb670yf07_1440_3216_dsc *ctx = to_panel_samsung_amb670yf07_1440_3216_dsc(panel);
+	ctx->connector = connector;
+
 	int count = 0;
 
 	for (int i = 0; i < ARRAY_SIZE(panel_samsung_amb670yf07_1440_3216_dsc_modes); i++)
@@ -431,7 +527,7 @@ static struct mipi_dsi_driver panel_samsung_amb670yf07_1440_3216_dsc_driver = {
 	.probe = panel_samsung_amb670yf07_1440_3216_dsc_probe,
 	.remove = panel_samsung_amb670yf07_1440_3216_dsc_remove,
 	.driver = {
-		.name = "panel-panel-samsung-amb670yf07-1440-3216-dsc",
+		.name = "panel-samsung-amb670yf07-1440-3216-dsc",
 		.of_match_table = panel_samsung_amb670yf07_1440_3216_dsc_of_match,
 	},
 };
