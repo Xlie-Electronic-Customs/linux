@@ -89,9 +89,9 @@ static int panel_samsung_amb670yf07_1440_3216_dsc_on(struct panel_samsung_amb670
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x3a, 0xb9);
 	if (vrefresh == 120)
 		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb9, 0x02);
-	else if ((vrefresh == 90))
+	else if (vrefresh == 90)
 		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb9, 0x03);
-	else if ((vrefresh == 60))
+	else if (vrefresh == 60)
 		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb9, 0x05);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x26, 0xb9);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb9, 0x00, 0x00);
@@ -121,21 +121,21 @@ static int panel_samsung_amb670yf07_1440_3216_dsc_on(struct panel_samsung_amb670
 		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbd, 0x21, 0x82);
 		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x60, 0x09);
 	}
-	else if ((vrefresh == 60)) {
+	else if (vrefresh == 60) {
 		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xcb, 0x24);
 		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x60, 0x01);
 		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbd, 0x23, 0x02);
 	}
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x10, 0xbd);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbd, 0x00);
-	if ((vrefresh != 90)) {
+	if (vrefresh != 90) {
 		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x16, 0xbd);
 		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbd, 0x77);
 		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x14, 0xbd);
 	}
 	if (vrefresh == 120)
 		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbd, 0x00);
-	else if ((vrefresh == 60))
+	else if (vrefresh == 60)
 		mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbd, 0x01);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf7, 0x0f);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0xa5, 0xa5);
