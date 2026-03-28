@@ -16,6 +16,12 @@ obj-$(CONFIG_IIO_SW_TRIGGER) += industrialio-sw-trigger.o
 obj-$(CONFIG_IIO_TRIGGERED_EVENT) += industrialio-triggered-event.o
 obj-$(CONFIG_IIO_BACKEND) += industrialio-backend.o
 
+oplus_sensor-y := oplus_sensor_devinfo.o
+oplus_sensor-y += oplus_press_cali_info.o
+oplus_sensor-y += oplus_pad_als_info.o
+obj-$(CONFIG_OPLUS_FEATURE_SENSOR_CFG) += oplus_sensor.o
+obj-$(CONFIG_OPLUS_SENSOR_FB_QC)	+= sensor_feedback.o
+
 obj-y += accel/
 obj-y += adc/
 obj-y += addac/
