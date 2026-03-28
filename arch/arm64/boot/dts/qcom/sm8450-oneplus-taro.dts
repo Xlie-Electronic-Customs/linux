@@ -1229,6 +1229,34 @@
 	};
 };
 
+&pmk8350_sdam_2 {
+	hap_cl_brake: cl_brake@7c {
+		reg = <0x7c 0x1>;
+		bits = <0 8>;
+	};
+};
+
+&pm8350b_haptics {
+	nvmem-cell-names = "hap_cl_brake";
+	nvmem-cells = <&hap_cl_brake>;
+	nvmem-names = "hap_cfg_sdam";
+	nvmem = <&pmk8350_sdam_46>;
+	qcom,pbs-client = <&pm8350b_pbs2>;
+
+	qcom,vmax-mv = <1680>;
+	qcom,cl-vmax-mv = <1680>;
+	qcom,lra-period-us = <5882>;
+	qcom,fifo-vmax-mv = <8500>;
+	qcom,old-steady-vmax-mv = <8500>;
+	qcom,cal-data-restore;
+	qcom,fifo-empty-threshold = <480>;
+	//#endif
+	qcom,vibrator-type = <8151>;//sla0815
+
+	qcom,fifo-vmax-mv = <8700>;
+	qcom,old-steady-vmax-mv = <8700>;//8.7v
+};
+
 &pm8350c_flash {
 	status = "okay";
 
