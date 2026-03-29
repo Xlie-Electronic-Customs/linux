@@ -35,7 +35,7 @@
 	: PANEL_EVENT_NOTIFIER_CLIENT_PRIMARY_TOUCH)
 
 int cur_tp_index = 0;
-unsigned int tp_debug = 1;
+unsigned int tp_debug = 0;
 
 struct touchpanel_data *g_tp[TP_SUPPORT_MAX] = {NULL};
 static DEFINE_MUTEX(tp_core_lock);
@@ -1534,11 +1534,11 @@ static int init_input_device(struct touchpanel_data *ts)
 	set_bit(EV_ABS, ts->input_dev->evbit);
 	set_bit(EV_KEY, ts->input_dev->evbit);
 	set_bit(ABS_MT_TOUCH_MAJOR, ts->input_dev->absbit);
-	set_bit(ABS_MT_WIDTH_MAJOR, ts->input_dev->absbit);
+	// set_bit(ABS_MT_WIDTH_MAJOR, ts->input_dev->absbit);
 	set_bit(ABS_MT_POSITION_X, ts->input_dev->absbit);
 	set_bit(ABS_MT_POSITION_Y, ts->input_dev->absbit);
-	set_bit(ABS_MT_PRESSURE, ts->input_dev->absbit);
-	set_bit(ABS_TOUCH_COST_TIME_KERNEL, ts->input_dev->absbit);
+	// set_bit(ABS_MT_PRESSURE, ts->input_dev->absbit);
+	// set_bit(ABS_TOUCH_COST_TIME_KERNEL, ts->input_dev->absbit);
 	/*set_bit(ABS_TOUCH_COST_TIME_ALGO, ts->input_dev->absbit);
 	set_bit(ABS_TOUCH_COST_TIME_DAEMON, ts->input_dev->absbit);*/
 	set_bit(ABS_MT_TOOL_TYPE, ts->input_dev->absbit);
@@ -1605,6 +1605,7 @@ static int init_input_device(struct touchpanel_data *ts)
 		TP_BOOT_INFO(ts->tp_index, "%s: input_mt_init_slots return %d\n", __func__, ret);
 	input_set_abs_params(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0, 255, 0, 0);
 	//input_set_abs_params(ts->input_dev, ABS_MT_PRESSURE, 0, 255, 0, 0);
+	input_set_abs_params(ts->input_dev, ABS_PROFILE, 0, 1, 0, 0);
 	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_X, 0,
 			     ts->resolution_info.max_x - 1, 0, 0);
 	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_Y, 0,
@@ -1981,9 +1982,6 @@ static inline void tp_touch_down(struct touchpanel_data *ts, struct point_info p
 			input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, SMART_GESTURE_LOW_VALUE);
 		}
 
-		/*pressure_report_support*/
-		input_report_abs(ts->input_dev, ABS_MT_PRESSURE,
-				 ts->last_touch_major);   /*add for fixing gripview tap no function issue*/
 	}
 
 	if (!CHK_BIT(ts->irq_slot, (1 << id))) {
