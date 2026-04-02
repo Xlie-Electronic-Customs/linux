@@ -27,7 +27,7 @@
 
 / {
 	model = "OnePlus 10 Pro 5G";
-	compatible = "oplus,taro", "qcom,sm8450";
+	compatible = "oplus,negroni", "qcom,sm8450";
 
 	chassis-type = "handset";
 
