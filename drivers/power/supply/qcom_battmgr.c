@@ -5,6 +5,7 @@
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #include <linux/auxiliary_bus.h>
+#include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/nvmem-consumer.h>
@@ -74,6 +75,21 @@ enum qcom_battmgr_variant {
 #define BATT_CHG_CTRL_START_THR		25
 #define BATT_CHG_CTRL_END_THR		26
 
+/*
+ * Oplus-specific battery property IDs.
+ * The stock Oplus ADSP firmware extends the standard property enum with
+ * vendor-specific entries starting at position 24. BATT_ADSP_GAUGE_INIT
+ * is at position 38 in the Oplus enum. Sending property_id=38 with value=1
+ * via opcode 0x31 (BATTMGR_BAT_PROPERTY_SET) initializes the ADSP fuel gauge
+ * (bq27541) and enables SOC reporting.
+ */
+#define BATT_OPLUS_CHG_EN                      24
+#define BATT_OPLUS_SET_PDO                     25
+#define BATT_OPLUS_RTC_SOC                     31
+#define BATT_OPLUS_SEND_CHG_STATUS             37
+#define BATT_OPLUS_ADSP_GAUGE_INIT             38
+#define BATT_OPLUS_UPDATE_SOC_SMOOTH_PARAM     39
+
 #define BATTMGR_USB_PROPERTY_GET	0x32
 #define BATTMGR_USB_PROPERTY_SET	0x33
 #define USB_ONLINE			0
@@ -86,6 +102,17 @@ enum qcom_battmgr_variant {
 #define USB_ADAP_TYPE			7
 #define USB_MOISTURE_DET_EN		8
 #define USB_MOISTURE_DET_STS		9
+
+/*
+ * Oplus-specific USB property IDs.
+ * USB_VOOCPHY_ENABLE (property 13) enables the ADSP VoocPHY subsystem
+ * which manages both VOOC fast charging AND the fuel gauge. The stock
+ * driver enables this after gauge init during crash recovery and during
+ * normal charger setup.
+ */
+#define USB_OPLUS_VOOCPHY_STATUS       12
+#define USB_OPLUS_VOOCPHY_ENABLE       13
+
 
 #define BATTMGR_WLS_PROPERTY_GET	0x34
 #define BATTMGR_WLS_PROPERTY_SET	0x35
@@ -103,6 +130,63 @@ enum qcom_battmgr_variant {
 #define CHARGE_CTRL_END_THR_MIN		55
 #define CHARGE_CTRL_END_THR_MAX		100
 #define CHARGE_CTRL_DELTA_SOC		5
+
+/* Oplus OEM read buffer opcode and layout */
+#define OEM_OPCODE_READ_BUFFER         0x10000
+#define OEM_READ_BUF_MAX               128
+/* OEM buffer indices (from Oplus ADSP firmware) */
+#define OEM_BUF_TEMP                   0
+#define OEM_BUF_CURRENT                        1
+#define OEM_BUF_VOLTAGE                        2
+#define OEM_BUF_SOC                    3
+#define OEM_BUF_REMAINING_CAP          4
+#define OEM_BUF_CYCLE_COUNT            5
+#define OEM_BUF_FCC                    6
+#define OEM_BUF_CHARGE_COUNTER         7
+#define OEM_BUF_SOH                    8
+
+/* Oplus-specific notification IDs */
+#define NOTIF_TYPEC_STATE_CHANGE       0x55
+#define NOTIF_PLUGIN_IRQ               0x57
+#define NOTIF_CHG_STATUS_GET           0x59  /* BC_CHG_STATUS_GET: ADSP asks AP if charging OK */
+#define NOTIF_CHG_STATUS_SET           0x60
+#define NOTIF_ADSP_SUSPEND_CHG         0x61  /* BC_ADSP_NOTIFY_AP_SUSPEND_CHG */
+#define NOTIF_CP_MOS_DISABLE           0x64
+
+/*
+ * Oplus ADSP VOOC notification codes (from stock oplus_battery_sm8450.h).
+ * These are sent as BATTMGR_NOTIFICATION opcodes from the ADSP firmware.
+ */
+#define NOTIF_VOOC_STATUS_GET          0x48  /* BC_VOOC_STATUS_GET */
+#define NOTIF_VOOC_VBUS_ADC_ENABLE     0x52  /* BC_VOOC_VBUS_ADC_ENABLE */
+#define NOTIF_PD_SVOOC                 0x56  /* BC_PD_SVOOC */
+#define NOTIF_VOOC_CHG_PUMP_0          0x62  /* Charge pump event */
+#define NOTIF_VOOC_CHG_PUMP_1          0x63  /* Charge pump MOS event */
+
+/*
+ * VOOC fast charge status values (from stock oplus_adsp_voocphy.c).
+ * Delivered as (intval & 0xFF) when reading USB_OPLUS_VOOCPHY_STATUS.
+ */
+enum adsp_voocphy_fast_status {
+        ADSP_VPHY_FAST_NOTIFY_UNKNOW            = 0,
+        ADSP_VPHY_FAST_NOTIFY_PRESENT           = 1,
+        ADSP_VPHY_FAST_NOTIFY_ONGOING           = 2,
+        ADSP_VPHY_FAST_NOTIFY_ABSENT            = 3,
+        ADSP_VPHY_FAST_NOTIFY_FULL              = 4,
+        ADSP_VPHY_FAST_NOTIFY_BAD_CONNECTED     = 5,
+        ADSP_VPHY_FAST_NOTIFY_BATT_TEMP_OVER    = 6,
+        ADSP_VPHY_FAST_NOTIFY_BTB_TEMP_OVER     = 7,
+        ADSP_VPHY_FAST_NOTIFY_DUMMY_START       = 8,
+        ADSP_VPHY_FAST_NOTIFY_ADAPTER_COPYCAT   = 9,
+        ADSP_VPHY_FAST_NOTIFY_ERR_COMMU         = 10,
+        ADSP_VPHY_FAST_NOTIFY_SWITCH_TEMP_RANGE = 11,
+        ADSP_VPHY_FAST_NOTIFY_COMMU_TIME_OUT    = 12,
+        ADSP_VPHY_FAST_NOTIFY_COMMU_CLK_ERR     = 13,
+        ADSP_VPHY_FAST_NOTIFY_COMMU_SEND_ERR    = 14,
+        ADSP_VPHY_FAST_NOTIFY_HW_VBATT_HIGH     = 15,
+        ADSP_VPHY_FAST_NOTIFY_HW_TBATT_HIGH     = 16,
+};
+
 
 struct qcom_battmgr_enable_request {
 	struct pmic_glink_hdr hdr;
@@ -235,6 +319,18 @@ struct qcom_battmgr_message {
 	};
 };
 
+struct qcom_battmgr_oem_read_req {
+        struct pmic_glink_hdr hdr;
+        __le32 data_size;
+};
+
+struct qcom_battmgr_oem_read_resp {
+        struct pmic_glink_hdr hdr;
+        __le32 data_buffer[OEM_READ_BUF_MAX];
+        __le32 data_size;
+};
+
+
 #define BATTMGR_CHARGING_SOURCE_AC	1
 #define BATTMGR_CHARGING_SOURCE_USB	2
 #define BATTMGR_CHARGING_SOURCE_WIRELESS 3
@@ -297,6 +393,8 @@ struct qcom_battmgr_usb {
 	unsigned int current_max;
 	unsigned int current_limit;
 	unsigned int usb_type;
+	unsigned int adap_type;
+        unsigned int voocphy_status_raw;
 };
 
 struct qcom_battmgr_wireless {
@@ -332,6 +430,35 @@ struct qcom_battmgr {
 	struct qcom_battmgr_wireless wireless;
 
 	struct work_struct enable_work;
+
+        /* Oplus OEM read buffer for fuel gauge data */
+        bool oem_read_buf_valid;
+        bool oem_read_buf_supported;
+        bool oem_read_buf_tried;
+        u32 oem_read_buf[OEM_READ_BUF_MAX];
+        struct completion oem_read_ack;
+        struct mutex oem_read_lock;
+
+        /* Oplus ADSP fuel gauge init tracking */
+        bool gauge_init_done;
+
+        /* Periodic VoocPHY re-enable (matches stock 5s polling) */
+        struct delayed_work voocphy_recheck_work;
+
+        /* VOOC status read worker (triggered by 0x48 notification) */
+        struct work_struct voocphy_status_work;
+
+        /* Set once ICL/FCC have been configured for DCP (avoid repeated sets) */
+        bool vooc_limits_set;
+        int last_configured_adap_type;  /* adapter type we last configured, -1 = none */
+        unsigned int usb_offline_count; /* consecutive USB_ONLINE=0 readings */
+
+        /* ADSP told AP to suspend charging (notification 0x61) */
+        bool adsp_suspended_chg;
+
+        /* Worker to reply to ADSP charging status queries (notification 0x59) */
+        struct work_struct chg_status_reply_work;
+
 
 	/*
 	 * @lock is used to prevent concurrent power supply requests to the
@@ -451,6 +578,24 @@ static const u8 sm8350_bat_prop_map[] = {
 	[POWER_SUPPLY_PROP_CHARGE_CONTROL_END_THRESHOLD] = BATT_CHG_CTRL_END_THR,
 };
 
+static int qcom_battmgr_oem_read_buffer(struct qcom_battmgr *battmgr);
+
+static void qcom_battmgr_apply_oem_data(struct qcom_battmgr *battmgr)
+{
+        if (!battmgr->oem_read_buf_valid)
+                return;
+
+        battmgr->status.percent = battmgr->oem_read_buf[OEM_BUF_SOC] / 100;
+        battmgr->status.temperature = battmgr->oem_read_buf[OEM_BUF_TEMP];
+        battmgr->status.current_now = (int)battmgr->oem_read_buf[OEM_BUF_CURRENT];
+        battmgr->status.voltage_now = battmgr->oem_read_buf[OEM_BUF_VOLTAGE];
+        battmgr->info.cycle_count = battmgr->oem_read_buf[OEM_BUF_CYCLE_COUNT];
+        battmgr->info.last_full_capacity = battmgr->oem_read_buf[OEM_BUF_FCC];
+        battmgr->info.charge_count = battmgr->oem_read_buf[OEM_BUF_CHARGE_COUNTER];
+        battmgr->status.soh_percent = battmgr->oem_read_buf[OEM_BUF_SOH];
+}
+
+
 static int qcom_battmgr_bat_sm8350_update(struct qcom_battmgr *battmgr,
 					  enum power_supply_property psp)
 {
@@ -465,6 +610,11 @@ static int qcom_battmgr_bat_sm8350_update(struct qcom_battmgr *battmgr,
 	mutex_lock(&battmgr->lock);
 	ret = qcom_battmgr_request_property(battmgr, BATTMGR_BAT_PROPERTY_GET, prop, 0);
 	mutex_unlock(&battmgr->lock);
+
+        /* Try OEM read buffer and override with real fuel gauge data */
+        if (!qcom_battmgr_oem_read_buffer(battmgr))
+                qcom_battmgr_apply_oem_data(battmgr);
+
 
 	return ret;
 }
@@ -529,7 +679,33 @@ static int qcom_battmgr_bat_get_property(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
+                /*
+                 * Query USB_ONLINE fresh — it's only updated when explicitly
+                 * read, and upower reads STATUS immediately on plug events
+                 * before the periodic recheck worker can refresh it.
+                 */
+                mutex_lock(&battmgr->lock);
+                qcom_battmgr_request_property(battmgr,
+                                BATTMGR_USB_PROPERTY_GET, USB_ONLINE, 0);
+                mutex_unlock(&battmgr->lock);
+
 		val->intval = battmgr->status.status;
+                /*
+                 * The Oplus ADSP doesn't reliably update BATT_STATUS on
+                 * charger removal — it can stay stuck at "Charging".
+                 * Override based on actual charger presence.
+                 */
+                if (!battmgr->usb.online && !battmgr->wireless.online &&
+                    val->intval == POWER_SUPPLY_STATUS_CHARGING)
+                        val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
+                /*
+                 * Conversely, the ADSP often reports "Discharging" even
+                 * when a charger is connected and current is flowing in.
+                 * Override based on actual charger presence.
+                 */
+                if ((battmgr->usb.online || battmgr->wireless.online) &&
+                    val->intval == POWER_SUPPLY_STATUS_DISCHARGING)
+			val->intval = POWER_SUPPLY_STATUS_CHARGING;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
 		val->intval = battmgr->info.charge_type;
@@ -988,6 +1164,17 @@ static int qcom_battmgr_usb_sm8350_update(struct qcom_battmgr *battmgr,
 
 	prop = sm8350_usb_prop_map[psp];
 
+        /*
+         * For USB type, query USB_ADAP_TYPE (property 7) instead of USB_TYPE
+         * (property 6). The Oplus ADSP firmware reports the real negotiated
+         * adapter type (PD, DCP, PD_PPS, etc.) via USB_ADAP_TYPE, while
+         * USB_TYPE always returns SDP (the BC1.2 fallback). Without this,
+         * the device charges at SDP rates (~500mA) instead of full speed.
+         */
+        if (psp == POWER_SUPPLY_PROP_USB_TYPE)
+                prop = USB_ADAP_TYPE;
+
+
 	mutex_lock(&battmgr->lock);
 	ret = qcom_battmgr_request_property(battmgr, BATTMGR_USB_PROPERTY_GET, prop, 0);
 	mutex_unlock(&battmgr->lock);
@@ -1187,6 +1374,92 @@ static const struct power_supply_desc sm8350_wls_psy_desc = {
 	.get_property = qcom_battmgr_wls_get_property,
 };
 
+static int qcom_battmgr_oem_read_buffer(struct qcom_battmgr *battmgr)
+{
+        struct qcom_battmgr_oem_read_req req = {
+                .hdr.owner = cpu_to_le32(PMIC_GLINK_OWNER_BATTMGR),
+                .hdr.type = cpu_to_le32(PMIC_GLINK_REQ_RESP),
+                .hdr.opcode = cpu_to_le32(OEM_OPCODE_READ_BUFFER),
+                .data_size = cpu_to_le32(sizeof(battmgr->oem_read_buf)),
+        };
+        unsigned long left;
+        int ret;
+
+        /* Don't retry if we already know firmware doesn't support this */
+        if (battmgr->oem_read_buf_tried && !battmgr->oem_read_buf_supported)
+                return -EOPNOTSUPP;
+
+        mutex_lock(&battmgr->oem_read_lock);
+        reinit_completion(&battmgr->oem_read_ack);
+
+        ret = pmic_glink_send(battmgr->client, &req, sizeof(req));
+        if (ret < 0) {
+                mutex_unlock(&battmgr->oem_read_lock);
+                battmgr->oem_read_buf_tried = true;
+                return ret;
+        }
+
+        left = wait_for_completion_timeout(&battmgr->oem_read_ack, msecs_to_jiffies(500));
+        mutex_unlock(&battmgr->oem_read_lock);
+
+        battmgr->oem_read_buf_tried = true;
+        if (!left) {
+                dev_info(battmgr->dev, "oem read buffer timed out, firmware may not support it\n");
+                return -ETIMEDOUT;
+        }
+
+        battmgr->oem_read_buf_supported = true;
+        dev_dbg(battmgr->dev, "oem read buffer supported by firmware\n");
+        return 0;
+}
+
+static void qcom_battmgr_oem_read_response(struct qcom_battmgr *battmgr,
+                                            const void *data, size_t len)
+{
+        const struct qcom_battmgr_oem_read_resp *resp = data;
+        u32 buf_len;
+
+        if (len > sizeof(*resp)) {
+                dev_warn(battmgr->dev, "oem read: incorrect length %zu\n", len);
+                return;
+        }
+
+        buf_len = le32_to_cpu(resp->data_size);
+        if (buf_len == 0 || buf_len > sizeof(battmgr->oem_read_buf)) {
+                dev_warn(battmgr->dev, "oem read: invalid buffer length %u\n", buf_len);
+                return;
+        }
+
+        memcpy(battmgr->oem_read_buf, resp->data_buffer, buf_len);
+        battmgr->oem_read_buf_valid = true;
+
+        dev_dbg(battmgr->dev, "oem read: data_size=%u bytes (%u u32s)\n",
+                 buf_len, buf_len / 4);
+        dev_dbg(battmgr->dev,
+                "oem buf[0-14]: %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u\n",
+                battmgr->oem_read_buf[0], battmgr->oem_read_buf[1],
+                battmgr->oem_read_buf[2], battmgr->oem_read_buf[3],
+                battmgr->oem_read_buf[4], battmgr->oem_read_buf[5],
+                battmgr->oem_read_buf[6], battmgr->oem_read_buf[7],
+                battmgr->oem_read_buf[8], battmgr->oem_read_buf[9],
+                battmgr->oem_read_buf[10], battmgr->oem_read_buf[11],
+                battmgr->oem_read_buf[12], battmgr->oem_read_buf[13],
+                battmgr->oem_read_buf[14]);
+        dev_dbg(battmgr->dev,
+                "oem buf[15-29]: %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u\n",
+                battmgr->oem_read_buf[15], battmgr->oem_read_buf[16],
+                battmgr->oem_read_buf[17], battmgr->oem_read_buf[18],
+                battmgr->oem_read_buf[19], battmgr->oem_read_buf[20],
+                battmgr->oem_read_buf[21], battmgr->oem_read_buf[22],
+                battmgr->oem_read_buf[23], battmgr->oem_read_buf[24],
+                battmgr->oem_read_buf[25], battmgr->oem_read_buf[26],
+                battmgr->oem_read_buf[27], battmgr->oem_read_buf[28],
+                battmgr->oem_read_buf[29]);
+
+        complete(&battmgr->oem_read_ack);
+}
+
+
 static void qcom_battmgr_notification(struct qcom_battmgr *battmgr,
 				      const struct qcom_battmgr_message *msg,
 				      int len)
@@ -1216,6 +1489,63 @@ static void qcom_battmgr_notification(struct qcom_battmgr *battmgr,
 	case NOTIF_WLS_PROPERTY:
 		power_supply_changed(battmgr->wls_psy);
 		break;
+        case NOTIF_TYPEC_STATE_CHANGE:
+        case NOTIF_PLUGIN_IRQ:
+                power_supply_changed(battmgr->usb_psy);
+                power_supply_changed(battmgr->bat_psy);
+                /*
+                 * The ADSP may not have updated USB_ONLINE yet, so the
+                 * above notifications may carry stale data.  Schedule
+                 * the recheck worker at 500 ms to re-query USB_ONLINE
+                 * and emit a corrected notification.
+                 *
+                 * Don't reset vooc_limits_set here — the ADSP fires
+                 * these notifications spuriously, and resetting the
+                 * flag causes repeated ICL/FCC/PDO writes that
+                 * interfere with PD negotiation.  The recheck worker
+                 * resets the flag only when USB_ONLINE actually goes 0.
+                 */
+                mod_delayed_work(system_wq, &battmgr->voocphy_recheck_work,
+                                 msecs_to_jiffies(500));
+                break;
+        case NOTIF_CHG_STATUS_GET:
+                /*
+                 * ADSP asks: "is charging allowed?"
+                 * Must reply with BATT_SEND_CHG_STATUS=1 or ADSP aborts
+                 * the VOOC handshake and drops to failsafe 5V/0.5A.
+                 */
+                schedule_work(&battmgr->chg_status_reply_work);
+                break;
+        case NOTIF_CHG_STATUS_SET:
+        case NOTIF_CP_MOS_DISABLE:
+                power_supply_changed(battmgr->bat_psy);
+                break;
+        case NOTIF_ADSP_SUSPEND_CHG:
+                /* ADSP tells AP to suspend charging */
+                dev_info(battmgr->dev, "vooc: ADSP requests charging suspend\n");
+                battmgr->adsp_suspended_chg = true;
+                schedule_work(&battmgr->chg_status_reply_work);
+                break;
+        case NOTIF_VOOC_STATUS_GET:
+                /*
+                 * ADSP signals that VOOC status changed.
+                 * Schedule worker to read USB_VOOCPHY_STATUS.
+                 */
+                schedule_work(&battmgr->voocphy_status_work);
+                break;
+        case NOTIF_VOOC_VBUS_ADC_ENABLE:
+                dev_info(battmgr->dev, "vooc: VBUS ADC enable (handshake starting)\n");
+                power_supply_changed(battmgr->bat_psy);
+                break;
+        case NOTIF_PD_SVOOC:
+                dev_info(battmgr->dev, "vooc: PD-SVOOC adapter detected\n");
+                power_supply_changed(battmgr->usb_psy);
+                break;
+        case NOTIF_VOOC_CHG_PUMP_0:
+        case NOTIF_VOOC_CHG_PUMP_1:
+                dev_dbg(battmgr->dev, "vooc: charge pump event %#x\n", notification);
+                power_supply_changed(battmgr->bat_psy);
+                break;
 	default:
 		dev_err(battmgr->dev, "unknown notification: %#x\n", notification);
 		break;
@@ -1515,6 +1845,19 @@ static void qcom_battmgr_sm8350_callback(struct qcom_battmgr *battmgr,
 		case USB_TYPE:
 			battmgr->usb.usb_type = le32_to_cpu(resp->intval.value);
 			break;
+                case USB_ADAP_TYPE:
+                        /*
+                         * USB_ADAP_TYPE returns the real negotiated adapter type
+                         * from the Oplus ADSP firmware. Use this as the reported
+                         * usb_type so the power supply subsystem sees the actual
+                         * adapter type (PD/DCP/etc.) instead of SDP.
+                         */
+                        battmgr->usb.adap_type = le32_to_cpu(resp->intval.value);
+                        battmgr->usb.usb_type = battmgr->usb.adap_type;
+                        break;
+                case USB_OPLUS_VOOCPHY_STATUS:
+                        battmgr->usb.voocphy_status_raw = le32_to_cpu(resp->intval.value);
+                        break;
 		default:
 			dev_warn(battmgr->dev, "unknown property %#x\n", property);
 			break;
@@ -1559,6 +1902,14 @@ static void qcom_battmgr_sm8350_callback(struct qcom_battmgr *battmgr,
 	case BATTMGR_CHG_CTRL_LIMIT_EN:
 		battmgr->error = 0;
 		break;
+        case BATTMGR_BAT_PROPERTY_SET:
+        case BATTMGR_USB_PROPERTY_SET:
+                /* Response to property write (e.g. Oplus gauge init, voocphy enable) */
+                dev_dbg(battmgr->dev, "property set response: opcode=0x%x prop=%u result=%u\n",
+                        opcode, le32_to_cpu(resp->intval.property),
+                        le32_to_cpu(resp->intval.result));
+                battmgr->error = le32_to_cpu(resp->intval.result);
+                break;
 	default:
 		dev_warn(battmgr->dev, "unknown message %#x\n", opcode);
 		break;
@@ -1576,12 +1927,535 @@ static void qcom_battmgr_callback(const void *data, size_t len, void *priv)
 
 	if (opcode == BATTMGR_NOTIFICATION)
 		qcom_battmgr_notification(battmgr, data, len);
+	else if (opcode == OEM_OPCODE_READ_BUFFER)
+                qcom_battmgr_oem_read_response(battmgr, data, len);
 	else if (battmgr->variant == QCOM_BATTMGR_SC8280XP ||
 		 battmgr->variant == QCOM_BATTMGR_X1E80100)
 		qcom_battmgr_sc8280xp_callback(battmgr, data, len);
 	else
 		qcom_battmgr_sm8350_callback(battmgr, data, len);
 }
+
+/*
+ * VOOC status read worker.
+ *
+ * Triggered by notification 0x48 (BC_VOOC_STATUS_GET) from the ADSP.
+ * Reads USB_OPLUS_VOOCPHY_STATUS and decodes the packed VOOC state:
+ *   bits [7:0]  = VOOC fast charge status (enum adsp_voocphy_fast_status)
+ *   bits [14:8] = fast charger type ID
+ *   bits [23:16] = track/error status
+ */
+static void qcom_battmgr_voocphy_status_worker(struct work_struct *work)
+{
+        struct qcom_battmgr *battmgr = container_of(work,
+                        struct qcom_battmgr, voocphy_status_work);
+        static const char * const vooc_state_names[] = {
+                [ADSP_VPHY_FAST_NOTIFY_UNKNOW]           = "UNKNOWN",
+                [ADSP_VPHY_FAST_NOTIFY_PRESENT]          = "PRESENT",
+                [ADSP_VPHY_FAST_NOTIFY_ONGOING]          = "ONGOING",
+                [ADSP_VPHY_FAST_NOTIFY_ABSENT]           = "ABSENT",
+                [ADSP_VPHY_FAST_NOTIFY_FULL]             = "FULL",
+                [ADSP_VPHY_FAST_NOTIFY_BAD_CONNECTED]    = "BAD_CONNECTED",
+                [ADSP_VPHY_FAST_NOTIFY_BATT_TEMP_OVER]   = "BATT_TEMP_OVER",
+                [ADSP_VPHY_FAST_NOTIFY_BTB_TEMP_OVER]    = "BTB_TEMP_OVER",
+                [ADSP_VPHY_FAST_NOTIFY_DUMMY_START]      = "DUMMY_START",
+                [ADSP_VPHY_FAST_NOTIFY_ADAPTER_COPYCAT]  = "ADAPTER_COPYCAT",
+                [ADSP_VPHY_FAST_NOTIFY_ERR_COMMU]        = "ERR_COMMU",
+                [ADSP_VPHY_FAST_NOTIFY_SWITCH_TEMP_RANGE]= "SWITCH_TEMP_RANGE",
+                [ADSP_VPHY_FAST_NOTIFY_COMMU_TIME_OUT]   = "COMMU_TIME_OUT",
+                [ADSP_VPHY_FAST_NOTIFY_COMMU_CLK_ERR]    = "COMMU_CLK_ERR",
+                [ADSP_VPHY_FAST_NOTIFY_COMMU_SEND_ERR]   = "COMMU_SEND_ERR",
+                [ADSP_VPHY_FAST_NOTIFY_HW_VBATT_HIGH]    = "HW_VBATT_HIGH",
+                [ADSP_VPHY_FAST_NOTIFY_HW_TBATT_HIGH]    = "HW_TBATT_HIGH",
+        };
+        int ret;
+        unsigned int raw, vooc_state, fast_chg_type, track_status;
+        const char *state_name;
+
+        if (!battmgr->service_up)
+                return;
+
+        mutex_lock(&battmgr->lock);
+        ret = qcom_battmgr_request_property(battmgr,
+                        BATTMGR_USB_PROPERTY_GET,
+                        USB_OPLUS_VOOCPHY_STATUS, 0);
+        mutex_unlock(&battmgr->lock);
+
+        if (ret) {
+                dev_err(battmgr->dev,
+                        "vooc: failed to read VOOCPHY_STATUS: %d\n", ret);
+                return;
+        }
+
+        raw = battmgr->usb.voocphy_status_raw;
+        vooc_state = raw & 0xFF;
+        fast_chg_type = (raw >> 8) & 0x7F;
+        track_status = (raw >> 16) & 0xFF;
+
+        state_name = (vooc_state < ARRAY_SIZE(vooc_state_names) &&
+                      vooc_state_names[vooc_state])
+                     ? vooc_state_names[vooc_state] : "?";
+
+        dev_info(battmgr->dev,
+                 "vooc status: raw=0x%08x state=%s(%u) fast_chg_type=0x%02x track=0x%02x\n",
+                 raw, state_name, vooc_state, fast_chg_type, track_status);
+
+        /*
+         * On error states (ERR_COMMU, COMMU_TIME_OUT, COMMU_CLK_ERR),
+         * re-enable VoocPHY to retry the handshake — matching stock
+         * behavior in oplus_adsp_voocphy_status_func().
+         */
+        if (vooc_state == ADSP_VPHY_FAST_NOTIFY_ERR_COMMU ||
+            vooc_state == ADSP_VPHY_FAST_NOTIFY_COMMU_TIME_OUT ||
+            vooc_state == ADSP_VPHY_FAST_NOTIFY_COMMU_CLK_ERR) {
+                dev_warn(battmgr->dev,
+                         "vooc: communication error (%s), will re-enable VoocPHY\n",
+                         state_name);
+                battmgr->vooc_limits_set = false;
+                battmgr->last_configured_adap_type = -1;
+        }
+
+        power_supply_changed(battmgr->bat_psy);
+}
+
+/*
+ * Oplus ADSP fuel gauge + VoocPHY init.
+ *
+ * The stock Oplus firmware requires two init steps:
+ *
+ * 1. Gauge init: property_id=38 (BATT_ADSP_GAUGE_INIT) with value=1 via
+ *    opcode 0x31 (BATTMGR_BAT_PROPERTY_SET). This initializes the bq27541
+ *    fuel gauge on the ADSP.
+ *
+ * 2. VoocPHY enable: property_id=13 (USB_VOOCPHY_ENABLE) with value=1 via
+ *    opcode 0x33 (BATTMGR_USB_PROPERTY_SET). The VoocPHY subsystem on the
+ *    ADSP manages both VOOC fast charging AND the fuel gauge. Without
+ *    enabling it, the gauge may not fully populate SOC.
+ *
+ * This matches the stock driver's crash recovery sequence:
+ *   oplus_ap_init_adsp_gague() → oplus_adsp_voocphy_enable(true)
+ */
+static void qcom_battmgr_oplus_gauge_init(struct qcom_battmgr *battmgr)
+{
+        int ret;
+
+        if (battmgr->gauge_init_done) {
+                dev_dbg(battmgr->dev, "oplus gauge init: already done, skipping\n");
+                return;
+        }
+
+        /* Step 1: Initialize the ADSP fuel gauge */
+        dev_info(battmgr->dev,
+                 "oplus gauge init: sending BATT property_id=%d value=1 via opcode 0x%x\n",
+                 BATT_OPLUS_ADSP_GAUGE_INIT, BATTMGR_BAT_PROPERTY_SET);
+
+        mutex_lock(&battmgr->lock);
+        ret = qcom_battmgr_request_property(battmgr, BATTMGR_BAT_PROPERTY_SET,
+                                            BATT_OPLUS_ADSP_GAUGE_INIT, 1);
+        mutex_unlock(&battmgr->lock);
+
+        if (ret) {
+                dev_err(battmgr->dev,
+                        "oplus gauge init: FAILED ret=%d\n", ret);
+                return;
+        }
+        dev_info(battmgr->dev, "oplus gauge init: SUCCESS\n");
+
+        /* Step 2: Enable the ADSP VoocPHY subsystem */
+        dev_info(battmgr->dev,
+                 "oplus voocphy enable: sending USB property_id=%d value=1 via opcode 0x%x\n",
+                 USB_OPLUS_VOOCPHY_ENABLE, BATTMGR_USB_PROPERTY_SET);
+
+        mutex_lock(&battmgr->lock);
+        ret = qcom_battmgr_request_property(battmgr, BATTMGR_USB_PROPERTY_SET,
+                                            USB_OPLUS_VOOCPHY_ENABLE, 1);
+        mutex_unlock(&battmgr->lock);
+
+        if (ret) {
+                dev_err(battmgr->dev,
+                        "oplus voocphy enable: FAILED ret=%d\n", ret);
+        } else {
+                dev_info(battmgr->dev, "oplus voocphy enable: SUCCESS\n");
+        }
+
+        /* Step 3: Write dummy RTC SOC to initialize gauge state */
+        dev_info(battmgr->dev, "oplus gauge: sending BATT_RTC_SOC (id=31) via opcode 0x31\n");
+        mutex_lock(&battmgr->lock);
+        ret = qcom_battmgr_request_property(battmgr, BATTMGR_BAT_PROPERTY_SET,
+                                            BATT_OPLUS_RTC_SOC, 50); /* Dummy 50% */
+        mutex_unlock(&battmgr->lock);
+        if (ret)
+                dev_warn(battmgr->dev, "failed to send BATT_RTC_SOC: %d (non-fatal)\n", ret);
+
+        /* Step 4: Write UPDATE_SOC_SMOOTH_PARAM to trigger internal updates */
+        dev_info(battmgr->dev, "oplus gauge: sending BATT_UPDATE_SOC_SMOOTH_PARAM (id=39) via opcode 0x31\n");
+        mutex_lock(&battmgr->lock);
+        ret = qcom_battmgr_request_property(battmgr, BATTMGR_BAT_PROPERTY_SET,
+                                            BATT_OPLUS_UPDATE_SOC_SMOOTH_PARAM, 1);
+        mutex_unlock(&battmgr->lock);
+        if (ret)
+                dev_warn(battmgr->dev, "failed to send BATT_UPDATE_SOC_SMOOTH_PARAM: %d (non-fatal)\n", ret);
+
+        /*
+         * Step 5: Detect adapter type and set charging parameters.
+         * Query USB_ADAP_TYPE to determine the actual charger type,
+         * then set PDO voltage, ICL, and FCC accordingly instead of
+         * hardcoding values that only work for one charger type.
+         */
+        {
+                int adap_type;
+                int pdo_mv = 0;    /* 0 = don't change PDO */
+                int icl_ua = 500000;  /* default SDP 500mA */
+                int fcc_ua = 500000;  /* default SDP 500mA */
+
+                /* Query the adapter type from the ADSP */
+                mutex_lock(&battmgr->lock);
+                ret = qcom_battmgr_request_property(battmgr,
+                                BATTMGR_USB_PROPERTY_GET, USB_ADAP_TYPE, 0);
+                mutex_unlock(&battmgr->lock);
+
+                adap_type = battmgr->usb.adap_type;
+                if (ret) {
+                        dev_warn(battmgr->dev,
+                                 "failed to query adapter type: %d, assuming PD\n", ret);
+                        adap_type = POWER_SUPPLY_USB_TYPE_PD;
+                }
+
+                switch (adap_type) {
+                case POWER_SUPPLY_USB_TYPE_PD:
+                case POWER_SUPPLY_USB_TYPE_PD_DRP:
+                case POWER_SUPPLY_USB_TYPE_PD_PPS:
+                        pdo_mv = 9000;
+                        icl_ua = 3000000;
+                        fcc_ua = 3000000;
+                        dev_info(battmgr->dev,
+                                 "oplus: PD/PPS adapter detected (type=%d), requesting 9V/3A\n",
+                                 adap_type);
+                        break;
+                case POWER_SUPPLY_USB_TYPE_DCP:
+                        /*
+                         * DCP: no PD negotiation. Set high ICL/FCC because
+                         * VOOC/SuperVOOC chargers present as DCP to BC1.2.
+                         * The ADSP VoocPHY handles the proprietary handshake
+                         * and regulates current internally — low Linux-side
+                         * limits starve the VoocPHY and block fast charging.
+                         */
+                        pdo_mv = 0;
+                        icl_ua = 7300000;
+                        fcc_ua = 7300000;
+                        dev_info(battmgr->dev,
+                                 "oplus: DCP adapter detected, setting 7.3A ICL (VOOC/SuperVOOC)\n");
+                        break;
+                case POWER_SUPPLY_USB_TYPE_CDP:
+                        pdo_mv = 0;
+                        icl_ua = 1500000;
+                        fcc_ua = 1500000;
+                        dev_info(battmgr->dev,
+                                 "oplus: CDP adapter detected, setting 1.5A ICL\n");
+                        break;
+                case POWER_SUPPLY_USB_TYPE_C:
+                        pdo_mv = 0;
+                        icl_ua = 1500000;
+                        fcc_ua = 2000000;
+                        dev_info(battmgr->dev,
+                                 "oplus: Type-C adapter detected, setting 1.5A ICL\n");
+                        break;
+                case POWER_SUPPLY_USB_TYPE_SDP:
+                default:
+                        pdo_mv = 0;
+                        icl_ua = 500000;
+                        fcc_ua = 500000;
+                        dev_info(battmgr->dev,
+                                 "oplus: SDP/unknown adapter (type=%d), using defaults\n",
+                                 adap_type);
+                        break;
+                }
+
+                /* Step 5a: Request higher voltage PDO if PD-capable */
+                if (pdo_mv > 0) {
+                        mutex_lock(&battmgr->lock);
+                        ret = qcom_battmgr_request_property(battmgr,
+                                        BATTMGR_BAT_PROPERTY_SET,
+                                        BATT_OPLUS_SET_PDO, pdo_mv);
+                        mutex_unlock(&battmgr->lock);
+                        if (ret)
+                                dev_warn(battmgr->dev,
+                                         "failed to set PDO %dmV: %d\n",
+                                         pdo_mv, ret);
+                        else
+                                msleep(300); /* PD re-negotiation delay */
+                }
+
+                /* Step 6: Set input current limit (after PDO switch) */
+                dev_info(battmgr->dev,
+                         "oplus: setting ICL to %d.%03dA\n",
+                         icl_ua / 1000000, (icl_ua % 1000000) / 1000);
+                mutex_lock(&battmgr->lock);
+                ret = qcom_battmgr_request_property(battmgr,
+                                BATTMGR_USB_PROPERTY_SET,
+                                USB_INPUT_CURR_LIMIT, icl_ua);
+                mutex_unlock(&battmgr->lock);
+                if (ret)
+                        dev_warn(battmgr->dev,
+                                 "failed to set ICL: %d\n", ret);
+
+                /* Step 7: Enable charging */
+                mutex_lock(&battmgr->lock);
+                ret = qcom_battmgr_request_property(battmgr,
+                                BATTMGR_BAT_PROPERTY_SET,
+                                BATT_OPLUS_CHG_EN, 1);
+                mutex_unlock(&battmgr->lock);
+                if (ret)
+                        dev_warn(battmgr->dev,
+                                 "failed to enable charging: %d\n", ret);
+
+                /*
+                 * Step 8: Set fast charge current.
+                 * Skip for DCP — VOOC/SuperVOOC chargers present as DCP,
+                 * and the ADSP VoocPHY controls charging current autonomously.
+                 * Writing BATT_CHG_CTRL_LIM during VOOC causes ADSP error 514.
+                 */
+                if (adap_type != POWER_SUPPLY_USB_TYPE_DCP) {
+                        dev_info(battmgr->dev,
+                                 "oplus: setting FCC to %d.%03dA\n",
+                                 fcc_ua / 1000000, (fcc_ua % 1000000) / 1000);
+                        mutex_lock(&battmgr->lock);
+                        ret = qcom_battmgr_request_property(battmgr,
+                                        BATTMGR_BAT_PROPERTY_SET,
+                                        BATT_CHG_CTRL_LIM, fcc_ua);
+                        mutex_unlock(&battmgr->lock);
+                        if (ret)
+                                dev_warn(battmgr->dev,
+                                         "failed to set FCC: %d\n", ret);
+                } else {
+                        dev_info(battmgr->dev,
+                                 "oplus: DCP/VOOC mode — skipping FCC write (ADSP VoocPHY controls current)\n");
+                }
+                battmgr->last_configured_adap_type = adap_type;
+        }
+
+        battmgr->gauge_init_done = true;
+        battmgr->vooc_limits_set = true;
+        dev_info(battmgr->dev, "oplus gauge init sequence complete\n");
+
+        /* Start periodic VoocPHY re-enable check (every 5s, like stock) */
+        schedule_delayed_work(&battmgr->voocphy_recheck_work,
+                              msecs_to_jiffies(5000));
+}
+
+/*
+ * Worker to reply to ADSP whenever it asks for AP charging status (notification 0x59).
+ * If we fail to reply with BATT_OPLUS_SEND_CHG_STATUS (37) = 1, the ADSP will abort
+ * the VOOC handshake and drop to 5V/0.5A charging.
+ */
+static void qcom_battmgr_chg_status_reply_work(struct work_struct *work)
+{
+        struct qcom_battmgr *battmgr = container_of(work,
+                        struct qcom_battmgr, chg_status_reply_work);
+        int status = !battmgr->adsp_suspended_chg;
+        int ret;
+
+        if (!battmgr->service_up)
+                return;
+
+        mutex_lock(&battmgr->lock);
+        ret = qcom_battmgr_request_property(battmgr,
+                        BATTMGR_BAT_PROPERTY_SET,
+                        BATT_OPLUS_SEND_CHG_STATUS, status);
+        mutex_unlock(&battmgr->lock);
+
+        if (ret)
+                dev_warn(battmgr->dev, "failed to send chg status %d: %d\n", status, ret);
+}
+
+/*
+ * Periodic VoocPHY re-enable worker.
+ *
+ * The stock Oplus driver (oplus_adsp_voocphy_enable_check_func) polls
+ * every 5 seconds and re-enables VoocPHY if it has been disabled.
+ * VOOC chargers present as DCP — once VoocPHY is enabled, the ADSP
+ * hardware performs the proprietary handshake autonomously. Without
+ * periodic re-enabling, VoocPHY may fail on first attempt and never
+ * retry, leaving the charger stuck at low-power DCP.
+ *
+ * This worker also handles charger hot-plug: if the gauge init ran
+ * before the charger was plugged in (SDP/0.5A), we re-query the
+ * adapter type and upgrade ICL/FCC when DCP is detected.
+ */
+static void qcom_battmgr_voocphy_recheck(struct work_struct *work)
+{
+        struct qcom_battmgr *battmgr = container_of(work,
+                        struct qcom_battmgr, voocphy_recheck_work.work);
+        int ret, adap_type;
+
+        if (!battmgr->service_up)
+                return;
+
+        /*
+         * Refresh usb.online — it only gets updated when explicitly
+         * queried, and stale values cause wrong status reporting and
+         * repeated charger setup.
+         */
+        mutex_lock(&battmgr->lock);
+        qcom_battmgr_request_property(battmgr,
+                        BATTMGR_USB_PROPERTY_GET, USB_ONLINE, 0);
+        mutex_unlock(&battmgr->lock);
+
+        if (!battmgr->usb.online) {
+                /*
+                 * Debounce: require 2 consecutive offline readings (~10s)
+                 * before treating as a genuine unplug.  During PD
+                 * negotiation USB_ONLINE flaps briefly to 0 — reacting
+                 * immediately causes status oscillation in upower and
+                 * re-sends ICL/FCC commands that disrupt negotiation.
+                 */
+                battmgr->usb_offline_count++;
+                if (battmgr->usb_offline_count >= 2) {
+                        battmgr->vooc_limits_set = false;
+                        battmgr->adsp_suspended_chg = false;
+                        battmgr->last_configured_adap_type = -1;
+                        power_supply_changed(battmgr->usb_psy);
+                        power_supply_changed(battmgr->bat_psy);
+                }
+                goto reschedule;
+        }
+        battmgr->usb_offline_count = 0;
+
+        /*
+         * Re-query the adapter type from the ADSP.  The type may have
+         * changed since gauge init (e.g. charger plugged in after boot).
+         */
+        mutex_lock(&battmgr->lock);
+        ret = qcom_battmgr_request_property(battmgr,
+                        BATTMGR_USB_PROPERTY_GET, USB_ADAP_TYPE, 0);
+        mutex_unlock(&battmgr->lock);
+
+        adap_type = battmgr->usb.adap_type;
+        if (ret) {
+                dev_dbg(battmgr->dev,
+                        "voocphy recheck: failed to query adap_type: %d\n",
+                        ret);
+                goto reschedule;
+        }
+
+        /*
+         * First time seeing a charger after plug-in: configure charging
+         * parameters based on the detected adapter type.  Don't repeat —
+         * the ADSP commands interfere with time-sensitive VOOC handshakes
+         * if sent repeatedly.
+         */
+        /* Force reconfiguration if adapter type changed (e.g. SDP→PD) */
+        if (battmgr->vooc_limits_set &&
+            adap_type != battmgr->last_configured_adap_type)
+                battmgr->vooc_limits_set = false;
+
+        if (!battmgr->vooc_limits_set) {
+                int pdo_mv = 0;
+                int icl_ua = 500000;
+                int fcc_ua = 500000;
+
+                switch (adap_type) {
+                case POWER_SUPPLY_USB_TYPE_PD:
+                case POWER_SUPPLY_USB_TYPE_PD_DRP:
+                case POWER_SUPPLY_USB_TYPE_PD_PPS:
+                        pdo_mv = 9000;
+                        icl_ua = 3000000;
+                        fcc_ua = 3000000;
+                        dev_info(battmgr->dev,
+                                "voocphy recheck: PD adapter (type=%d), requesting 9V/3A\n",
+                                adap_type);
+                        break;
+                case POWER_SUPPLY_USB_TYPE_DCP:
+                        icl_ua = 7300000;
+                        fcc_ua = 7300000;
+                        dev_info(battmgr->dev,
+                                "voocphy recheck: DCP detected, setting 7.3A ICL (VOOC/SuperVOOC)\n");
+                        break;
+                case POWER_SUPPLY_USB_TYPE_CDP:
+                        icl_ua = 1500000;
+                        fcc_ua = 1500000;
+                        dev_info(battmgr->dev,
+                                "voocphy recheck: CDP detected, setting 1.5A ICL\n");
+                        break;
+                case POWER_SUPPLY_USB_TYPE_C:
+                        icl_ua = 1500000;
+                        fcc_ua = 2000000;
+                        dev_info(battmgr->dev,
+                                "voocphy recheck: Type-C detected, setting 1.5A ICL\n");
+                        break;
+                case POWER_SUPPLY_USB_TYPE_SDP:
+                default:
+                        dev_info(battmgr->dev,
+                                "voocphy recheck: SDP/unknown (type=%d), using defaults\n",
+                                adap_type);
+                        break;
+                }
+
+                /* Request higher voltage PDO if PD-capable */
+                if (pdo_mv > 0) {
+                        mutex_lock(&battmgr->lock);
+                        ret = qcom_battmgr_request_property(battmgr,
+                                        BATTMGR_BAT_PROPERTY_SET,
+                                        BATT_OPLUS_SET_PDO, pdo_mv);
+                        mutex_unlock(&battmgr->lock);
+                        if (ret)
+                                dev_warn(battmgr->dev,
+                                        "recheck: failed to set PDO %dmV: %d\n",
+                                        pdo_mv, ret);
+                        else
+                                msleep(300); /* PD re-negotiation delay */
+                }
+
+                /* Set ICL */
+                mutex_lock(&battmgr->lock);
+                qcom_battmgr_request_property(battmgr,
+                                BATTMGR_USB_PROPERTY_SET,
+                                USB_INPUT_CURR_LIMIT, icl_ua);
+                /* Enable charging */
+                qcom_battmgr_request_property(battmgr,
+                                BATTMGR_BAT_PROPERTY_SET,
+                                BATT_OPLUS_CHG_EN, 1);
+                /* Enable VoocPHY (needed for DCP/VOOC) */
+                qcom_battmgr_request_property(battmgr,
+                                BATTMGR_USB_PROPERTY_SET,
+                                USB_OPLUS_VOOCPHY_ENABLE, 1);
+                mutex_unlock(&battmgr->lock);
+
+                /* Set FCC (skip for DCP — VoocPHY controls current) */
+                if (adap_type != POWER_SUPPLY_USB_TYPE_DCP) {
+                        mutex_lock(&battmgr->lock);
+                        qcom_battmgr_request_property(battmgr,
+                                        BATTMGR_BAT_PROPERTY_SET,
+                                        BATT_CHG_CTRL_LIM, fcc_ua);
+                        mutex_unlock(&battmgr->lock);
+                }
+
+                battmgr->vooc_limits_set = true;
+                battmgr->last_configured_adap_type = adap_type;
+
+                /* Notify userspace so upower re-reads battery status */
+                power_supply_changed(battmgr->bat_psy);
+                power_supply_changed(battmgr->usb_psy);
+                goto reschedule;
+        }
+
+        /* Subsequent cycles for DCP: re-enable VoocPHY (stock behavior) */
+        if (adap_type == POWER_SUPPLY_USB_TYPE_DCP) {
+                mutex_lock(&battmgr->lock);
+                ret = qcom_battmgr_request_property(battmgr,
+                                BATTMGR_USB_PROPERTY_SET,
+                                USB_OPLUS_VOOCPHY_ENABLE, 1);
+                mutex_unlock(&battmgr->lock);
+                if (ret)
+                        dev_dbg(battmgr->dev,
+                                "voocphy re-enable failed: %d\n", ret);
+        }
+
+reschedule:
+        schedule_delayed_work(&battmgr->voocphy_recheck_work,
+                              msecs_to_jiffies(5000));
+}
+
 
 static void qcom_battmgr_enable_worker(struct work_struct *work)
 {
@@ -1594,8 +2468,18 @@ static void qcom_battmgr_enable_worker(struct work_struct *work)
 	int ret;
 
 	ret = qcom_battmgr_request(battmgr, &req, sizeof(req));
-	if (ret)
-		dev_err(battmgr->dev, "failed to request power notifications\n");
+        if (ret) {
+                dev_err(battmgr->dev, "failed to request power notifications\n");
+                return;
+        }
+
+        /*
+         * Initialize the Oplus ADSP fuel gauge after GLINK is up and
+         * notifications are registered. This matches the stock driver's
+         * probe sequence which calls oplus_ap_init_adsp_gague() right after
+         * pmic_glink_register_client().
+         */
+        qcom_battmgr_oplus_gauge_init(battmgr);
 }
 
 static void qcom_battmgr_pdr_notify(void *priv, int state)
@@ -1649,8 +2533,17 @@ static int qcom_battmgr_probe(struct auxiliary_device *adev,
 	psy_cfg_supply.num_supplicants = 1;
 
 	INIT_WORK(&battmgr->enable_work, qcom_battmgr_enable_worker);
+        INIT_DELAYED_WORK(&battmgr->voocphy_recheck_work,
+                          qcom_battmgr_voocphy_recheck);
+        INIT_WORK(&battmgr->voocphy_status_work,
+                  qcom_battmgr_voocphy_status_worker);
+        INIT_WORK(&battmgr->chg_status_reply_work,
+                  qcom_battmgr_chg_status_reply_work);
+        battmgr->last_configured_adap_type = -1;
 	mutex_init(&battmgr->lock);
 	init_completion(&battmgr->ack);
+	mutex_init(&battmgr->oem_read_lock);
+        init_completion(&battmgr->oem_read_ack);
 
 	match = of_match_device(qcom_battmgr_of_variants, dev->parent);
 	if (match)
