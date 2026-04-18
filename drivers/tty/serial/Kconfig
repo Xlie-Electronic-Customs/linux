@@ -1592,6 +1592,10 @@ config SERIAL_NUVOTON_MA35D1_CONSOLE
 	  but you can alter that using a kernel command line option such as
 	  "console=ttyNVTx".
 
+config SERIAL_TC3162
+	bool "TC3162/TC3262 serial port support"
+	depends on MIPS_TC3262
+	select SERIAL_CORE
 endmenu
 
 config SERIAL_MCTRL_GPIO
