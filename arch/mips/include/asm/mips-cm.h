@@ -384,6 +384,12 @@ GCR_CX_ACCESSOR_RW(32, 0x030, reset_ext_base)
 #define CM_GCR_Cx_RESET_EXT_BASE_BEVEXCPA	GENMASK(7, 1)
 #define CM_GCR_Cx_RESET_EXT_BASE_PRESENT	BIT(0)
 
+/* GCR_GIC_BASE register fields */
+#define CM_GCR_GIC_BASE_GICBASE_SHF		17
+#define CM_GCR_GIC_BASE_GICBASE_MSK		(_ULCAST_(0x7fff) << 17)
+#define CM_GCR_GIC_BASE_GICEN_SHF		0
+#define CM_GCR_GIC_BASE_GICEN_MSK		(_ULCAST_(0x1) << 0)
+
 /**
  * mips_cm_l2sync - perform an L2-only sync operation
  *
