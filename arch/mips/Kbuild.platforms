@@ -32,6 +32,7 @@ platform-$(CONFIG_SIBYTE_BCM112X)	+= sibyte/
 platform-$(CONFIG_SIBYTE_SB1250)	+= sibyte/
 platform-$(CONFIG_SIBYTE_BCM1x80)	+= sibyte/
 platform-$(CONFIG_SNI_RM)		+= sni/
+platform-$(CONFIG_MIPS_TC3262)		+= tc3262/
 platform-$(CONFIG_MACH_TX49XX)		+= txx9/
 
 # include the platform specific files
