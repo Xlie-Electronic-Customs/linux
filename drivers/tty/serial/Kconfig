@@ -1619,6 +1619,11 @@ config SERIAL_ESP32_ACM
 	  snippet may be used:
 	    earlycon=esp32s3acm,mmio32,0x60038000
 
+config SERIAL_TC3162
+	bool "TC3162/TC3262 serial port support"
+	depends on MIPS_TC3262
+	select SERIAL_CORE
+
 endmenu
 
 config SERIAL_MCTRL_GPIO
