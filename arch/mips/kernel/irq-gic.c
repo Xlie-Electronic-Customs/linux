@@ -455,26 +455,23 @@ static irqreturn_t ipi_call_interrupt(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+static __init void gic_ipi_init_one(unsigned int irq, const char *name,
+				    irq_handler_t handler)
+{
+	irq_set_handler(gic_irq_base + irq, handle_percpu_irq);
+	request_irq(gic_irq_base + irq, handler, IRQF_PERCPU, name, NULL);
+}
+
 static inline void gic_ipi_init(int intnumintrs, int numvpes)
 {
-	int cpu, ret;
+	int cpu;
 
 	gic_call_int_base = intnumintrs - numvpes;
 	gic_resched_int_base = gic_call_int_base - numvpes;
 
 	for (cpu = 0; cpu < nr_cpu_ids; cpu++) {
-
-		irq_set_handler(gic_irq_base + gic_resched_int_base + cpu, handle_percpu_irq);
-		ret = request_irq(gic_irq_base + gic_resched_int_base + cpu, ipi_resched_interrupt, IRQF_PERCPU, "IPI_resched", NULL);
-		if (ret) {
-			pr_err("%s: failed to register irq\n", __func__);
-		}
-
-		irq_set_handler(gic_irq_base + gic_resched_int_base + cpu, handle_percpu_irq);
-		ret = request_irq(gic_irq_base + gic_call_int_base + cpu, ipi_call_interrupt, IRQF_PERCPU, "IPI_call", NULL);
-		if (ret) {
-			pr_err("%s: failed to register irq\n", __func__);
-		}
+		gic_ipi_init_one(gic_resched_int_base + cpu, "IPI_resched", ipi_resched_interrupt);
+		gic_ipi_init_one(gic_call_int_base + cpu, "IPI_call", ipi_call_interrupt);
 	}
 }
 #else
