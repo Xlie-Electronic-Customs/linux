@@ -1,11 +1,11 @@
 
 obj-y := prom.o cmdline.o printf.o setup.o time.o
 
-# ifdef CONFIG_IRQ_GIC
+ifdef CONFIG_IRQ_GIC
 obj-y += irq-gic.o
-# else
-# obj-y += irq.o
-# endif
+else
+obj-y += irq.o
+endif
 
 obj-$(CONFIG_TC3262_CPU_TIMER) += hpt.o
 obj-$(CONFIG_PCI) += pci_en75xx.o

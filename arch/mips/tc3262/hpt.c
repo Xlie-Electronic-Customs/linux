@@ -10,6 +10,7 @@
 #include <linux/clockchips.h>
 #include <linux/sched_clock.h>
 #include <asm/tc3162/tc3162.h>
+#include <asm/time.h>
 
 #define HPT_BITS				32
 
@@ -112,12 +113,6 @@ static void hpt_event_handler(struct clock_event_device *cd)
 
 int r4k_clockevent_init(void)
 {
-	static struct irqaction hpt_compare_irqaction = {
-		.handler	= hpt_compare_interrupt,
-		.percpu_dev_id	= &hpt_pcpu,
-		.flags		= IRQF_PERCPU | IRQF_TIMER | IRQF_SHARED,
-		.name		= "timer"
-	};
 	static atomic_t irq_installed = ATOMIC_INIT(0);
 	const unsigned int irq = HPT_IRQ;
 	const unsigned int cpu = smp_processor_id();
@@ -148,7 +143,8 @@ int r4k_clockevent_init(void)
 			return rc;
 		}
 
-		rc = setup_percpu_irq(irq, &hpt_compare_irqaction);
+		rc = request_percpu_irq(irq, hpt_compare_interrupt,
+					 "timer", &hpt_pcpu);
 		if (rc) {
 			pr_err("unable to setup IRQ%u (%i)\n", irq, rc);
 			return rc;
@@ -172,9 +168,9 @@ static u64 notrace hpt_read_sched_clock(void)
 	return (u64)hpt_read();
 }
 
-static cycle_t hpt_clocksource_read(struct clocksource *cs)
+static u64 hpt_clocksource_read(struct clocksource *cs)
 {
-	return (cycle_t)hpt_read();
+	return (u64)hpt_read();
 }
 
 int __init init_r4k_clocksource(void)

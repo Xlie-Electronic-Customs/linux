@@ -1286,6 +1286,10 @@ config CPU_LITTLE_ENDIAN
 
 endchoice
 
+
+config TC3262_CPU_TIMER
+	bool
+
 config EXPORT_UASM
 	bool
 
@@ -1300,6 +1304,12 @@ config SYS_SUPPORTS_LITTLE_ENDIAN
 
 config MIPS_HUGE_TLB_SUPPORT
 	def_bool HUGETLB_PAGE || TRANSPARENT_HUGEPAGE
+
+config IRQ_GIC
+	bool
+
+config IRQ_GIC_EIC
+	bool
 
 config IRQ_TXX9
 	bool
@@ -2790,6 +2800,9 @@ config HOTPLUG_CPU
 	  Say N if you want to disable CPU hotplug.
 
 config SMP_UP
+	bool
+
+config SYS_SUPPORTS_MIPS_CMP
 	bool
 
 config SYS_SUPPORTS_MIPS_CPS
