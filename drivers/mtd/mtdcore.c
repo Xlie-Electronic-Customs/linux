@@ -38,6 +38,11 @@
 
 #include "mtdcore.h"
 
+#ifdef CONFIG_MTD_NDM_PARTS
+#include <linux/root_dev.h>
+#include "ndmpart.h"
+#endif
+
 struct backing_dev_info *mtd_bdi;
 
 #ifdef CONFIG_PM_SLEEP
@@ -837,6 +842,15 @@ int add_mtd_device(struct mtd_info *mtd)
 	   of this try_ nonsense, and no bitching about it
 	   either. :) */
 	__module_get(THIS_MODULE);
+
+#ifdef CONFIG_MTD_NDM_PARTS
+	if (ROOT_DEV == 0 && is_mtd_partition_rootfs(mtd)) {
+		pr_info("mtd: device %d (%s) set to be root filesystem\n",
+			mtd->index, mtd->name);
+		ROOT_DEV = MKDEV(MTD_BLOCK_MAJOR, mtd->index);
+	}
+#endif
+
 	return 0;
 
 fail_nvmem_add:
