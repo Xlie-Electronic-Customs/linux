@@ -215,6 +215,8 @@ config MTD_VIRT_CONCAT
 	  entity. This allows for the creation of partitions larger than
 	  the individual physical chips, extending across chip boundaries.
 
+source "drivers/mtd/ralink/Kconfig"
+
 source "drivers/mtd/chips/Kconfig"
 
 source "drivers/mtd/maps/Kconfig"
