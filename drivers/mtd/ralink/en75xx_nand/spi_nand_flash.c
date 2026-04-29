@@ -136,8 +136,6 @@
 #define MAX_LINUX_USE_OOB_SIZE			(26)
 #define MAX_USE_OOB_SIZE				(LINUX_USE_OOB_START_OFFSET + MAX_LINUX_USE_OOB_SIZE + 2)
 
-#define MIN(a,b)			((a) < (b) ? (a) : (b))
-
 #define K0_TO_K1(x)			(((uint32)x) | 0xa0000000)
 #define K1_TO_PHY(x)		(((uint32)x) & 0x1fffffff)
 
@@ -3230,6 +3228,8 @@ spinand_read_page_hwecc(struct nand_chip *chip, uint8_t *buf, int oob_required, 
 	struct SPI_NAND_FLASH_INFO_T *ptr_dev_info_t = _SPI_NAND_GET_DEVICE_INFO_PTR;
 
 	_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "[spinand_read_page_hwecc]: enter, page=0x%x \n", page);
+
+	chip->legacy.cmdfunc(chip, NAND_CMD_READ0, 0, page);
 
 	if(buf == NULL) {
 		_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "[spinand_read_page_hwecc]buf is NULL\n");
