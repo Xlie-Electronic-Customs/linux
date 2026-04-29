@@ -1296,19 +1296,20 @@ static int __init ndm_parser_init(void)
 
 		// entry = proc_create(DI_BOOT_ACTIVE, 0644, proc_dir,
 		// 		    &fops_boot_active);
-
-		entry = proc_create_single(DI_BOOT_ACTIVE, 0644, proc_dir, show_boot);
-		BUG_ON(entry == NULL);
-
-		entry = proc_create_single(DI_BOOT_BACKUP, 0644, proc_dir, show_boot);
-		BUG_ON(entry == NULL);
-
-		entry = proc_create_single("boot_current", 0644, proc_dir, show_boot_current);
-		BUG_ON(entry == NULL);
-
-		entry = proc_create_single(DI_BOOT_FAILS, 0644, proc_dir, show_boot);
-		BUG_ON(entry == NULL);
-
+		// BUG_ON(entry == NULL);
+  //
+		// entry = proc_create(DI_BOOT_BACKUP, 0644, proc_dir,
+		// 		    &fops_boot_backup);
+		// BUG_ON(entry == NULL);
+  //
+		// entry = proc_create("boot_current", 0644, proc_dir,
+		// 		    &fops_boot_current);
+		// BUG_ON(entry == NULL);
+  //
+		// entry = proc_create(DI_BOOT_FAILS, 0644, proc_dir,
+		// 		    &fops_boot_fails);
+		// BUG_ON(entry == NULL);
+  //
 		// entry = proc_create("commit", 0200, proc_dir, &fops_commit);
 		// BUG_ON(entry == NULL);
 	}
@@ -1438,6 +1439,17 @@ static bool di_is_enabled(void)
 #if defined(CONFIG_ARCH_VEXPRESS)
 	/* QEMU */
 	return true;
+#elif defined(CONFIG_OF_FLATTREE)
+	const unsigned char *val;
+	void *fdt = initial_boot_params;
+	const int off = fdt_path_offset(fdt, "/chosen");
+
+	if (off < 0)
+		return false;
+
+	val = fdt_getprop(fdt, off, "dualimage", NULL);
+	if (val	&& *val)
+		return true;
 
 #elif defined(CONFIG_MIPS)
 	extern int env_dual_image;
