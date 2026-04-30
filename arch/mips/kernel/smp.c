@@ -96,7 +96,7 @@ static int __init early_smt(char *s)
 }
 early_param("smt", early_smt);
 
-#ifdef CONFIG_GENERIC_IRQ_IPI
+#if defined(CONFIG_GENERIC_IRQ_IPI) && !defined(CONFIG_IRQ_GIC)
 static struct irq_desc *call_desc;
 static struct irq_desc *sched_desc;
 #endif
@@ -168,7 +168,7 @@ void register_smp_ops(const struct plat_smp_ops *ops)
 	mp_ops = ops;
 }
 
-#ifdef CONFIG_GENERIC_IRQ_IPI
+#if defined(CONFIG_GENERIC_IRQ_IPI) && !defined(CONFIG_IRQ_GIC)
 void mips_smp_send_ipi_single(int cpu, unsigned int action)
 {
 	mips_smp_send_ipi_mask(cpumask_of(cpu), action);

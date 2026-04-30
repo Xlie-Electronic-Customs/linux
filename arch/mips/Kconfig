@@ -242,6 +242,7 @@ config ECONET_EN7528
 	select MIPS_TC3262_1004K
 	select ECONET_EN75XX_MP
 	select SYS_SUPPORTS_LITTLE_ENDIAN
+	select MIPS_GIC
 	help
 	  EcoNET evaluation board based on EN7528DU/EN7561DU
 
