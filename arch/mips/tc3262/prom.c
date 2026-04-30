@@ -104,6 +104,22 @@ phys_addr_t mips_cpc_default_phys_base(void)
 	return RALINK_CPC_BASE;
 }
 
+static inline int register_cmp_smp_ops(void)
+{
+#ifdef CONFIG_MIPS_CMP
+	extern const struct plat_smp_ops cmp_smp_ops;
+
+	if (!mips_cm_present())
+		return -ENODEV;
+
+	register_smp_ops(&cmp_smp_ops);
+
+	return 0;
+#else
+	return -ENODEV;
+#endif
+}
+
 static inline void prom_init_cm(void)
 {
 	/* early detection of CMP support */
