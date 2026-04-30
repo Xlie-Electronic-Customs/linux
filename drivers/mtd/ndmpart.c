@@ -717,7 +717,7 @@ static uint32_t part_rootfs_offset(struct mtd_info *master,
 {
 	size_t len;
 	uint32_t off, magic;
-	const uint32_t kernel_min_size = SZ_1M;
+	const uint32_t kernel_min_size = SZ_2M;
 
 	/* Skip kernel first blocks to speedup */
 	for (off = begin + kernel_min_size;
