@@ -717,7 +717,7 @@ static uint32_t part_rootfs_offset(struct mtd_info *master,
 {
 	size_t len;
 	uint32_t off, magic;
-	const uint32_t kernel_min_size = SZ_2M;
+	const uint32_t kernel_min_size = SZ_5M;
 
 	/* Skip kernel first blocks to speedup */
 	for (off = begin + kernel_min_size;
@@ -1439,17 +1439,6 @@ static bool di_is_enabled(void)
 #if defined(CONFIG_ARCH_VEXPRESS)
 	/* QEMU */
 	return true;
-#elif defined(CONFIG_OF_FLATTREE)
-	const unsigned char *val;
-	void *fdt = initial_boot_params;
-	const int off = fdt_path_offset(fdt, "/chosen");
-
-	if (off < 0)
-		return false;
-
-	val = fdt_getprop(fdt, off, "dualimage", NULL);
-	if (val	&& *val)
-		return true;
 
 #elif defined(CONFIG_MIPS)
 	extern int env_dual_image;
