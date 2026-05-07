@@ -144,7 +144,7 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 		},
 		.endpoint = {
 			.config = {
-				.resource_group	= IPA_RSRC_GROUP_DST_DL,
+				.resource_group	= IPA_RSRC_GROUP_DST_UL,
 				.checksum       = true,
 				.qmap		= true,
 				.aggregation	= true,
