@@ -1142,7 +1142,7 @@ struct panel_info {
 };
 
 struct hw_resource {
-	int irq_gpio;                                   /*irq GPIO num*/
+	struct gpio_desc *irq_gpiod;                                /*irq GPIO desc*/
 	int reset_gpio;                                 /*Reset GPIO*/
 	int cs_gpio;                                    /*CS GPIO*/
 	int enable_avdd_gpio;                             /*avdd enable GPIO*/
