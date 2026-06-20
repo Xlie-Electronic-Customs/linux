@@ -14,7 +14,8 @@
 #include <linux/timer.h>
 #include <linux/time.h>
 #include <linux/proc_fs.h>
-#include <linux/of_gpio.h>
+#include <linux/gpio.h>
+#include <linux/gpio/consumer.h>
 #include <linux/delay.h>
 #include <linux/seq_file.h>
 
