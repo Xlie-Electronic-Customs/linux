@@ -1714,7 +1714,7 @@ static int syna_tcm_continued_read(struct syna_tcm_data *tcm_info)
 
 		if (retval < 0) {
 			TPD_INFO("Failed to read from device\n");
-			TPD_INFO("Failed to read from device.#1 ATTN:%d\n", gpio_get_value(tcm_info->hw_res->irq_gpio));
+			TPD_INFO("Failed to read from device.#1 ATTN:%d\n", gpiod_get_value(tcm_info->hw_res->irq_gpiod));
 			UNLOCK_BUFFER(tcm_info->temp);
 			UNLOCK_BUFFER(tcm_info->in);
 			return retval;
@@ -1831,7 +1831,7 @@ static int syna_tcm_raw_read(struct syna_tcm_data *tcm_info,
 
 		if (retval < 0) {
 			TPD_INFO("Failed to read from device\n");
-			TPD_INFO("Failed to read from device.#2 ATTN:%d\n", gpio_get_value(tcm_info->hw_res->irq_gpio));
+			TPD_INFO("Failed to read from device.#2 ATTN:%d\n", gpiod_get_value(tcm_info->hw_res->irq_gpiod));
 			UNLOCK_BUFFER(tcm_info->temp);
 			return retval;
 		}
@@ -2019,7 +2019,7 @@ static int syna_tcm_read_message(struct syna_tcm_data *tcm_info,
 
 	if (retval < 0) {
 		TPD_INFO("Failed to read from device\n");
-		TPD_INFO("Failed to read from device. #3 ATTN:%d\n", gpio_get_value(tcm_info->hw_res->irq_gpio));
+		TPD_INFO("Failed to read from device. #3 ATTN:%d\n", gpiod_get_value(tcm_info->hw_res->irq_gpiod));
 		UNLOCK_BUFFER(tcm_info->in);
 		ssleep(5);
 		goto exit;
@@ -2302,7 +2302,7 @@ static int syna_tcm_write_message(struct syna_tcm_data *tcm_info,
 			tp_kfree((void **)&report);
 		}
 		TPD_INFO("Timed out waiting for response (command 0x%02x), ATTN:%d\n",
-			 tcm_info->command, gpio_get_value(tcm_info->hw_res->irq_gpio));
+			 tcm_info->command, gpiod_get_value(tcm_info->hw_res->irq_gpiod));
 		retval = -EIO;
 
 	} else {
