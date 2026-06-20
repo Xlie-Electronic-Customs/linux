@@ -34,6 +34,24 @@
 	? match_panel_index[cur_tp_index].match_touch \
 	: PANEL_EVENT_NOTIFIER_CLIENT_PRIMARY_TOUCH)
 
+static int syna_devm_get_gpio_number(struct device *dev,
+				     struct device_node *np,
+				     const char *con_id,
+				     enum gpiod_flags flags,
+				     const char *label)
+{
+	struct gpio_desc *desc;
+
+	desc = devm_fwnode_gpiod_get_optional(dev, of_fwnode_handle(np),
+					      con_id, flags, label);
+	if (IS_ERR(desc))
+		return PTR_ERR(desc);
+	if (!desc)
+		return -ENOENT;
+
+	return desc_to_gpio(desc);
+}
+
 int cur_tp_index = 0;
 unsigned int tp_debug = 0;
 
@@ -768,44 +786,40 @@ static int init_parse_dts(struct device *dev, struct touchpanel_data *ts)
 	}
 
 	/* irq gpio*/
-	ts->hw_res.irq_gpio = of_get_named_gpio(np, "irq-gpio", 0);
+	ts->hw_res.irq_gpiod = devm_fwnode_gpiod_get_optional(dev,
+					of_fwnode_handle(np), "irq",
+					GPIOD_IN, "tp_irq_gpio");
 
-	if (gpio_is_valid(ts->hw_res.irq_gpio)) {
+	if (!IS_ERR_OR_NULL(ts->hw_res.irq_gpiod)) {
 		TP_BOOT_INFO(ts->tp_index, "irq-gpio valid!X\n");
-		rc = gpio_request(ts->hw_res.irq_gpio, "tp_irq_gpio");
-
-		if (rc) {
-			TP_INFO(ts->tp_index, "unable to request gpio [%d]\n", ts->hw_res.irq_gpio);
-		}
 
 	} else {
+		rc = PTR_ERR_OR_ZERO(ts->hw_res.irq_gpiod);
+		ts->hw_res.irq_gpiod = NULL;
 		TP_INFO(ts->tp_index, "irq-gpio not specified in dts\n");
 	}
 
 	/* reset gpio*/
-	ts->hw_res.reset_gpio = of_get_named_gpio(np, "reset-gpio", 0);
+	ts->hw_res.reset_gpio = syna_devm_get_gpio_number(dev, np, "reset",
+							  GPIOD_ASIS,
+							  "reset-gpio");
 	if (gpio_is_valid(ts->hw_res.reset_gpio)) {
-		rc = gpio_request(ts->hw_res.reset_gpio, "reset-gpio");
-
-		if (rc) {
-			TP_INFO(ts->tp_index, "unable to request gpio [%d]\n", ts->hw_res.reset_gpio);
-		}
+		TP_BOOT_INFO(ts->tp_index, "reset-gpio valid\n");
 
 	} else {
 		TP_INFO(ts->tp_index, "ts->reset-gpio not specified\n");
 	}
 
 	TP_BOOT_INFO(ts->tp_index, "%s : irq_gpio = %d, irq_flags = 0x%x, reset_gpio = %d\n",
-		 __func__, ts->hw_res.irq_gpio, ts->irq_flags, ts->hw_res.reset_gpio);
+		 __func__, ts->hw_res.irq_gpiod ? desc_to_gpio(ts->hw_res.irq_gpiod) : -EINVAL,
+		 ts->irq_flags, ts->hw_res.reset_gpio);
 
 	/* spi cs gpio */
-	ts->hw_res.cs_gpio = of_get_named_gpio(np, "cs-gpio", 0);
+	ts->hw_res.cs_gpio = syna_devm_get_gpio_number(dev, np, "cs",
+						       GPIOD_ASIS,
+						       "cs-gpio");
 	if (gpio_is_valid(ts->hw_res.cs_gpio)) {
-		rc = gpio_request(ts->hw_res.cs_gpio, "cs-gpio");
-		if (rc)
-			TP_INFO(ts->tp_index, "unable to request gpio [%d]\n", ts->hw_res.cs_gpio);
-		else
-			TP_BOOT_INFO(ts->tp_index, "%s : irq_gpio = %d\n", __func__, ts->hw_res.cs_gpio);
+		TP_BOOT_INFO(ts->tp_index, "%s : irq_gpio = %d\n", __func__, ts->hw_res.cs_gpio);
 	} else {
 		TP_BOOT_INFO(ts->tp_index, "ts->cs-gpio not specified\n");
 	}
@@ -899,34 +913,24 @@ static int init_parse_dts(struct device *dev, struct touchpanel_data *ts)
 		TPD_BOOT_INFO("success get suspend pinctrl state");
 	}
 
-	ts->hw_res.enable_avdd_gpio = of_get_named_gpio(np, "enable2v8_gpio", 0);
+	ts->hw_res.enable_avdd_gpio = syna_devm_get_gpio_number(dev, np,
+								"enable2v8",
+								GPIOD_ASIS,
+								"enable2v8_gpio");
 
 	if (ts->hw_res.enable_avdd_gpio < 0) {
 		TP_BOOT_INFO(ts->tp_index, "ts->hw_res.enable2v8_gpio not specified\n");
 
-	} else {
-		if (gpio_is_valid(ts->hw_res.enable_avdd_gpio)) {
-			rc = gpio_request(ts->hw_res.enable_avdd_gpio, "vdd2v8-gpio");
-
-			if (rc) {
-				TP_INFO(ts->tp_index, "unable to request gpio [%d] %d\n", ts->hw_res.enable_avdd_gpio, rc);
-			}
-		}
 	}
 
-	ts->hw_res.enable_vddi_gpio = of_get_named_gpio(np, "enable1v8_gpio", 0);
+	ts->hw_res.enable_vddi_gpio = syna_devm_get_gpio_number(dev, np,
+								"enable1v8",
+								GPIOD_ASIS,
+								"enable1v8_gpio");
 
 	if (ts->hw_res.enable_vddi_gpio < 0) {
 		TP_BOOT_INFO(ts->tp_index, "ts->hw_res.enable1v8_gpio not specified\n");
 
-	} else {
-		if (gpio_is_valid(ts->hw_res.enable_vddi_gpio)) {
-			rc = gpio_request(ts->hw_res.enable_vddi_gpio, "vcc1v8-gpio");
-
-			if (rc) {
-				TP_INFO(ts->tp_index, "unable to request gpio [%d], %d\n", ts->hw_res.enable_vddi_gpio, rc);
-			}
-		}
 	}
 
 	/* interrupt mode*/
@@ -2491,9 +2495,9 @@ int tp_register_irq_func(struct touchpanel_data *ts)
 {
 	int ret = 0;
 
-	if (gpio_is_valid(ts->hw_res.irq_gpio)) {
+	if (ts->hw_res.irq_gpiod) {
 	TP_DEBUG(ts->tp_index, "%s, irq_gpio is %d, ts->irq is %d\n", __func__,
-	ts->hw_res.irq_gpio, ts->irq);
+	desc_to_gpio(ts->hw_res.irq_gpiod), ts->irq);
 
 		if (ts->irq_flags_cover) {
 			ts->irq_flags = ts->irq_flags_cover;
@@ -2502,7 +2506,7 @@ int tp_register_irq_func(struct touchpanel_data *ts)
 		}
 
 		if (ts->irq <= 0) {
-			ts->irq = gpio_to_irq(ts->hw_res.irq_gpio);
+			ts->irq = gpiod_to_irq(ts->hw_res.irq_gpiod);
 			TP_BOOT_INFO(ts->tp_index, "%s ts->irq is %d\n", __func__, ts->irq);
 		}
 
@@ -2832,8 +2836,8 @@ static void esd_handle_func(struct work_struct *work)
 		}
 	}
 
-	if (ts->up_status && gpio_is_valid(ts->hw_res.irq_gpio)) {
-		gpio_en = gpio_get_value(ts->hw_res.irq_gpio);
+	if (ts->up_status && ts->hw_res.irq_gpiod) {
+		gpio_en = gpiod_get_value(ts->hw_res.irq_gpiod);
 		if (!gpio_en || ts->monitor_data.health_simulate_trigger) {
 			TPD_INFO("irq gpio is %d\n", gpio_en);
 		}
