@@ -292,7 +292,9 @@ static const struct drm_display_mode panel_samsung_amb670yf07_1440_3216_dsc_mode
 		.vtotal = 2412 + 2 + 2 + 8,
 		.width_mm = 70,
 		.height_mm = 156,
-		.type = DRM_MODE_TYPE_DRIVER,
+		.slice_width = 540,
+		.slice_height = 36,
+		.type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED,
 	},
 	{ /* FHD 90Hz mode */
 		.clock = (1080 + 64 + 8 + 49) * (2412 + 2 + 2 + 8) * 90 / 1000,
@@ -306,6 +308,8 @@ static const struct drm_display_mode panel_samsung_amb670yf07_1440_3216_dsc_mode
 		.vtotal = 2412 + 2 + 2 + 8,
 		.width_mm = 70,
 		.height_mm = 156,
+		.slice_width = 540,
+		.slice_height = 36,
 		.type = DRM_MODE_TYPE_DRIVER,
 	},
 	{ /* FHD 60Hz mode */
@@ -320,6 +324,8 @@ static const struct drm_display_mode panel_samsung_amb670yf07_1440_3216_dsc_mode
 		.vtotal = 2412 + 2 + 2 + 8,
 		.width_mm = 70,
 		.height_mm = 156,
+		.slice_width = 540,
+		.slice_height = 36,
 		.type = DRM_MODE_TYPE_DRIVER,
 	},
 	{ /* WQHD 120Hz mode */
@@ -334,6 +340,8 @@ static const struct drm_display_mode panel_samsung_amb670yf07_1440_3216_dsc_mode
 		.vtotal = 3216 + 8 + 8 + 8,
 		.width_mm = 70,
 		.height_mm = 156,
+		.slice_width = 720,
+		.slice_height = 24,
 		.type = DRM_MODE_TYPE_DRIVER,
 	},
 	{ /* WQHD 90Hz mode */
@@ -348,6 +356,8 @@ static const struct drm_display_mode panel_samsung_amb670yf07_1440_3216_dsc_mode
 		.vtotal = 3216 + 8 + 8 + 8,
 		.width_mm = 70,
 		.height_mm = 156,
+		.slice_width = 720,
+		.slice_height = 24,
 		.type = DRM_MODE_TYPE_DRIVER,
 	},
 	{ /* WQHD 60Hz mode */
@@ -362,6 +372,8 @@ static const struct drm_display_mode panel_samsung_amb670yf07_1440_3216_dsc_mode
 		.vtotal = 3216 + 8 + 8 + 8,
 		.width_mm = 70,
 		.height_mm = 156,
+		.slice_width = 720,
+		.slice_height = 24,
 		.type = DRM_MODE_TYPE_DRIVER,
 	},
 };
@@ -483,15 +495,7 @@ static int panel_samsung_amb670yf07_1440_3216_dsc_probe(struct mipi_dsi_device *
 	ctx->dsc.dsc_version_major = 1;
 	ctx->dsc.dsc_version_minor = 2;
 
-	/* TODO: Pass slice_per_pkt = 2 */
-	ctx->dsc.slice_height = 36;
-	ctx->dsc.slice_width = 540;
-	/*
-	 * TODO: hdisplay should be read from the selected mode once
-	 * it is passed back to drm_panel (in prepare?)
-	 */
-	WARN_ON(1080 % ctx->dsc.slice_width);
-	ctx->dsc.slice_count = 1080 / ctx->dsc.slice_width;
+	ctx->dsc.slice_count = 2;
 	ctx->dsc.bits_per_component = 10;
 	ctx->dsc.bits_per_pixel = 8 << 4; /* 4 fractional bits */
 	ctx->dsc.block_pred_enable = true;
