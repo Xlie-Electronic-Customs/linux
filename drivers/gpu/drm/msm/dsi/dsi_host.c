@@ -1032,6 +1032,16 @@ static void dsi_timing_setup(struct msm_dsi_host *msm_host, bool is_bonded_dsi)
 
 		dsc->pic_width = mode->hdisplay;
 		dsc->pic_height = mode->vdisplay;
+
+		if (mode->slice_width)
+			dsc->slice_width = mode->slice_width;
+
+		if (mode->slice_height)
+			dsc->slice_height = mode->slice_height;
+
+		if (mode->slice_count)
+			dsc->slice_count = mode->slice_count;
+
 		DBG("Mode %dx%d\n", dsc->pic_width, dsc->pic_height);
 
 		/* we do the calculations for dsc parameters here so that
@@ -2599,19 +2609,31 @@ enum drm_mode_status msm_dsi_host_check_dsc(struct mipi_dsi_host *host,
 	struct drm_dsc_config *dsc = msm_host->dsc;
 	int pic_width = mode->hdisplay;
 	int pic_height = mode->vdisplay;
+	u16 slice_width;
+	u16 slice_height;
 
 	if (!msm_host->dsc)
 		return MODE_OK;
 
-	if (pic_width % dsc->slice_width) {
+	if (mode->slice_width)
+		slice_width = mode->slice_width;
+	else
+		slice_width = dsc->slice_width;
+
+	if (mode->slice_height)
+		slice_height = mode->slice_height;
+	else
+		slice_height = dsc->slice_height;
+
+	if (pic_width % slice_width) {
 		pr_err("DSI: pic_width %d has to be multiple of slice %d\n",
-		       pic_width, dsc->slice_width);
+		       pic_width, slice_width);
 		return MODE_H_ILLEGAL;
 	}
 
-	if (pic_height % dsc->slice_height) {
+	if (pic_height % slice_height) {
 		pr_err("DSI: pic_height %d has to be multiple of slice %d\n",
-		       pic_height, dsc->slice_height);
+		       pic_height, slice_height);
 		return MODE_V_ILLEGAL;
 	}
 
