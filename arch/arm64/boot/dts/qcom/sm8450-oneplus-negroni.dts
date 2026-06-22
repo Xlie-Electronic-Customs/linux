@@ -9,6 +9,7 @@
 #include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
 #include <dt-bindings/leds/common.h>
+#include <dt-bindings/media/video-interfaces.h>
 
 #include "sm8450.dtsi"
 #include "pm8350.dtsi"
@@ -1077,6 +1078,20 @@
 		output-low;
 		bias-pull-down;
 	};
+
+	cam_sensor_rear_1_mclk1_active: cam_sensor_rear_1_mclk1_active {
+		pins = "gpio101";
+		function = "cam_mclk";
+		bias-disable; /* No PULL */
+		drive-strength = <2>; /* 2 MA */
+	};
+
+	cam_sensor_rear_1_reset_active: cam_sensor_rear_1_reset_active {
+		pins = "gpio24";
+		function = "gpio";
+		bias-disable; /* No PULL */
+		drive-strength = <2>; /* 2 MA */
+	};
 };
 
 &pm8350_gpios {
@@ -1534,4 +1549,64 @@
 	memory-region = <&ipa_fw_mem>;
 	firmware-name = "ipa_fws.mdt";
 	status = "disabled";
+};
+
+&cci0 {
+	status = "okay";
+};
+
+&camss {
+	vdda-phy-supply = <&pm8350_l6>;
+	vdda-pll-supply = <&pm8350_l5>;
+
+	status = "okay";
+
+	ports {
+		port@1 {
+			csiphy1_ep: endpoint {
+				data-lanes = <0 1 2 3>;
+				bus-type = <MEDIA_BUS_TYPE_CSI2_DPHY>;
+				remote-endpoint = <&camera_s5kjn1_ep>;
+			};
+		};
+	};
+};
+
+// Ultrawide camera
+&cci0_i2c1 {
+	camera@10 {
+		compatible = "samsung,s5kjn1";
+		reg = <0x10>;
+
+		vdda-supply = <&pm8350_l3>;
+		vddd-supply = <&pm8350_l2>;
+		vddio-supply = <&pm8350_l6>;
+
+		clocks = <&camcc CAM_CC_MCLK1_CLK>;
+		assigned-clocks = <&camcc CAM_CC_MCLK1_CLK>;
+		assigned-clock-rates = <19200000>;
+
+		reset-gpios = <&tlmm 101 GPIO_ACTIVE_HIGH>;
+
+		pinctrl-0 = <&cam_sensor_rear_1_mclk1_active &cam_sensor_rear_1_reset_active>;
+		pinctrl-names = "default";
+
+		orientation = <1>;
+		rotation = <90>;
+
+		port {
+			camera_s5kjn1_ep: endpoint {
+				data-lanes = <1 2 3 4>;
+				link-frequencies = /bits/ 64 <700000000>;
+				remote-endpoint = <&csiphy1_ep>;
+			};
+		};
+	};
+
+	eeprom@51 {
+		compatible = "giantec,gt24p128f", "atmel,24c128";
+		reg = <0x51>;
+		vcc-supply = <&pm8350_l6>;
+		read-only;
+	};
 };
