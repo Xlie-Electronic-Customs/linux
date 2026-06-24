@@ -3274,8 +3274,8 @@
 				 <&videocc VIDEO_CC_MVS0_CLK>;
 			clock-names = "iface", "core", "vcodec0_core";
 
-			interconnects = <&gem_noc MASTER_APPSS_PROC 0 &config_noc SLAVE_VENUS_CFG 0>,
-					<&mmss_noc MASTER_VIDEO 0 &mc_virt SLAVE_LLCC 0>;
+			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ALWAYS &config_noc SLAVE_VENUS_CFG QCOM_ICC_TAG_ALWAYS>,
+					<&mmss_noc MASTER_VIDEO QCOM_ICC_TAG_ALWAYS &mc_virt SLAVE_LLCC QCOM_ICC_TAG_ALWAYS>;
 			interconnect-names = "cpu-cfg", "video-mem";
 
 			iommus = <&apps_smmu 0x2180 0x0400>;
@@ -3558,10 +3558,10 @@
 				<&apps_smmu 0xc40 0x460>,
 				<&apps_smmu 0xc60 0x460>;
 
-			interconnects = <&gem_noc MASTER_APPSS_PROC 0 &config_noc SLAVE_CAMERA_CFG 0>,
-					<&mmss_noc MASTER_CAMNOC_HF 0 &mc_virt SLAVE_EBI1 0>,
-					<&mmss_noc MASTER_CAMNOC_SF 0 &mc_virt SLAVE_EBI1 0>,
-					<&mmss_noc MASTER_CAMNOC_ICP 0 &mc_virt SLAVE_EBI1 0>;
+			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ALWAYS &config_noc SLAVE_CAMERA_CFG QCOM_ICC_TAG_ALWAYS>,
+					<&mmss_noc MASTER_CAMNOC_HF QCOM_ICC_TAG_ALWAYS &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>,
+					<&mmss_noc MASTER_CAMNOC_SF QCOM_ICC_TAG_ALWAYS &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>,
+					<&mmss_noc MASTER_CAMNOC_ICP QCOM_ICC_TAG_ALWAYS &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>;
 			interconnect-names = "cam_ahb",
 					     "cam_hf_0_mnoc",
 					     "cam_sf_0_mnoc",
