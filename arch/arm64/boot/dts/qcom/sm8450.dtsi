@@ -3095,6 +3095,8 @@
 			qcom,smem-state-names = "ipa-clock-enabled-valid",
 						"ipa-clock-enabled";
 
+			sram = <&ipa_modem_tables>;
+
 			status = "disabled";
 		};
 
@@ -5250,6 +5252,10 @@
 
 			#address-cells = <1>;
 			#size-cells = <1>;
+
+			ipa_modem_tables: modem-tables@0 {
+				reg = <0 0x2000>;
+			};
 
 			minidump_config: minidump-sram@1c {
 				reg = <0x1c 0x4>;
