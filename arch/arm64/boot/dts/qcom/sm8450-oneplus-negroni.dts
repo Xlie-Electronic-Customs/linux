@@ -1548,7 +1548,7 @@
 	qcom,gsi-loader = "self";
 	memory-region = <&ipa_fw_mem>;
 	firmware-name = "ipa_fws.mdt";
-	status = "disabled";
+	status = "okay";
 };
 
 &cci0 {
