@@ -267,18 +267,6 @@ struct drm_display_mode {
 	u16 vtotal;
 	u16 vscan;
 	/**
-	 * @slice_count: Number fo slices per line used by the DSC encoder
-	 */
-	u8 slice_count;
-	/**
-	 *  @slice_width: Width of each slice in pixels
-	 */
-	u16 slice_width;
-	/**
-	 * @slice_height: Slice height in pixels
-	 */
-	u16 slice_height;
-	/**
 	 * @flags:
 	 *
 	 * Sync and timing flags:
