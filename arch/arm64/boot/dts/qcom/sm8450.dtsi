@@ -5258,10 +5258,10 @@
 			clock-names = "apb_pclk";
 		};
 
-		sram@146aa000 {
+		sram@146a8000 {
 			compatible = "qcom,sm8450-imem", "syscon", "simple-mfd";
-			reg = <0 0x146aa000 0 0x1000>;
-			ranges = <0 0 0x146aa000 0x1000>;
+			reg = <0 0x146a8000 0 0x3000>;
+			ranges = <0 0 0x146a8000 0x3000>;
 
 			#address-cells = <1>;
 			#size-cells = <1>;
