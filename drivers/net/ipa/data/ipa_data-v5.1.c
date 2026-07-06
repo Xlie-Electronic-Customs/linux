@@ -2,6 +2,7 @@
 
 /* Copyright (C) 2023-2024 Linaro Ltd. */
 /* Copyright (C) 2026 Esteban Urrutia <esteuwu@proton.me> */
+/* Copyright (C) 2026 Nazar Kompanets <xlie7669@gmail.com> */
 
 #include <linux/array_size.h>
 #include <linux/log2.h>
@@ -43,7 +44,7 @@ enum ipa_rsrc_group_id {
 	IPA_RSRC_GROUP_DST_UNUSED_2,
 	IPA_RSRC_GROUP_DST_UNUSED_3,
 	IPA_RSRC_GROUP_DST_UNUSED_4,
-	IPA_RSRC_GROUP_DST_UC,
+	IPA_RSRC_GROUP_DST_UNUSED_5,
 	IPA_RSRC_GROUP_DST_DRB_IP,
 	IPA_RSRC_GROUP_DST_COUNT,	/* Last; not a destination group */
 };
@@ -385,18 +386,6 @@ static const struct ipa_mem ipa_mem_local_data[] = {
 		.canary_count	= 0,
 	},
 	{
-		.id		= IPA_MEM_AP_V4_FILTER,
-		.offset		= 0x29b8,
-		.size		= 0x0188,
-		.canary_count	= 2,
-	},
-	{
-		.id		= IPA_MEM_AP_V6_FILTER,
-		.offset		= 0x2b40,
-		.size		= 0x0228,
-		.canary_count	= 0,
-	},
-	{
 		.id		= IPA_MEM_STATS_FILTER_ROUTE,
 		.offset		= 0x2cd0,
 		.size		= 0x0ba0,
@@ -434,10 +423,6 @@ static const struct ipa_mem_data ipa_mem_data = {
 	.local		= ipa_mem_local_data,
 	.imem_addr	= 0x146a8000,
 	.imem_size	= 0x00002000,
-	/*
-	 * While this value is 0xb000 on SM8450 and 0x9000 on SM8475,
-	 * it has been left set to 0x9000 for compatibility with SM8475
-	 */
 	.smem_size	= 0x00009000,
 };
 
