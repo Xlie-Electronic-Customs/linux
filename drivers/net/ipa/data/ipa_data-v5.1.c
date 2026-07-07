@@ -429,7 +429,7 @@ static const struct ipa_interconnect_data ipa_interconnect_data[] = {
 	{
 		.name			= "memory",
 		.peak_bandwidth		= 1900000,	/* 1.9 GBps */
-		.average_bandwidth	= 600000,	/* 600 MBps */
+		.average_bandwidth	= 590000,	/* 590 MBps */
 	},
 	/* Average rate is unused for the next interconnect */
 	{
