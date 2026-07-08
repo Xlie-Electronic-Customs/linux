@@ -3084,7 +3084,7 @@
 				    "ipa-shared",
 				    "gsi";
 
-			interrupts-extended = <&intc GIC_SPI 655 IRQ_TYPE_EDGE_RISING>,
+			interrupts-extended = <&intc GIC_SPI 654 IRQ_TYPE_EDGE_RISING>,
 					      <&intc GIC_SPI 432 IRQ_TYPE_LEVEL_HIGH>,
 					      <&ipa_smp2p_in 0 IRQ_TYPE_EDGE_RISING>,
 					      <&ipa_smp2p_in 1 IRQ_TYPE_EDGE_RISING>;
@@ -3108,8 +3108,11 @@
 			qcom,smem-state-names = "ipa-clock-enabled-valid",
 						"ipa-clock-enabled";
 
+			sram = <&ipa_modem_tables>;
+
 			status = "disabled";
 		};
+
 
 
 		remoteproc_cdsp: remoteproc@32300000 {
@@ -5010,13 +5013,17 @@
 			clock-names = "apb_pclk";
 		};
 
-		sram@146aa000 {
+		sram@146a8000 {
 			compatible = "qcom,sm8450-imem", "syscon", "simple-mfd";
-			reg = <0 0x146aa000 0 0x1000>;
-			ranges = <0 0 0x146aa000 0x1000>;
+			reg = <0 0x146a8000 0 0x3000>;
+			ranges = <0 0 0x146a8000 0x3000>;
 
 			#address-cells = <1>;
 			#size-cells = <1>;
+
+			ipa_modem_tables: modem-tables@0 {
+				reg = <0 0x2000>;
+			};
 
 			pil-reloc@94c {
 				compatible = "qcom,pil-reloc-info";
