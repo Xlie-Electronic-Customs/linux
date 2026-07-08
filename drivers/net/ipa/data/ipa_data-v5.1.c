@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
-/* Copyright (C) 2026 Nazar Kompanets */
+/* Copyright (C) 2026 Nazar Kompanets <xlie7669@gmail.com> */
 
 #include <linux/array_size.h>
 #include <linux/log2.h>
@@ -39,10 +39,10 @@ enum ipa_rsrc_group_id {
 	/* Destination resource group identifiers */
 	IPA_RSRC_GROUP_DST_UL				= 0,
 	IPA_RSRC_GROUP_DST_DL,
-	IPA_RSRC_GROUP_DST_DMA,
-	IPA_RSRC_GROUP_DST_QDSS,
-	IPA_RSRC_GROUP_DST_CV2X,
-	IPA_RSRC_GROUP_DST_UC,
+	IPA_RSRC_GROUP_DST_UNUSED_2,
+	IPA_RSRC_GROUP_DST_UNUSED_3,
+	IPA_RSRC_GROUP_DST_UNUSED_4,
+	IPA_RSRC_GROUP_DST_UNUSED_5,
 	IPA_RSRC_GROUP_DST_DRB_IP,
 	IPA_RSRC_GROUP_DST_COUNT,	/* Last; not a destination group */
 };
@@ -144,7 +144,7 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 		},
 		.endpoint = {
 			.config = {
-				.resource_group	= IPA_RSRC_GROUP_DST_DL,
+				.resource_group	= IPA_RSRC_GROUP_DST_UL,
 				.checksum       = true,
 				.qmap		= true,
 				.aggregation	= true,
@@ -419,7 +419,7 @@ static const struct ipa_mem ipa_mem_local_data[] = {
 static const struct ipa_mem_data ipa_mem_data = {
 	.local_count	= ARRAY_SIZE(ipa_mem_local_data),
 	.local		= ipa_mem_local_data,
-	.imem_addr	= 0x14688000,
+	.imem_addr	= 0x146a8000,
 	.imem_size	= 0x00002000,
 	.smem_size	= 0x00009000,
 };
@@ -429,7 +429,7 @@ static const struct ipa_interconnect_data ipa_interconnect_data[] = {
 	{
 		.name			= "memory",
 		.peak_bandwidth		= 1900000,	/* 1.9 GBps */
-		.average_bandwidth	= 600000,	/* 600 MBps */
+		.average_bandwidth	= 590000,	/* 590 MBps */
 	},
 	/* Average rate is unused for the next interconnect */
 	{
