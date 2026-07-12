@@ -72,8 +72,8 @@
 	wcn6855-pmu {
 		compatible = "qcom,wcn6855-pmu";
 
-		pinctrl-0 = <&wlan_en>, <&bt_default>, <&xo_clk_default>;
-		pinctrl-1 = <&wlan_en_sleep>, <&bt_sleep>;
+		pinctrl-0 = <&wlan_en>, <&bt_default>;
+		pinctrl-1 = <&wlan_en_sleep>;
 		pinctrl-names = "default", "sleep";
 
 		wlan-enable-gpios = <&tlmm 80 GPIO_ACTIVE_HIGH>;
@@ -1013,11 +1013,10 @@
 		pins = "gpio43";
 		function = "gpio";
 		drive-strength = <16>;
-		bias-disable;
 		output-high;
 	};
 
-	wcd_sleep: wcd-reset-n-active-state {
+	wcd_sleep: wcd-reset-n-sleep-state {
 		pins = "gpio43";
 		function = "gpio";
 		drive-strength = <16>;
@@ -1042,34 +1041,11 @@
 	};
 
 	bt_default: bt-default-state {
-		bt-en-pins {
 			pins = "gpio81";
 			function = "gpio";
-			drive-strength = <16>;
-			bias-disable;
-		};
-
-		sw-ctrl-pins {
-			pins = "gpio82";
-			function = "gpio";
+			drive-strength = <2>;
+			output-low;
 			bias-pull-down;
-		};
-	};
-
-	bt_sleep: bt-sleep-state {
-		pins = "gpio81";
-		function = "gpio";
-		drive-strength = <2>;
-		output-low;
-		bias-pull-down;
-	};
-
-	xo_clk_default: xo-clk-state {
-		pins = "gpio204";
-		function = "gpio";
-		drive-strength = <16>;
-		output-low;
-		bias-pull-down;
 	};
 
 	cam_sensor_rear_1_mclk1_active: cam_sensor_rear_1_mclk1_active {
