@@ -186,6 +186,7 @@ enum adsp_voocphy_fast_status {
         ADSP_VPHY_FAST_NOTIFY_COMMU_SEND_ERR    = 14,
         ADSP_VPHY_FAST_NOTIFY_HW_VBATT_HIGH     = 15,
         ADSP_VPHY_FAST_NOTIFY_HW_TBATT_HIGH     = 16,
+	ADSP_VPHY_FAST_NOTIFY_CRASH		= 17,
 };
 
 
@@ -1968,6 +1969,7 @@ static void qcom_battmgr_voocphy_status_worker(struct work_struct *work)
                 [ADSP_VPHY_FAST_NOTIFY_COMMU_SEND_ERR]   = "COMMU_SEND_ERR",
                 [ADSP_VPHY_FAST_NOTIFY_HW_VBATT_HIGH]    = "HW_VBATT_HIGH",
                 [ADSP_VPHY_FAST_NOTIFY_HW_TBATT_HIGH]    = "HW_TBATT_HIGH",
+		[ADSP_VPHY_FAST_NOTIFY_CRASH]    	 = "CRASH",
         };
         int ret;
         unsigned int raw, vooc_state, fast_chg_type, track_status;
