@@ -42,10 +42,10 @@ static unsigned long phy_mux_recalc_rate(struct clk_hw *hw, unsigned long parent
 
 static int phy_mux_determine_rate(struct clk_hw *hw, struct clk_rate_request *req)
 {
-	if (req->rate == XO_RATE || req->rate == ULONG_MAX)
-		return 0;
+	if (!(req->rate == XO_RATE))
+		req->rate = ULONG_MAX;
 
-	return -EINVAL;
+	return 0;
 }
 
 static int phy_mux_set_rate(struct clk_hw *hw, unsigned long rate, unsigned long parent_rate)
