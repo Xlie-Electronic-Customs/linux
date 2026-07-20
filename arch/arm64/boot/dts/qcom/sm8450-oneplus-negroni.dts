@@ -1579,3 +1579,167 @@
 		read-only;
 	};
 };
+
+&cpu4_top_alert0 {
+	temperature = <60000>;
+};
+
+&cpu4_top_alert1 {
+	temperature = <65000>;
+};
+
+&cpu4_top_crit {
+	temperature = <70000>;
+};
+
+&cpu4_bottom_alert0 {
+	temperature = <60000>;
+};
+
+&cpu4_bottom_alert1 {
+	temperature = <65000>;
+};
+
+&cpu4_bottom_crit {
+	temperature = <70000>;
+};
+
+&cpu5_top_alert0 {
+	temperature = <60000>;
+};
+
+&cpu5_top_alert1 {
+	temperature = <65000>;
+};
+
+&cpu5_top_crit {
+	temperature = <70000>;
+};
+
+&cpu5_bottom_alert0 {
+	temperature = <60000>;
+};
+
+&cpu5_bottom_alert1 {
+	temperature = <65000>;
+};
+
+&cpu5_bottom_crit {
+	temperature = <70000>;
+};
+
+&cpu6_top_alert0 {
+	temperature = <60000>;
+};
+
+&cpu6_top_alert1 {
+	temperature = <65000>;
+};
+
+&cpu6_top_crit {
+	temperature = <70000>;
+};
+
+&cpu6_bottom_alert0 {
+	temperature = <60000>;
+};
+
+&cpu6_bottom_alert1 {
+	temperature = <65000>;
+};
+
+&cpu6_bottom_crit {
+	temperature = <70000>;
+};
+
+&cpu7_top_alert0 {
+	temperature = <60000>;
+};
+
+&cpu7_top_alert1 {
+	temperature = <65000>;
+};
+
+&cpu7_top_crit {
+	temperature = <70000>;
+};
+
+&cpu7_middle_alert0 {
+	temperature = <60000>;
+};
+
+&cpu7_middle_alert1 {
+	temperature = <65000>;
+};
+
+&cpu7_middle_crit {
+	temperature = <70000>;
+};
+
+&cpu7_bottom_alert0 {
+	temperature = <60000>;
+};
+
+&cpu7_bottom_alert1 {
+	temperature = <65000>;
+};
+
+&cpu7_bottom_crit {
+	temperature = <70000>;
+};
+
+&gpu_bottom_alert0 {
+	temperature = <70000>;
+};
+
+&gpu_top_alert0 {
+	temperature = <70000>;
+};
+
+&cpu0_alert0 {
+	temperature = <60000>;
+};
+
+&cpu0_alert1 {
+	temperature = <65000>;
+};
+
+&cpu0_crit {
+	temperature = <70000>;
+};
+
+&cpu1_alert0 {
+	temperature = <60000>;
+};
+
+&cpu1_alert1 {
+	temperature = <65000>;
+};
+
+&cpu1_crit {
+	temperature = <70000>;
+};
+
+&cpu2_alert0 {
+	temperature = <60000>;
+};
+
+&cpu2_alert1 {
+	temperature = <65000>;
+};
+
+&cpu2_crit {
+	temperature = <70000>;
+};
+
+&cpu3_alert0 {
+	temperature = <60000>;
+};
+
+&cpu3_alert1 {
+	temperature = <65000>;
+};
+
+&cpu3_crit {
+	temperature = <70000>;
+};
