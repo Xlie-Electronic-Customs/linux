@@ -1438,4 +1438,18 @@ config TOUCHSCREEN_SYNAPTICS_TCM_ONCELL
 	  To compile this driver as module, choose M here: the
 	  module will be called synaptics_tcm_oncell.
 
+config TOUCHSCREEN_SYNAPTICS_TCM
+	tristate
+
+config TOUCHSCREEN_SYNAPTICS_TCM_SPI
+	tristate "Synaptics TCM SPI touchscreen"
+	depends on SPI_MASTER
+	select REGMAP
+	select TOUCHSCREEN_SYNAPTICS_TCM
+	help
+	  Say Y here if you have a Synaptics TCM controller connected via SPI.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called synaptics_tcm_spi.
+
 endif
