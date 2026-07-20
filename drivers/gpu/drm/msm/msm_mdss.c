@@ -11,6 +11,7 @@
 #include <linux/irqchip.h>
 #include <linux/irqdesc.h>
 #include <linux/irqchip/chained_irq.h>
+#include <linux/module.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
@@ -23,6 +24,19 @@
 #include <generated/mdss.xml.h>
 
 #define MIN_IB_BW	400000000UL /* Min ib vote 400MB */
+
+static bool msm_mdss_skip_reset;
+module_param_named(skip_mdss_reset, msm_mdss_skip_reset, bool, 0644);
+MODULE_PARM_DESC(skip_mdss_reset,
+		 "Skip MDSS core reset on probe (UEFI continuous splash handoff)");
+
+static bool msm_mdss_should_skip_reset(struct device *dev)
+{
+	if (msm_mdss_skip_reset)
+		return true;
+
+	return device_property_read_bool(dev, "qcom,skip-mdss-reset");
+}
 
 struct msm_mdss_data {
 	u32 reg_bus_bw;
@@ -369,7 +383,11 @@ static struct msm_mdss *msm_mdss_init(struct platform_device *pdev, bool is_mdp5
 	int ret;
 	int irq;
 
-	ret = msm_mdss_reset(&pdev->dev);
+	ret = 0;
+	if (!msm_mdss_should_skip_reset(&pdev->dev))
+		ret = msm_mdss_reset(&pdev->dev);
+	else
+		dev_info(&pdev->dev, "skipping MDSS reset for continuous splash handoff\n");
 	if (ret)
 		return ERR_PTR(ret);
 

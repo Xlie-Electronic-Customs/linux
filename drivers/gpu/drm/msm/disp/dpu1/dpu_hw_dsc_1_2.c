@@ -126,13 +126,6 @@ static void dpu_hw_dsc_config_1_2(struct dpu_hw_dsc *hw_dsc,
 
 	data |= (_dsc_calc_output_buf_max_addr(hw_dsc, num_active_slice_per_enc) << 18);
 
-	/*
-	 * ENC_DF_CTRL FULL_ICH_PREC: the downstream driver sets this for
-	 * SDE_DSC_FULL_ICH_PREC (DPU major >= 0xA00, i.e. >= 10) whenever
-	 * bits_per_component > 8. kaanapali/canoe is DPU 13 with 10bpc.
-	 * (Upstream curation should gate this on core_major_ver >= 10 rather
-	 * than assuming the caller is a DPU >= 10 part.)
-	 */
 	if (dsc->bits_per_component > 8)
 		data |= BIT(12);
 

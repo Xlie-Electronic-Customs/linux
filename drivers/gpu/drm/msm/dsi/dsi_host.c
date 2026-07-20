@@ -166,6 +166,7 @@ struct msm_dsi_host {
 
 	struct drm_display_mode *mode;
 	struct drm_dsc_config *dsc;
+	unsigned int dsc_slice_per_pkt;
 
 	/* connected device info */
 	unsigned int channel;
@@ -955,25 +956,11 @@ static void dsi_update_dsc_timing(struct msm_dsi_host *msm_host, bool is_cmd_mod
 
 	total_bytes_per_intf = dsc->slice_chunk_size * slice_per_intf;
 
-
-	/*
-	 * [OP15] The AD296/AA601 stock dtbo sets qcom,mdss-dsc-slice-per-pkt = 2:
-	 * BOTH slice chunks of a line ride in ONE write_memory packet
-	 * (bytes_per_pkt = 2*chunk, 1 pkt/line). Mainline hardcodes slice_per_pkt
-	 * = 1 (2 packets/line, WC=637) -- a wire format this DDIC's DSC decoder
-	 * will not consume, so the panel shows its white default despite a
-	 * byte-correct compressed stream. Use slice_per_pkt = 2.
-	 * TODO: plumb slice_per_pkt from the panel/DT instead of hardcoding.
-	 */
-	bytes_per_pkt = dsc->slice_chunk_size * 2; /* slice_per_pkt = 2 */
+	bytes_per_pkt = dsc->slice_chunk_size * msm_host->dsc_slice_per_pkt;
 
 	eol_byte_num = total_bytes_per_intf % 3;
 
-	/*
-	 * pkt_per_line = slice_per_intf / slice_per_pkt. With slice_per_pkt = 2
-	 * (see above) both slices are one packet -> pkt_per_line = 1.
-	 */
-	pkt_per_line = slice_per_intf / 2;
+	pkt_per_line = slice_per_intf / msm_host->dsc_slice_per_pkt;
 
 	if (is_cmd_mode) /* packet data type */
 		reg = DSI_COMMAND_COMPRESSION_MODE_CTRL_STREAM0_DATATYPE(MIPI_DSI_DCS_LONG_WRITE);
@@ -1137,16 +1124,8 @@ static void dsi_timing_setup(struct msm_dsi_host *msm_host, bool is_bonded_dsi)
 		if (!msm_host->dsc)
 			wc = hdisplay * mipi_dsi_pixel_format_to_bpp(msm_host->format) / 8 + 1;
 		else
-			/*
-			 * When DSC is enabled, WC = slice_chunk_size * slice_per_pkt + 1.
-			 * [OP15] AD296/AA601 stock dtbo uses slice_per_pkt = 2 (both
-			 * slices in one write_memory packet); mainline's default of 1
-			 * (WC=637) is a wire format this DDIC will not decode.
-			 *
-			 * TODO: Expand mipi_dsi_device struct to hold slice_per_pkt info
-			 *       and adjust DSC math to account for slice_per_pkt.
-			 */
-			wc = msm_host->dsc->slice_chunk_size * 2 + 1; /* slice_per_pkt = 2 */
+			wc = msm_host->dsc->slice_chunk_size *
+			     msm_host->dsc_slice_per_pkt + 1;
 
 		dsi_write(msm_host, REG_DSI_CMD_MDP_STREAM0_CTRL,
 			DSI_CMD_MDP_STREAM0_CTRL_WORD_COUNT(wc) |
@@ -1755,8 +1734,12 @@ static int dsi_host_attach(struct mipi_dsi_host *host,
 	msm_host->lanes = dsi->lanes;
 	msm_host->format = dsi->format;
 	msm_host->mode_flags = dsi->mode_flags;
-	if (dsi->dsc)
+	if (dsi->dsc) {
 		msm_host->dsc = dsi->dsc;
+		msm_host->dsc_slice_per_pkt = dsi->dsc_slice_per_pkt;
+		if (!msm_host->dsc_slice_per_pkt)
+			msm_host->dsc_slice_per_pkt = 1;
+	}
 
 	if (msm_host->format == MIPI_DSI_FMT_RGB101010) {
 		if (!msm_dsi_host_version_geq(msm_host, MSM_DSI_VER_MAJOR_6G,
@@ -1948,12 +1931,12 @@ static int dsi_populate_dsc_params(struct msm_dsi_host *msm_host, struct drm_dsc
 	drm_dsc_set_const_params(dsc);
 	drm_dsc_set_rc_buf_thresh(dsc);
 
-	/* DPU supports only pre-SCR panels */
-	ret = drm_dsc_setup_rc_params(dsc, DRM_DSC_1_1_PRE_SCR);
+		ret = drm_dsc_setup_rc_params(dsc, DRM_DSC_1_2_444);
 	if (ret) {
 		DRM_DEV_ERROR(&msm_host->pdev->dev, "could not find DSC RC parameters\n");
 		return ret;
 	}
+	dsc->first_line_bpg_offset = 13;
 
 	dsc->initial_scale_value = drm_dsc_initial_scale_value(dsc);
 	dsc->line_buf_depth = dsc->bits_per_component + 1;
