@@ -30,7 +30,7 @@ enum ipa_rsrc_group_id {
 	/* Source resource group identifiers */
 	IPA_RSRC_GROUP_SRC_UL				= 0,
 	IPA_RSRC_GROUP_SRC_DL,
-	IPA_RSRC_GROUP_SRC_UNUSED_2,
+	IPA_RSRC_GROUP_SRC_DMA,
 	IPA_RSRC_GROUP_SRC_UNUSED_3,
 	IPA_RSRC_GROUP_SRC_URLLC,
 	IPA_RSRC_GROUP_SRC_U_RX_QC,
@@ -42,7 +42,7 @@ enum ipa_rsrc_group_id {
 	IPA_RSRC_GROUP_DST_UNUSED_2,
 	IPA_RSRC_GROUP_DST_UNUSED_3,
 	IPA_RSRC_GROUP_DST_UNUSED_4,
-	IPA_RSRC_GROUP_DST_UC,
+	IPA_RSRC_GROUP_DST_UNUSED_5,
 	IPA_RSRC_GROUP_DST_DRB_IP,
 	IPA_RSRC_GROUP_DST_COUNT,	/* Last; not a destination group */
 };
@@ -50,12 +50,12 @@ enum ipa_rsrc_group_id {
 /* QSB configuration data for an SoC having IPA v5.5 */
 static const struct ipa_qsb_data ipa_qsb_data[] = {
 	[IPA_QSB_MASTER_DDR] = {
-		.max_writes		= 0,	/* Unlimited */
+		.max_writes		= 16,
 		.max_reads		= 12,
 		.max_reads_beats	= 0,
 	},
 	[IPA_QSB_MASTER_PCIE] = {
-		.max_writes		= 0,	/* Unlimited */
+		.max_writes		= 16,
 		.max_reads		= 8,
 		.max_reads_beats	= 0,
 	},
@@ -67,7 +67,7 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 		.ee_id		= GSI_EE_AP,
 		.channel_id	= 12,
 		.endpoint_id	= 14,
-		.toward_ipa	= true,
+		.toward_ipa	= false,
 		.channel = {
 			.tre_count	= 256,
 			.event_count	= 256,
@@ -86,8 +86,8 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 	},
 	[IPA_ENDPOINT_AP_LAN_RX] = {
 		.ee_id		= GSI_EE_AP,
-		.channel_id	= 13,
-		.endpoint_id	= 16,
+		.channel_id	= 14,
+		.endpoint_id	= 17,
 		.toward_ipa	= false,
 		.channel = {
 			.tre_count	= 256,
@@ -135,7 +135,7 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 	[IPA_ENDPOINT_AP_MODEM_RX] = {
 		.ee_id		= GSI_EE_AP,
 		.channel_id	= 1,
-		.endpoint_id	= 23,
+		.endpoint_id	= 24,
 		.toward_ipa	= false,
 		.channel = {
 			.tre_count	= 256,
@@ -168,7 +168,7 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 	[IPA_ENDPOINT_MODEM_AP_RX] = {
 		.ee_id		= GSI_EE_MODEM,
 		.channel_id	= 7,
-		.endpoint_id	= 21,
+		.endpoint_id	= 22,
 		.toward_ipa	= false,
 	},
 	[IPA_ENDPOINT_MODEM_DL_NLO_TX] = {
@@ -225,6 +225,9 @@ static const struct ipa_resource ipa_resource_src[] = {
 			.min = 0,	.max = 63,
 		},
 		.limits[IPA_RSRC_GROUP_SRC_DL] = {
+			.min = 0,	.max = 63,
+		},
+		.limits[IPA_RSRC_GROUP_SRC_DMA] = {
 			.min = 0,	.max = 63,
 		},
 		.limits[IPA_RSRC_GROUP_SRC_URLLC] = {
@@ -293,151 +296,139 @@ static const struct ipa_mem ipa_mem_local_data[] = {
 	{
 		.id		= IPA_MEM_UC_EVENT_RING,
 		.offset		= 0x0000,
-		.size		= 0x1000,
+		.size		= 0x0300,
 		.canary_count	= 0,
 	},
 	{
 		.id		= IPA_MEM_UC_SHARED,
-		.offset		= 0x1000,
+		.offset		= 0x0300,
 		.size		= 0x0080,
 		.canary_count	= 0,
 	},
 	{
 		.id		= IPA_MEM_UC_INFO,
-		.offset		= 0x1080,
-		.size		= 0x0200,
+		.offset		= 0x0380,
+		.size		= 0x0080,
 		.canary_count	= 0,
 	},
 	{
 		.id		= IPA_MEM_V4_FILTER_HASHED,
-		.offset		= 0x1288,
+		.offset		= 0x0408,
 		.size		= 0x0078,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_V4_FILTER,
-		.offset		= 0x1308,
+		.offset		= 0x0488,
 		.size		= 0x0078,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_V6_FILTER_HASHED,
-		.offset		= 0x1388,
+		.offset		= 0x0508,
 		.size		= 0x0078,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_V6_FILTER,
-		.offset		= 0x1408,
+		.offset		= 0x0588,
 		.size		= 0x0078,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_V4_ROUTE_HASHED,
-		.offset		= 0x1488,
+		.offset		= 0x0608,
 		.size		= 0x0098,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_V4_ROUTE,
-		.offset		= 0x1528,
+		.offset		= 0x06a8,
 		.size		= 0x0098,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_V6_ROUTE_HASHED,
-		.offset		= 0x15c8,
+		.offset		= 0x0748,
 		.size		= 0x0098,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_V6_ROUTE,
-		.offset		= 0x1668,
+		.offset		= 0x07e8,
 		.size		= 0x0098,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_MODEM_HEADER,
-		.offset		= 0x1708,
+		.offset		= 0x0888,
 		.size		= 0x0240,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_AP_HEADER,
-		.offset		= 0x1948,
+		.offset		= 0x0ac8,
 		.size		= 0x01e0,
 		.canary_count	= 0,
 	},
 	{
 		.id		= IPA_MEM_MODEM_PROC_CTX,
-		.offset		= 0x1b40,
+		.offset		= 0x0cc0,
 		.size		= 0x0b20,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_AP_PROC_CTX,
-		.offset		= 0x2660,
+		.offset		= 0x17e0,
 		.size		= 0x0200,
 		.canary_count	= 0,
 	},
 	{
 		.id		= IPA_MEM_STATS_QUOTA_MODEM,
-		.offset		= 0x2868,
+		.offset		= 0x19e8,
 		.size		= 0x0060,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_STATS_QUOTA_AP,
-		.offset		= 0x28c8,
+		.offset		= 0x1a48,
 		.size		= 0x0048,
 		.canary_count	= 0,
 	},
 	{
 		.id		= IPA_MEM_STATS_TETHERING,
-		.offset		= 0x2910,
+		.offset		= 0x1a90,
 		.size		= 0x03c0,
 		.canary_count	= 0,
 	},
 	{
-		.id		= IPA_MEM_AP_V4_FILTER,
-		.offset		= 0x29b8,
-		.size		= 0x0188,
-		.canary_count	= 2,
-	},
-	{
-		.id		= IPA_MEM_AP_V6_FILTER,
-		.offset		= 0x2b40,
-		.size		= 0x0228,
-		.canary_count	= 0,
-	},
-	{
 		.id		= IPA_MEM_STATS_FILTER_ROUTE,
-		.offset		= 0x2cd0,
-		.size		= 0x0ba0,
+		.offset		= 0x1e50,
+		.size		= 0x1000,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_STATS_DROP,
-		.offset		= 0x3870,
+		.offset		= 0x2e50,
 		.size		= 0x0020,
 		.canary_count	= 0,
 	},
 	{
 		.id		= IPA_MEM_MODEM,
-		.offset		= 0x3898,
+		.offset		= 0x2e78,
 		.size		= 0x0d48,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_NAT_TABLE,
-		.offset		= 0x45e0,
+		.offset		= 0x3bc0,
 		.size		= 0x0900,
 		.canary_count	= 0,
 	},
 	{
 		.id		= IPA_MEM_PDN_CONFIG,
-		.offset		= 0x4ee8,
-		.size		= 0x0100,
+		.offset		= 0x44c8,
+		.size		= 0x0050,
 		.canary_count	= 2,
 	},
 };
@@ -512,7 +503,7 @@ const struct ipa_data ipa_data_v5_5_sm8750 = {
 static const struct ipa_mem_data ipa_mem_data_kaanapali = {
 	.local_count	= ARRAY_SIZE(ipa_mem_local_data),
 	.local		= ipa_mem_local_data,
-	.imem_addr	= 0x14688000,
+	.imem_addr	= 0x14683000,
 	.imem_size	= 0x00002000,
 	.smem_size	= 0x00019000,
 };
