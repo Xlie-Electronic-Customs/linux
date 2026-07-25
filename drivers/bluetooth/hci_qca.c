@@ -1401,6 +1401,62 @@ static inline void host_set_baudrate(struct hci_uart *hu, unsigned int speed)
 		hci_uart_set_baudrate(hu, speed);
 }
 
+/* WCN7860/BRAHMA bring-up (OnePlus 15 kaanapali; the chip rides the
+ * QCA_WCN7850 soc type on this branch): on the BRAHMA/GANGES combo-chip
+ * family the shared UART's baud belongs to the PERIPHERAL subsystem, not
+ * the BT subsystem — the wcn7850 EDL baud VSC (0xfc48) is silently
+ * ignored by this ROM (measured gens 44/46: after the host-side switch
+ * every command times out while the controller stays at init speed).
+ * The vendor stack (QTI BT HAL PeriPatchDLManager::SetPeriBaudRateReq)
+ * switches the rate with a peri-subsystem command instead:
+ *
+ *   0x31  HCI_PERI_COMMAND_PKT
+ *   0x00  BT host id
+ *   0xf1 0xff  vendor "general" opcode 0xfff1 (le16)
+ *   0x02  parameter length
+ *   0x02  HCI_PERI_SET_BAUDRATE
+ *   <n>   baud enum — same table as the BT VSC (vendor uart_utils.h
+ *         matches enum qca_baudrate through 0x12; 8 Mbps is 0x15)
+ *
+ * Fire-and-forget like the BT VSC. Kernel prior art: Teguh Sobirin's
+ * SM8750 WCN7860 (GANGES sibling) port, shipped at 3.2M by ROCKNIX/
+ * batocera on retail handhelds.
+ */
+static int qca_peri_set_baudrate(struct hci_uart *hu, u8 baudrate)
+{
+	struct qca_data *qca = hu->priv;
+	struct sk_buff *skb;
+	u8 cmd[] = { 0x31, 0x00, 0xF1, 0xFF, 0x02, 0x02, 0x00 };
+
+	cmd[6] = baudrate;
+
+	if (!hu->serdev)
+		return -ENODEV;
+
+	/* Harmless while host IBS stays unarmed: the controller ACKs the
+	 * wake handshake unconditionally (measured on this device).
+	 */
+	if (send_hci_ibs_cmd(HCI_IBS_WAKE_IND, hu) < 0)
+		return -EBUSY;
+
+	msleep(10);
+
+	skb = bt_skb_alloc(sizeof(cmd), GFP_KERNEL);
+	if (!skb)
+		return -ENOMEM;
+
+	skb_put_data(skb, cmd, sizeof(cmd));
+	skb_queue_tail(&qca->txq, skb);
+	hci_uart_tx_wakeup(hu);
+
+	/* No completion event to wait on — give the queue and the peri
+	 * subsystem time to apply the switch before the host follows.
+	 */
+	msleep(100);
+
+	return 0;
+}
+
 static int qca_send_power_pulse(struct hci_uart *hu, bool on)
 {
 	int timeout = CMD_TRANS_TIMEOUT;
@@ -2000,6 +2056,21 @@ retry:
 		qca_set_speed(hu, QCA_INIT_SPEED);
 	}
 
+	/* WCN7860/BRAHMA (rides QCA_WCN7850 on this branch): tell the peri
+	 * subsystem the operating rate BEFORE the standard user-speed switch
+	 * — the BT-subsystem baud VSC that switch sends is ignored by this
+	 * ROM, the peri command is the one that actually moves the UART.
+	 */
+	if (soc_type == QCA_WCN7850) {
+		speed = qca_get_speed(hu, QCA_OPER_SPEED);
+		if (speed) {
+			ret = qca_peri_set_baudrate(hu,
+					qca_get_baudrate_value(speed));
+			if (ret)
+				goto out;
+		}
+	}
+
 	/* Setup user speed if needed */
 	speed = qca_get_speed(hu, QCA_OPER_SPEED);
 	if (speed) {
@@ -2032,7 +2103,23 @@ retry:
 	ret = qca_uart_setup(hdev, qca_baudrate, soc_type, ver,
 			firmware_name, rampatch_name);
 	if (!ret) {
-		clear_bit(QCA_IBS_DISABLED, &qca->flags);
+		/* WCN7860/BRAHMA bring-up (OnePlus 15 kaanapali, rides the
+		 * QCA_WCN7850 soc type on this branch): host-side IBS stays
+		 * disabled ONLY while the UART runs at init speed. Measured
+		 * on this device: after a host IBS sleep->wake cycle at 115200
+		 * the controller ACKs the wake handshake (0xfd -> 0xfc) but
+		 * never answers the next HCI command (-110), escalating via
+		 * qca_hw_error into SoC crash/SSR. The vendor stack never
+		 * idles this chip at init speed -- it raises the baud with
+		 * the peri handshake first (qca_peri_set_baudrate), and at
+		 * the operating rate IBS is its normal shipped state (and
+		 * qca_suspend needs it armed to power-gate BT across
+		 * sleep). So: peri handshake ran (operating baud) => arm
+		 * IBS as usual; still at init speed => keep the crutch.
+		 */
+		if (soc_type != QCA_WCN7850 ||
+		    qca_baudrate != QCA_BAUDRATE_115200)
+			clear_bit(QCA_IBS_DISABLED, &qca->flags);
 		qca_debugfs_init(hdev);
 		hu->hdev->hw_error = qca_hw_error;
 		hu->hdev->reset = qca_reset;
