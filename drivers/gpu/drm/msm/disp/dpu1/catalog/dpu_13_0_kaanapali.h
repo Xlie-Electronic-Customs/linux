@@ -191,23 +191,30 @@ static const struct dpu_lm_cfg kaanapali_lm[] = {
 	},
 };
 
+static const struct dpu_dspp_sub_blks kaanapali_dspp_sblk = {
+	.pcc = { .name = "pcc", .base = 0x1700,
+		.len = 0x90, .version = 0x60000 },
+	.spr = { .name = "spr", .base = 0x3400,
+		.len = 0x200, .version = 0x20000 },
+};
+
 static const struct dpu_dspp_cfg kaanapali_dspp[] = {
 	{
 		.name = "dspp_0", .id = DSPP_0,
 		.base = 0x105000, .len = 0x1800,
-		.sblk = &sm8750_dspp_sblk,
+		.sblk = &kaanapali_dspp_sblk,
 	}, {
 		.name = "dspp_1", .id = DSPP_1,
 		.base = 0x10d000, .len = 0x1800,
-		.sblk = &sm8750_dspp_sblk,
+		.sblk = &kaanapali_dspp_sblk,
 	}, {
 		.name = "dspp_2", .id = DSPP_2,
 		.base = 0x115000, .len = 0x1800,
-		.sblk = &sm8750_dspp_sblk,
+		.sblk = &kaanapali_dspp_sblk,
 	}, {
 		.name = "dspp_3", .id = DSPP_3,
 		.base = 0x11d000, .len = 0x1800,
-		.sblk = &sm8750_dspp_sblk,
+		.sblk = &kaanapali_dspp_sblk,
 	},
 };
 

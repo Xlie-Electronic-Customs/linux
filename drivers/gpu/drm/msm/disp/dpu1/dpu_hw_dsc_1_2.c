@@ -57,6 +57,8 @@
 #define DSC_CFG                    0x04
 #define DSC_DATA_IN_SWAP           0x08
 #define DSC_CLK_CTRL               0x0C
+#define DSC_4HS_MERGE_EN           0x10
+#define DSC_4HS_MERGE_CFG          0x14
 
 static int _dsc_calc_output_buf_max_addr(struct dpu_hw_dsc *hw_dsc, int num_softslice)
 {
@@ -124,6 +126,16 @@ static void dpu_hw_dsc_config_1_2(struct dpu_hw_dsc *hw_dsc,
 
 	data |= (_dsc_calc_output_buf_max_addr(hw_dsc, num_active_slice_per_enc) << 18);
 
+	/*
+	 * ENC_DF_CTRL FULL_ICH_PREC: the downstream driver sets this for
+	 * SDE_DSC_FULL_ICH_PREC (DPU major >= 0xA00, i.e. >= 10) whenever
+	 * bits_per_component > 8. kaanapali/canoe is DPU 13 with 10bpc.
+	 * (Upstream curation should gate this on core_major_ver >= 10 rather
+	 * than assuming the caller is a DPU >= 10 part.)
+	 */
+	if (dsc->bits_per_component > 8)
+		data |= BIT(12);
+
 	DPU_REG_WRITE(hw, sblk->enc.base + ENC_DF_CTRL, data);
 
 	data = (dsc->dsc_version_minor & 0xf) << 28;
@@ -134,12 +146,17 @@ static void dpu_hw_dsc_config_1_2(struct dpu_hw_dsc *hw_dsc,
 			data |= BIT(21);
 	}
 
-	bpp = dsc->bits_per_pixel;
-	/* as per hw requirement bpp should be programmed
-	 * twice the actual value in case of 420 or 422 encoding
+	/*
+	 * The hardware wants twice the per-pixel rate for native 4:2:0/4:2:2
+	 * encoding -- i.e. the doubled bits_per_pixel the PPS carries (DSC
+	 * v1.2a). struct drm_dsc_config already stores that doubled
+	 * PPS-convention value (drm_dsc_compute_rc_parameters() and
+	 * drm_dsc_pps_payload_pack() both treat bits_per_pixel as pre-doubled
+	 * for native modes), so program it as-is. Doubling it again here
+	 * overshoots the encoder rate control by 2x and stalls the first
+	 * compressed frame (pp_tx_done never fires -> cmd-DMA defers -> -110).
 	 */
-	if (dsc->native_422 || dsc->native_420)
-		bpp = 2 * bpp;
+	bpp = dsc->bits_per_pixel;
 
 	data |= bpp << 10;
 
@@ -232,10 +249,31 @@ static void dpu_hw_dsc_config_1_2(struct dpu_hw_dsc *hw_dsc,
 		data |= BIT(12);
 	if (mode & DSC_MODE_MULTIPLEX)
 		data |= BIT(13);
-	if (!(mode & DSC_MODE_VIDEO))
+
+	/*
+	 * DSC_CFG bits 16..23 are the legacy pre-4HS-merge field; on DPU >= 9.0
+	 * the merge config lives in dedicated DSC_4HS_MERGE_EN/CFG registers
+	 * (the extended ctl sub-block, ctl.len >= 0x18) and the downstream
+	 * driver never sets any DSC_CFG bit above 13 there. Setting bit 17 in
+	 * the wrapper that performs native-422 input packing corrupts the DCE
+	 * output (kaanapali: everything decodes to black). Keep bit 17 only for
+	 * the older wrappers where it is the real cmd-mode merge-video bit.
+	 */
+	if (!(mode & DSC_MODE_VIDEO) && sblk->ctl.len < 0x18)
 		data |= BIT(17);
 
 	DPU_REG_WRITE(hw, sblk->ctl.base + DSC_CFG, data);
+
+	/*
+	 * On the extended-ctl parts the downstream driver rewrites the 4HS
+	 * merge registers on every setup (zero when merge is unused); otherwise
+	 * a merge configuration left by the bootloader can survive and scramble
+	 * the DCE output.
+	 */
+	if (sblk->ctl.len >= 0x18) {
+		DPU_REG_WRITE(hw, sblk->ctl.base + DSC_4HS_MERGE_CFG, 0);
+		DPU_REG_WRITE(hw, sblk->ctl.base + DSC_4HS_MERGE_EN, 0);
+	}
 }
 
 static void dpu_hw_dsc_config_thresh_1_2(struct dpu_hw_dsc *hw_dsc,

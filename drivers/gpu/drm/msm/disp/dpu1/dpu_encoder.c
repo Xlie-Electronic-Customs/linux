@@ -1334,6 +1334,33 @@ out:
 	mutex_unlock(&dpu_enc->enc_lock);
 }
 
+/* pixel latency lines buffered by each PPB; used to size the per-PP PPB FIFO */
+#define DPU_PPB_BUF_MAX_LINES 4
+
+/*
+ * DPU 12.0+ programs the pingpong latency buffer (PPB) FIFO size per-PP; a
+ * zero-sized PPB never feeds the DSC/INTF, so it must be set at enable time.
+ */
+static void dpu_encoder_update_ppb_size(struct dpu_encoder_virt *dpu_enc,
+					const struct drm_display_mode *mode)
+{
+	u32 num_pp = 0, pixels_per_pp;
+	int i;
+
+	for (i = 0; i < MAX_CHANNELS_PER_ENC; i++)
+		if (dpu_enc->hw_pp[i])
+			num_pp++;
+
+	if (!num_pp || !dpu_enc->hw_pp[0]->ops.setup_ppb_fifo_size)
+		return;
+
+	pixels_per_pp = mult_frac(mode->hdisplay, DPU_PPB_BUF_MAX_LINES, num_pp);
+
+	for (i = 0; i < num_pp; i++)
+		dpu_enc->hw_pp[i]->ops.setup_ppb_fifo_size(dpu_enc->hw_pp[i],
+							   pixels_per_pp);
+}
+
 static void dpu_encoder_virt_atomic_enable(struct drm_encoder *drm_enc,
 					struct drm_atomic_commit *state)
 {
@@ -1355,6 +1382,8 @@ static void dpu_encoder_virt_atomic_enable(struct drm_encoder *drm_enc,
 	cur_mode = &dpu_enc->base.crtc->state->adjusted_mode;
 
 	dpu_enc->wide_bus_en = dpu_encoder_is_widebus_enabled(drm_enc);
+
+	dpu_encoder_update_ppb_size(dpu_enc, cur_mode);
 
 	trace_dpu_enc_enable(DRMID(drm_enc), cur_mode->hdisplay,
 			     cur_mode->vdisplay);
@@ -1965,27 +1994,67 @@ int dpu_encoder_vsync_time(struct drm_encoder *drm_enc, ktime_t *wakeup_time)
 
 static u32
 dpu_encoder_dsc_initial_line_calc(struct drm_dsc_config *dsc,
-				  u32 enc_ip_width)
+				  u32 enc_ip_width, u32 dsc_common_mode)
 {
-	int ssm_delay, total_pixels, soft_slice_per_enc;
-
-	soft_slice_per_enc = enc_ip_width / dsc->slice_width;
-
 	/*
-	 * minimum number of initial line pixels is a sum of:
-	 * 1. sub-stream multiplexer delay (83 groups for 8bpc,
-	 *    91 for 10 bpc) * 3
-	 * 2. for two soft slice cases, add extra sub-stream multiplexer * 3
-	 * 3. the initial xmit delay
-	 * 4. total pipeline delay through the "lock step" of encoder (47)
-	 * 5. 6 additional pixels as the output of the rate buffer is
-	 *    48 bits wide
+	 * Ported from the downstream SDE driver's _dce_dsc_initial_line_calc().
+	 * The number of initial lines must cover the sub-stream-mux delay, the
+	 * output-buffer (rate-buffer) latency and, for a split + multiplexed
+	 * DSC-merge stream, the extra multi-hard-slice budget, all measured in
+	 * container-slice-width units. The previous mainline approximation
+	 * divided by the soft-slice width and dropped the output-buffer and
+	 * multi-hard-slice terms, so it started the encoder too early and the
+	 * first compressed frame underflowed the DSI command FIFO on a merged
+	 * native-422 panel (e.g. the OnePlus 15 kaanapali/canoe DPU 13 panel).
 	 */
-	ssm_delay = ((dsc->bits_per_component < 10) ? 84 : 92);
-	total_pixels = ssm_delay * 3 + dsc->initial_xmit_delay + 47;
-	if (soft_slice_per_enc > 1)
-		total_pixels += (ssm_delay * 3);
-	return DIV_ROUND_UP(total_pixels, dsc->slice_width);
+	const int rtl_max_bpc = 10, rtl_output_data_width = 64;
+	const int pipeline_latency = 28;
+	int bpc = dsc->bits_per_component;
+	bool native_422 = dsc->native_422;
+	bool native_420 = dsc->native_420;
+	bool split = dsc_common_mode & DSC_MODE_SPLIT_PANEL;
+	bool mux = dsc_common_mode & DSC_MODE_MULTIPLEX;
+	int num_active_ss_per_enc = mux ? dsc->slice_count >> 1 : dsc->slice_count;
+	int container_slice_width = native_422 ?
+			dsc->slice_width / 2 : dsc->slice_width;
+	int max_muxword_size = (rtl_max_bpc >= 12) ? 64 : 48;
+	int max_se_size = 4 * (rtl_max_bpc + 1);
+	int max_ssm_delay = max_se_size + max_muxword_size - 1;
+	int mux_word_size = (bpc >= 12) ? 64 : 48;
+	/*
+	 * mainline stores the native-422 doubled bits_per_pixel (1/16 units),
+	 * so >>4 already yields downstream's compress_bpp_group: 2*bpp for
+	 * 422, bpp otherwise.
+	 */
+	int compress_bpp_group = dsc->bits_per_pixel >> 4;
+	int input_ssm_out_latency = pipeline_latency +
+			3 * (max_ssm_delay + 2) * num_active_ss_per_enc;
+	int rtl_num_components = (native_420 || native_422) ? 4 : 3;
+	int ob_data_width_4comps = (rtl_output_data_width >= (2 * max_muxword_size)) ?
+			rtl_output_data_width : (2 * rtl_output_data_width);
+	int ob_data_width_3comps = (rtl_output_data_width >= max_muxword_size) ?
+			rtl_output_data_width : (2 * rtl_output_data_width);
+	int ob_data_width = (rtl_num_components == 4) ?
+			ob_data_width_4comps : ob_data_width_3comps;
+	int obuf_latency = DIV_ROUND_UP((9 * ob_data_width + mux_word_size),
+			compress_bpp_group) + 1;
+	int base_hs_latency = dsc->initial_xmit_delay +
+			input_ssm_out_latency + obuf_latency;
+	int chunk_bits = 8 * dsc->slice_chunk_size;
+	int output_rate_ratio_complement = ob_data_width - compress_bpp_group;
+	int output_rate_extra_budget_bits =
+			(output_rate_ratio_complement * chunk_bits) >>
+			((ob_data_width == 128) ? 7 : 6);
+	int multi_hs_c = split && mux;
+	int multi_hs_d = (num_active_ss_per_enc > 1) &&
+			(ob_data_width > compress_bpp_group);
+	int multi_hs_extra_budget_bits = multi_hs_c ? chunk_bits :
+			(multi_hs_d ? chunk_bits : output_rate_extra_budget_bits);
+	int multi_hs_extra_latency = DIV_ROUND_UP(multi_hs_extra_budget_bits,
+			compress_bpp_group);
+
+	return DIV_ROUND_UP(base_hs_latency + multi_hs_extra_latency,
+			container_slice_width);
 }
 
 static void dpu_encoder_dsc_pipe_cfg(struct dpu_hw_ctl *ctl,
@@ -2053,7 +2122,8 @@ static void dpu_encoder_prep_dsc(struct dpu_encoder_virt *dpu_enc,
 	intf_ip_w = this_frame_slices * dsc->slice_width;
 
 	enc_ip_w = intf_ip_w / num_dsc;
-	initial_lines = dpu_encoder_dsc_initial_line_calc(dsc, enc_ip_w);
+	initial_lines = dpu_encoder_dsc_initial_line_calc(dsc, enc_ip_w,
+							  dsc_common_mode);
 
 	for (i = 0; i < num_dsc; i++)
 		dpu_encoder_dsc_pipe_cfg(ctl, hw_dsc[i], hw_pp[i],

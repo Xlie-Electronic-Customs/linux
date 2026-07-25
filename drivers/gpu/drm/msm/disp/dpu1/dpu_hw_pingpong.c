@@ -34,6 +34,13 @@
 #define PP_DCE_DATA_IN_SWAP             0x0ac
 #define PP_DCE_DATA_OUT_SWAP            0x0c8
 
+/*
+ * DPU 12.0+: the pingpong latency buffer (PPB) size is programmed per-PP at
+ * this offset (which on DPU 7+ overlays the legacy PP tear PP_START_POS, since
+ * tear check moved to the separate PP_TE block). One FIFO entry holds 4 pixels.
+ */
+#define PP_PPB_FIFO_SIZE                0x01c
+
 #define PP_DITHER_EN			0x000
 #define PP_DITHER_BITDEPTH		0x004
 #define PP_DITHER_MATRIX		0x008
@@ -283,6 +290,11 @@ static int dpu_hw_pp_setup_dsc(struct dpu_hw_pingpong *pp)
 	return 0;
 }
 
+static void dpu_hw_pp_setup_ppb_fifo_size(struct dpu_hw_pingpong *pp, u32 pixels)
+{
+	DPU_REG_WRITE(&pp->hw, PP_PPB_FIFO_SIZE, (pixels / 4) & 0xfff);
+}
+
 /**
  * dpu_hw_pingpong_init() - initializes the pingpong driver for the passed
  * pingpong catalog entry.
@@ -324,6 +336,9 @@ struct dpu_hw_pingpong *dpu_hw_pingpong_init(struct drm_device *dev,
 		c->ops.enable_dsc = dpu_hw_pp_dsc_enable;
 		c->ops.disable_dsc = dpu_hw_pp_dsc_disable;
 	}
+
+	if (mdss_rev->core_major_ver >= 12)
+		c->ops.setup_ppb_fifo_size = dpu_hw_pp_setup_ppb_fifo_size;
 
 	if (mdss_rev->core_major_ver >= 3)
 		c->ops.setup_dither = dpu_hw_pp_setup_dither;

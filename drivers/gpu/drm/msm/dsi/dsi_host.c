@@ -591,6 +591,7 @@ dsi_adjust_pclk_for_compression(const struct drm_display_mode *mode,
 				bool is_bonded_dsi)
 {
 	int hdisplay, new_hdisplay, new_htotal;
+	int bpp_x16 = dsc->bits_per_pixel;	/* 6.4 fixed point */
 
 	/*
 	 * For bonded DSI, split hdisplay across two links and round up each
@@ -602,8 +603,23 @@ dsi_adjust_pclk_for_compression(const struct drm_display_mode *mode,
 	if (is_bonded_dsi)
 		hdisplay /= 2;
 
-	new_hdisplay = DIV_ROUND_UP(hdisplay * drm_dsc_get_bpp_int(dsc),
-				    dsc->bits_per_component * 3);
+	/*
+	 * In native 4:2:2/4:2:0 modes bits_per_pixel carries the DSC-1.2a
+	 * DOUBLED value; the link math needs the ACTUAL bits per pixel.
+	 */
+	if (dsc->native_422 || dsc->native_420)
+		bpp_x16 /= 2;
+
+	/*
+	 * One pclk carries 24 bits of compressed data on the link (3 bytes,
+	 * matching dsi_byte_clk_get_rate()'s RGB888 assumption) -- this is
+	 * INDEPENDENT of bits_per_component. The old divisor (bits_per_component
+	 * * 3) only happened to equal 24 for the 8bpc panels upstream exercises;
+	 * at 10bpc it over-derives the link rate (OP15: 1516.8 vs stock's
+	 * 1112.6 Mbps/lane, 36% over -> DDIC HS receiver never locks -> the panel
+	 * shows its white default). Identical result for 8bpp/8bpc 4:4:4 panels.
+	 */
+	new_hdisplay = DIV_ROUND_UP(hdisplay * bpp_x16, 24 * 16);
 
 	if (is_bonded_dsi)
 		new_hdisplay *= 2;
@@ -938,17 +954,26 @@ static void dsi_update_dsc_timing(struct msm_dsi_host *msm_host, bool is_cmd_mod
 	slice_per_intf = dsc->slice_count;
 
 	total_bytes_per_intf = dsc->slice_chunk_size * slice_per_intf;
-	bytes_per_pkt = dsc->slice_chunk_size; /* * slice_per_pkt; */
+
+
+	/*
+	 * [OP15] The AD296/AA601 stock dtbo sets qcom,mdss-dsc-slice-per-pkt = 2:
+	 * BOTH slice chunks of a line ride in ONE write_memory packet
+	 * (bytes_per_pkt = 2*chunk, 1 pkt/line). Mainline hardcodes slice_per_pkt
+	 * = 1 (2 packets/line, WC=637) -- a wire format this DDIC's DSC decoder
+	 * will not consume, so the panel shows its white default despite a
+	 * byte-correct compressed stream. Use slice_per_pkt = 2.
+	 * TODO: plumb slice_per_pkt from the panel/DT instead of hardcoding.
+	 */
+	bytes_per_pkt = dsc->slice_chunk_size * 2; /* slice_per_pkt = 2 */
 
 	eol_byte_num = total_bytes_per_intf % 3;
 
 	/*
-	 * Typically, pkt_per_line = slice_per_intf * slice_per_pkt.
-	 *
-	 * Since the current driver only supports slice_per_pkt = 1,
-	 * pkt_per_line will be equal to slice per intf for now.
+	 * pkt_per_line = slice_per_intf / slice_per_pkt. With slice_per_pkt = 2
+	 * (see above) both slices are one packet -> pkt_per_line = 1.
 	 */
-	pkt_per_line = slice_per_intf;
+	pkt_per_line = slice_per_intf / 2;
 
 	if (is_cmd_mode) /* packet data type */
 		reg = DSI_COMMAND_COMPRESSION_MODE_CTRL_STREAM0_DATATYPE(MIPI_DSI_DCS_LONG_WRITE);
@@ -1058,14 +1083,24 @@ static void dsi_timing_setup(struct msm_dsi_host *msm_host, bool is_bonded_dsi)
 		 * unused anyway.
 		 */
 		h_total -= hdisplay;
-		if (wide_bus_enabled) {
-			if (msm_host->mode_flags & MIPI_DSI_MODE_VIDEO)
-				bits_per_pclk = dsc->bits_per_component * 3;
-			else
-				bits_per_pclk = 48;
-		} else {
+
+		if (wide_bus_enabled && !(msm_host->mode_flags & MIPI_DSI_MODE_VIDEO))
+			/*
+			 * CMD-mode + widebus: CMD_MDP_STREAM0_TOTAL.H_TOTAL
+			 * counts 48-bit bus words, so the compressed bytes/line
+			 * divide by 6 (=*8/48), matching downstream
+			 * dsi_ctrl_hw_cmn_setup_cmd_stream()'s widebus path.
+			 * Restores the pre-ac47870fd795 behaviour for CMD mode
+			 * (that commit's video-mode fix stays below); the too-
+			 * large H_TOTAL was starving the MDP pixel FIFO ->
+			 * CMD_MDP_FIFO_UNDERFLOW, so DSC cmd frames never finish.
+			 */
+			bits_per_pclk = 48;
+		else if (wide_bus_enabled)
+			bits_per_pclk = mipi_dsi_pixel_format_to_bpp(msm_host->format);
+		else
 			bits_per_pclk = 24;
-		}
+
 
 		hdisplay = DIV_ROUND_UP(msm_dsc_get_bytes_per_line(msm_host->dsc) * 8, bits_per_pclk);
 
@@ -1104,12 +1139,14 @@ static void dsi_timing_setup(struct msm_dsi_host *msm_host, bool is_bonded_dsi)
 		else
 			/*
 			 * When DSC is enabled, WC = slice_chunk_size * slice_per_pkt + 1.
-			 * Currently, the driver only supports default value of slice_per_pkt = 1
+			 * [OP15] AD296/AA601 stock dtbo uses slice_per_pkt = 2 (both
+			 * slices in one write_memory packet); mainline's default of 1
+			 * (WC=637) is a wire format this DDIC will not decode.
 			 *
 			 * TODO: Expand mipi_dsi_device struct to hold slice_per_pkt info
 			 *       and adjust DSC math to account for slice_per_pkt.
 			 */
-			wc = msm_host->dsc->slice_chunk_size + 1;
+			wc = msm_host->dsc->slice_chunk_size * 2 + 1; /* slice_per_pkt = 2 */
 
 		dsi_write(msm_host, REG_DSI_CMD_MDP_STREAM0_CTRL,
 			DSI_CMD_MDP_STREAM0_CTRL_WORD_COUNT(wc) |
@@ -1869,6 +1906,7 @@ static int dsi_host_parse_lane_data(struct msm_dsi_host *msm_host,
 static int dsi_populate_dsc_params(struct msm_dsi_host *msm_host, struct drm_dsc_config *dsc)
 {
 	int ret;
+	bool panel_cfg = !!dsc->rc_model_size;
 
 	if (dsc->bits_per_pixel & 0xf) {
 		DRM_DEV_ERROR(&msm_host->pdev->dev, "DSI does not support fractional bits_per_pixel\n");
@@ -1891,6 +1929,17 @@ static int dsi_populate_dsc_params(struct msm_dsi_host *msm_host, struct drm_dsc
 			      dsc->bits_per_component);
 		return -EOPNOTSUPP;
 	}
+
+	/*
+	 * A panel driver that fully populated the DSC config (RC table,
+	 * flatness/quant limits, offsets - sentinel: rc_model_size) knows
+	 * the exact PPS its DDIC was qualified against, possibly including
+	 * DSC 1.2 RC parameters or native 4:2:2 sampling. Use it as-is and
+	 * only derive the computed fields. The DPU DSC 1.2 wrapper supports
+	 * these modes (dpu_hw_dsc_1_2.c).
+	 */
+	if (panel_cfg)
+		return drm_dsc_compute_rc_parameters(dsc);
 
 	dsc->simple_422 = 0;
 	dsc->convert_rgb = 1;

@@ -91,6 +91,11 @@ struct dpu_hw_pingpong_ops {
 	 * @setup_dsc: Setup DSC
 	 */
 	int (*setup_dsc)(struct dpu_hw_pingpong *pp);
+
+	/**
+	 * @setup_ppb_fifo_size: set the pingpong latency buffer size (DPU 12.0+)
+	 */
+	void (*setup_ppb_fifo_size)(struct dpu_hw_pingpong *pp, u32 pixels);
 };
 
 struct dpu_hw_merge_3d;

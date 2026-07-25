@@ -844,6 +844,20 @@ static void _dpu_crtc_get_gc_lut(struct drm_crtc_state *state,
 	gc_lut->flags = 0;
 }
 
+static bool dpu_crtc_needs_spr(const struct drm_crtc_state *state)
+{
+	struct drm_encoder *encoder;
+
+	drm_for_each_encoder_mask(encoder, state->crtc->dev, state->encoder_mask) {
+		struct drm_dsc_config *dsc = dpu_encoder_get_dsc_config(encoder);
+
+		if (dsc && dsc->native_422)
+			return true;
+	}
+
+	return false;
+}
+
 static void _dpu_crtc_setup_cp_blocks(struct drm_crtc *crtc)
 {
 	struct drm_crtc_state *state = crtc->state;
@@ -853,11 +867,14 @@ static void _dpu_crtc_setup_cp_blocks(struct drm_crtc *crtc)
 	struct dpu_hw_gc_lut *gc_lut;
 	struct dpu_hw_ctl *ctl;
 	struct dpu_hw_dspp *dspp;
+	bool enable_spr;
 	int i;
 
 
 	if (!state->color_mgmt_changed && !drm_atomic_crtc_needs_modeset(state))
 		return;
+
+	enable_spr = dpu_crtc_needs_spr(state);
 
 	for (i = 0; i < cstate->num_mixers; i++) {
 		ctl = mixer[i].lm_ctl;
@@ -894,6 +911,12 @@ static void _dpu_crtc_setup_cp_blocks(struct drm_crtc *crtc)
 			/* stage config flush mask */
 			ctl->ops.update_pending_flush_dspp(ctl,
 				mixer[i].hw_dspp->idx, DPU_DSPP_GC);
+		}
+
+		if (dspp->ops.setup_spr) {
+			dspp->ops.setup_spr(dspp, enable_spr, cstate->num_mixers);
+			ctl->ops.update_pending_flush_dspp(ctl, dspp->idx,
+						   DPU_DSPP_SPR);
 		}
 	}
 }
@@ -1423,7 +1446,8 @@ static struct msm_display_topology dpu_crtc_get_topology(
 	else
 		topology.num_lm = 1;
 
-	if (crtc_state->ctm || crtc_state->gamma_lut)
+	if (crtc_state->ctm || crtc_state->gamma_lut ||
+	    dpu_crtc_needs_spr(crtc_state))
 		topology.num_dspp = topology.num_lm;
 
 	return topology;

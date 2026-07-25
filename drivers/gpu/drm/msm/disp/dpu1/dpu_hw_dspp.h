@@ -72,6 +72,14 @@ struct dpu_hw_dspp_ops {
 	 */
 	void (*setup_gc)(struct dpu_hw_dspp *ctx, struct dpu_hw_gc_lut *gc_lut);
 
+	/**
+	 * setup_spr - enable or disable the panel's sub-pixel rendering packer
+	 * @ctx: Pointer to dspp context
+	 * @enable: Whether to enable pentile packing
+	 * @num_mixers: Number of mixers feeding the panel
+	 */
+	void (*setup_spr)(struct dpu_hw_dspp *ctx, bool enable,
+			  unsigned int num_mixers);
 };
 
 /**
@@ -109,4 +117,3 @@ struct dpu_hw_dspp *dpu_hw_dspp_init(struct drm_device *dev,
 				     void __iomem *addr);
 
 #endif /*_DPU_HW_DSPP_H */
-
