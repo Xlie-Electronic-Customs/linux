@@ -627,8 +627,27 @@ static int qca_download_firmware(struct hci_dev *hdev,
 
 		remain -= segsize;
 		/* The last segment is always acked regardless download mode */
-		if (!remain || segsize < MAX_SIZE_PER_TLV_SEGMENT)
+		if (!remain || segsize < MAX_SIZE_PER_TLV_SEGMENT) {
+			/* WCN7860/BRAHMA bring-up (init-speed download): the
+			 * unacked segments above were pushed straight into the
+			 * serdev buffer (__hci_cmd_send bypasses the cmd
+			 * queue), so at 115200 the final sync-acked segment
+			 * would sit behind ~26 s of buffered bytes while the
+			 * HCI core's 2 s command watchdog kills it (measured
+			 * on this device). Wait out the drain before the final
+			 * segment. ELF-only, so real WCN7850s (TLV, 3.2 M)
+			 * never hit this. With the peri baud handshake the
+			 * download runs at the operating rate instead and
+			 * the buffered bytes drain ~28x faster — a short
+			 * guard sleep keeps the same margin.
+			 */
+			if (config->type == ELF_TYPE_PATCH &&
+			    soc_type == QCA_WCN7850)
+				msleep(config->user_baud_rate ==
+				       QCA_BAUDRATE_115200 ? 28000 : 1200);
+
 			config->dnld_mode = QCA_SKIP_EVT_NONE;
+		}
 
 		ret = qca_tlv_send_segment(hdev, segsize, segment,
 					   config->dnld_mode, soc_type);
@@ -794,13 +813,32 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 	else
 		rom_ver = ((soc_ver & 0x00000f00) >> 0x04) | (soc_ver & 0x0000000f);
 
-	if (soc_type == QCA_WCN6750)
+	/* WCN7860 bring-up experiment (OnePlus 15 / kaanapali): the brh-family
+	 * ROM answers EDL version and board-id reads but never ACKs
+	 * EDL_PATCH_TLV_REQ_CMD (measured: first TLV segment times out at both
+	 * 3.2M and init speed). WCN6750 needed this patch-config prelude before
+	 * TLV download; test whether the WCN7860 ROM does too. The command's
+	 * failure is non-fatal and its response (or its absence) is itself a
+	 * discriminating read. Runs for QCA_WCN7850 because the WCN7860 rides
+	 * that soc type on this branch.
+	 */
+	if (soc_type == QCA_WCN6750 || soc_type == QCA_WCN7850)
 		qca_send_patch_config_cmd(hdev);
 
 	/* Download rampatch file */
 	config.type = TLV_TYPE_PATCH;
 	if (rampatch_name) {
+		size_t rlen = strlen(rampatch_name);
+
 		snprintf(config.fwname, sizeof(config.fwname), "qca/%s", rampatch_name);
+
+		/* A DT-supplied .mbn rampatch is an ELF patch (the WCN6750
+		 * precedent; the WCN7860/BRAHMA ships brhbtfw20.mbn as its
+		 * primary patch, with the .tlv only a fallback). Without this
+		 * the ELF header would be misparsed as a TLV header.
+		 */
+		if (rlen > 4 && !strcmp(rampatch_name + rlen - 4, ".mbn"))
+			config.type = ELF_TYPE_PATCH;
 	} else {
 		switch (soc_type) {
 		case QCA_QCA2066:
