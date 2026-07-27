@@ -252,6 +252,17 @@
 		qcom,protection-domain = "tms/servreg", "msm/adsp/charger_pd";
 		orientation-gpios = <&tlmm 91 GPIO_ACTIVE_HIGH>;
 
+		/* OTG GPIOs — consumed by qcom_battmgr.c */
+		qcom,otg-booster-en-gpio = <&tlmm 64 0x00>;
+		qcom,otg-ovp-en-gpio = <&tlmm 57 0x00>;
+
+		pinctrl-names = "otg_booster_en_active", "otg_booster_en_sleep",
+		"otg_ovp_en_active",     "otg_ovp_en_sleep";
+		pinctrl-0 = <&otg_booster_en_active>;
+		pinctrl-1 = <&otg_booster_en_sleep>;
+		pinctrl-2 = <&otg_ovp_en_active>;
+		pinctrl-3 = <&otg_ovp_en_sleep>;
+
 		connector@0 {
 			compatible = "usb-c-connector";
 			reg = <0>;
@@ -897,6 +908,35 @@
 			drive-strength = <2>;
 			bias-disable;
 		};
+	};
+
+	otg_booster_en_active: otg-booster-en-active {
+		pins = "gpio64";
+		function = "gpio";
+		drive-strength = <2>;
+		output-high;
+		bias-pull-up;
+	};
+	otg_booster_en_sleep: otg-booster-en-sleep {
+		pins = "gpio64";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		output-low;
+	};
+	otg_ovp_en_active: otg-ovp-en-active {
+		pins = "gpio57";
+		function = "gpio";
+		drive-strength = <2>;
+		output-high;
+		bias-pull-up;
+	};
+	otg_ovp_en_sleep: otg-ovp-en-sleep {
+		pins = "gpio57";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		output-low;
 	};
 
 	cp_en_active: cp_en_active {
