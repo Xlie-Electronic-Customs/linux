@@ -6,6 +6,8 @@
  */
 #include <linux/auxiliary_bus.h>
 #include <linux/devm-helpers.h>
+#include <linux/pinctrl/consumer.h>
+#include <linux/gpio/consumer.h>
 #include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -17,6 +19,7 @@
 #include <linux/soc/qcom/pmic_glink.h>
 #include <linux/math.h>
 #include <linux/units.h>
+#include <linux/delay.h>
 
 #define BATTMGR_CHEMISTRY_LEN	4
 #define BATTMGR_STRING_LEN	128
@@ -93,16 +96,67 @@ enum qcom_battmgr_variant {
 
 #define BATTMGR_USB_PROPERTY_GET	0x32
 #define BATTMGR_USB_PROPERTY_SET	0x33
-#define USB_ONLINE			0
-#define USB_VOLT_NOW			1
-#define USB_VOLT_MAX			2
-#define USB_CURR_NOW			3
-#define USB_CURR_MAX			4
-#define USB_INPUT_CURR_LIMIT		5
-#define USB_TYPE			6
-#define USB_ADAP_TYPE			7
-#define USB_MOISTURE_DET_EN		8
-#define USB_MOISTURE_DET_STS		9
+
+enum usb_property_id {
+	USB_ONLINE,
+	USB_VOLT_NOW,
+	USB_VOLT_MAX,
+	USB_CURR_NOW,
+	USB_CURR_MAX,
+	USB_INPUT_CURR_LIMIT,
+	USB_TYPE,
+	USB_ADAP_TYPE,
+	USB_MOISTURE_DET_EN,
+	USB_MOISTURE_DET_STS,
+	USB_ADAP_SUBTYPE,//sjc add
+	USB_VBUS_COLLAPSE_STATUS,
+	USB_VOOCPHY_STATUS,
+	USB_VOOCPHY_ENABLE,
+	USB_OTG_AP_ENABLE,
+	USB_OTG_SWITCH,
+	USB_POWER_SUPPLY_RELEASE_FIXED_FREQUENCE,
+	USB_TYPEC_CC_ORIENTATION,
+	USB_CID_STATUS,
+	USB_TYPEC_MODE,
+	USB_TYPEC_SINKONLY,
+	USB_OTG_VBUS_REGULATOR_ENABLE,
+	USB_VOOC_CHG_PARAM_INFO,
+	USB_VOOC_FAST_CHG_TYPE,
+	USB_DEBUG_REG,
+	USB_VOOCPHY_RESET_AGAIN,
+	USB_SUSPEND_PMIC,
+	USB_OEM_MISC_CTL,
+	USB_CCDETECT_HAPPENED,
+	USB_GET_PPS_TYPE,
+	USB_GET_PPS_STATUS,
+	USB_SET_PPS_VOLT,
+	USB_SET_PPS_CURR,
+	USB_GET_PPS_MAX_CURR,
+	USB_PPS_READ_VBAT0_VOLT,
+	USB_PPS_CHECK_BTB_TEMP,
+	USB_PPS_MOS_CTRL,
+	USB_PPS_CP_MODE_INIT,
+	USB_PPS_CHECK_AUTHENTICATE,
+	USB_PPS_GET_AUTHENTICATE,
+	USB_PPS_GET_CP_VBUS,
+	USB_PPS_GET_CP_MASTER_IBUS,
+	USB_PPS_GET_CP_SLAVE_IBUS,
+	USB_PPS_MOS_SLAVE_CTRL,
+	USB_PPS_GET_R_COOL_DOWN,
+	USB_PPS_GET_DISCONNECT_STATUS,
+	USB_PPS_VOOCPHY_ENABLE,
+	USB_IN_STATUS,
+	USB_GET_BATT_CURR,
+	/*USB_ADSP_TRACK_DEBUG,*/
+	USB_TEMP,
+	USB_REAL_TYPE,
+	USB_TYPEC_COMPLIANT,
+	USB_PPS_FORCE_SVOOC,
+	USB_SCOPE,
+	USB_CONNECTOR_TYPE,
+	F_ACTIVE,
+	USB_PROP_MAX,
+};
 
 /*
  * Oplus-specific USB property IDs.
@@ -159,6 +213,8 @@ enum qcom_battmgr_variant {
  * These are sent as BATTMGR_NOTIFICATION opcodes from the ADSP firmware.
  */
 #define NOTIF_VOOC_STATUS_GET          0x48  /* BC_VOOC_STATUS_GET */
+#define BC_OTG_ENABLE		       0x50
+#define BC_OTG_DISABLE		       0x51
 #define NOTIF_VOOC_VBUS_ADC_ENABLE     0x52  /* BC_VOOC_VBUS_ADC_ENABLE */
 #define NOTIF_PD_SVOOC                 0x56  /* BC_PD_SVOOC */
 #define NOTIF_VOOC_CHG_PUMP_0          0x62  /* Charge pump event */
@@ -458,8 +514,25 @@ struct qcom_battmgr {
         /* ADSP told AP to suspend charging (notification 0x61) */
         bool adsp_suspended_chg;
 
+	bool otg_enabled;
+
+	struct gpio_desc *otg_boost_en_gpio;
+	struct gpio_desc *otg_ovp_en_gpio;
+
+	struct pinctrl		*otg_boost_en_pinctrl;
+	struct pinctrl_state	*otg_boost_en_active;
+	struct pinctrl_state	*otg_boost_en_sleep;
+	struct pinctrl		*otg_ovp_en_pinctrl;
+	struct pinctrl_state	*otg_ovp_en_active;
+	struct pinctrl_state	*otg_ovp_en_sleep;
+
+	struct notifier_block	ssr_nb;
+	void			*subsys_handle;
+
         /* Worker to reply to ADSP charging status queries (notification 0x59) */
         struct work_struct chg_status_reply_work;
+
+	struct delayed_work	otg_init_work;
 
 
 	/*
@@ -1461,6 +1534,98 @@ static void qcom_battmgr_oem_read_response(struct qcom_battmgr *battmgr,
         complete(&battmgr->oem_read_ack);
 }
 
+static int oplus_otg_boost_en_gpio_init(struct qcom_battmgr *battmgr)
+{
+
+	battmgr->otg_boost_en_pinctrl = devm_pinctrl_get(battmgr->dev);
+	if (IS_ERR_OR_NULL(battmgr->otg_boost_en_pinctrl))
+		return -EINVAL;
+
+	battmgr->otg_boost_en_active =
+		pinctrl_lookup_state(battmgr->otg_boost_en_pinctrl, "otg_booster_en_active");
+	if (IS_ERR_OR_NULL(battmgr->otg_boost_en_active))
+		return -EINVAL;
+	battmgr->otg_boost_en_sleep =
+		pinctrl_lookup_state(battmgr->otg_boost_en_pinctrl, "otg_booster_en_sleep");
+	if (IS_ERR_OR_NULL(battmgr->otg_boost_en_sleep))
+		return -EINVAL;
+
+	pinctrl_select_state(battmgr->otg_boost_en_pinctrl,
+		battmgr->otg_boost_en_sleep);
+
+	battmgr->otg_boost_en_gpio = devm_gpiod_get_optional(battmgr->dev, "qcom,otg-booster-en", GPIOD_OUT_LOW);
+
+	return 0;
+}
+
+static int oplus_otg_ovp_en_gpio_init(struct qcom_battmgr *battmgr)
+{
+	battmgr->otg_ovp_en_pinctrl = devm_pinctrl_get(battmgr->dev);
+	if (IS_ERR_OR_NULL(battmgr->otg_ovp_en_pinctrl))
+		return -EINVAL;
+
+	battmgr->otg_ovp_en_active =
+		pinctrl_lookup_state(battmgr->otg_ovp_en_pinctrl, "otg_ovp_en_active");
+	if (IS_ERR_OR_NULL(battmgr->otg_ovp_en_active))
+		return -EINVAL;
+
+	battmgr->otg_ovp_en_sleep =
+		pinctrl_lookup_state(battmgr->otg_ovp_en_pinctrl, "otg_ovp_en_sleep");
+	if (IS_ERR_OR_NULL(battmgr->otg_ovp_en_sleep))
+		return -EINVAL;
+
+	pinctrl_select_state(battmgr->otg_ovp_en_pinctrl,
+		battmgr->otg_ovp_en_sleep);
+
+	battmgr->otg_ovp_en_gpio = devm_gpiod_get_optional(battmgr->dev, "qcom,otg-ovp-en", GPIOD_OUT_LOW);
+
+	return 0;
+}
+
+static void oplus_set_otg_boost_en_val(struct qcom_battmgr *battmgr, int value)
+{
+
+	if (battmgr->otg_boost_en_gpio <= 0)
+		return;
+
+	if (IS_ERR_OR_NULL(battmgr->otg_boost_en_pinctrl)
+		|| IS_ERR_OR_NULL(battmgr->otg_boost_en_active)
+		|| IS_ERR_OR_NULL(battmgr->otg_boost_en_sleep))
+		return;
+
+	if (value) {
+		gpiod_direction_output_raw(battmgr->otg_boost_en_gpio , 1);
+		pinctrl_select_state(battmgr->otg_boost_en_pinctrl,
+				battmgr->otg_boost_en_active);
+	} else {
+		gpiod_direction_output_raw(battmgr->otg_boost_en_gpio, 0);
+		pinctrl_select_state(battmgr->otg_boost_en_pinctrl,
+				battmgr->otg_boost_en_sleep);
+	}
+}
+
+static void oplus_set_otg_ovp_en_val(struct qcom_battmgr *battmgr, int value)
+{
+
+	if (battmgr->otg_ovp_en_gpio <= 0)
+		return;
+
+	if (IS_ERR_OR_NULL(battmgr->otg_ovp_en_pinctrl)
+		|| IS_ERR_OR_NULL(battmgr->otg_ovp_en_active)
+		|| IS_ERR_OR_NULL(battmgr->otg_ovp_en_sleep))
+		return;
+
+	if (value) {
+		gpiod_direction_output_raw(battmgr->otg_ovp_en_gpio , 1);
+		pinctrl_select_state(battmgr->otg_ovp_en_pinctrl,
+				battmgr->otg_ovp_en_active);
+	} else {
+		gpiod_direction_output_raw(battmgr->otg_ovp_en_gpio, 0);
+		pinctrl_select_state(battmgr->otg_ovp_en_pinctrl,
+				battmgr->otg_ovp_en_sleep);
+	}
+}
+
 
 static void qcom_battmgr_notification(struct qcom_battmgr *battmgr,
 				      const struct qcom_battmgr_message *msg,
@@ -1548,6 +1713,16 @@ static void qcom_battmgr_notification(struct qcom_battmgr *battmgr,
                 dev_dbg(battmgr->dev, "vooc: charge pump event %#x\n", notification);
                 power_supply_changed(battmgr->bat_psy);
                 break;
+	case BC_OTG_ENABLE:
+		oplus_set_otg_ovp_en_val(battmgr, 1);
+		oplus_set_otg_boost_en_val(battmgr, 1);
+		battmgr->otg_enabled = true;
+		break;
+	case BC_OTG_DISABLE:
+		oplus_set_otg_ovp_en_val(battmgr, 0);
+		oplus_set_otg_boost_en_val(battmgr, 0);
+		battmgr->otg_enabled = false;
+		break;
 	default:
 		dev_err(battmgr->dev, "unknown notification: %#x\n", notification);
 		break;
@@ -2304,7 +2479,7 @@ static void qcom_battmgr_voocphy_recheck(struct work_struct *work)
                         BATTMGR_USB_PROPERTY_GET, USB_ONLINE, 0);
         mutex_unlock(&battmgr->lock);
 
-        if (!battmgr->usb.online) {
+        if (!battmgr->usb.online || battmgr->otg_enabled) {
                 /*
                  * Debounce: require 2 consecutive offline readings (~10s)
                  * before treating as a genuine unplug.  During PD
@@ -2483,6 +2658,7 @@ static void qcom_battmgr_enable_worker(struct work_struct *work)
          * pmic_glink_register_client().
          */
         qcom_battmgr_oplus_gauge_init(battmgr);
+	schedule_delayed_work(&battmgr->otg_init_work, round_jiffies_relative(msecs_to_jiffies(3500)));
 }
 
 static void qcom_battmgr_pdr_notify(void *priv, int state)
@@ -2509,6 +2685,24 @@ static const struct of_device_id qcom_battmgr_of_variants[] = {
 };
 
 static char *qcom_battmgr_battery[] = { "battery" };
+
+static void oplus_otg_init_status_func(struct work_struct *work)
+{
+	int count = 20;
+	struct qcom_battmgr *battmgr = container_of(to_delayed_work(work), struct qcom_battmgr, otg_init_work);
+
+	while (count--)
+		msleep(500);
+
+
+	qcom_battmgr_request_property(battmgr, BATTMGR_USB_PROPERTY_SET, USB_OTG_AP_ENABLE, true);
+
+	// oplus_get_otg_online_status_with_cid_scheme(battmgr);
+	// if (battmgr->cid_status != 0) {
+	// 	chg_err("Oplus_otg_ap_enable,flag bcdev->cid_status != 0\n");
+	// 	oplus_ccdetect_enable(battmgr);
+	// }
+}
 
 static int qcom_battmgr_probe(struct auxiliary_device *adev,
 			      const struct auxiliary_device_id *id)
@@ -2542,11 +2736,15 @@ static int qcom_battmgr_probe(struct auxiliary_device *adev,
                   qcom_battmgr_voocphy_status_worker);
         INIT_WORK(&battmgr->chg_status_reply_work,
                   qcom_battmgr_chg_status_reply_work);
+	INIT_DELAYED_WORK(&battmgr->otg_init_work, oplus_otg_init_status_func);
         battmgr->last_configured_adap_type = -1;
 	mutex_init(&battmgr->lock);
 	init_completion(&battmgr->ack);
 	mutex_init(&battmgr->oem_read_lock);
         init_completion(&battmgr->oem_read_ack);
+
+	oplus_otg_boost_en_gpio_init(battmgr);
+	oplus_otg_ovp_en_gpio_init(battmgr);
 
 	match = of_match_device(qcom_battmgr_of_variants, dev->parent);
 	if (match)
