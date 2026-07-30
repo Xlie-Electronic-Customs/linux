@@ -158,6 +158,10 @@ enum usb_property_id {
 	USB_PROP_MAX,
 };
 
+enum oplus_power_supply_usb_type {
+	POWER_SUPPLY_USB_TYPE_PD_SDP = 17,
+};
+
 /*
  * Oplus-specific USB property IDs.
  * USB_VOOCPHY_ENABLE (property 13) enables the ADSP VoocPHY subsystem
@@ -2303,6 +2307,7 @@ static void qcom_battmgr_oplus_gauge_init(struct qcom_battmgr *battmgr)
                 case POWER_SUPPLY_USB_TYPE_PD:
                 case POWER_SUPPLY_USB_TYPE_PD_DRP:
                 case POWER_SUPPLY_USB_TYPE_PD_PPS:
+                case POWER_SUPPLY_USB_TYPE_PD_SDP:
                         pdo_mv = 9000;
                         icl_ua = 3000000;
                         fcc_ua = 3000000;
@@ -2536,6 +2541,7 @@ static void qcom_battmgr_voocphy_recheck(struct work_struct *work)
                 case POWER_SUPPLY_USB_TYPE_PD:
                 case POWER_SUPPLY_USB_TYPE_PD_DRP:
                 case POWER_SUPPLY_USB_TYPE_PD_PPS:
+                case POWER_SUPPLY_USB_TYPE_PD_SDP:
                         pdo_mv = 9000;
                         icl_ua = 3000000;
                         fcc_ua = 3000000;
