@@ -1,0 +1,62 @@
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+/dts-v1/;
+/plugin/;
+
+/ {
+	model = "Qualcomm Technologies, Inc. Canoe MTP,infiniti 2";
+	compatible = "qcom,canoe-mtp", "qcom,canoe", "qcom,canoep-mtp", "qcom,canoep", "qcom,mtp";
+	qcom,msm-id = <0x295 0x20000 0x294 0x10000 0x294 0x20000 0x1000294 0x10000 0x295 0x10000 0x1000295 0x10000 0x1000294 0x20000 0x1000295 0x20000>;
+	qcom,board-id = <0x08 0x00>;
+	oplus,project-id = <0x60ff>;
+	oplus,hw-id = <0x28 0x18 0x21 0x19 0x20>;
+
+	__fixups__ {};
+};
+
+&mdss_dsi0 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	vdda-supply = <&vreg_l1d_1p2>;
+	status = "okay";
+
+	panel@0 {
+		compatible = "mdss,ad296-p-3-a0020-dsc";
+		reg = <0>;
+
+		pinctrl-0 = <&sde_dsi_active &sde_te_active &sde_esync0_suspend
+			     &oplus_pmic_reset_active &oplus_vddr_en_active>;
+		pinctrl-1 = <&sde_dsi_suspend &sde_te_suspend &sde_esync0_suspend
+			     &oplus_pmic_reset_suspend &oplus_vddr_en_suspend>;
+		pinctrl-names = "default", "sleep";
+
+		reset-gpios = <&tlmm 171 GPIO_ACTIVE_LOW>;
+
+		/*
+		 * AA601 power-on: vddio -> vdd -> gpio1(PMK8850/1) ->
+		 * gpio2(PMH0101/4) -> vci. The two PMIC enable-gpios are wired through
+		 * the oplus_pmic_reset_* / oplus_vddr_en_* pinctrl states (power-source
+		 * 1.8V) below; without that power-source the OLED_PMIC_RST /
+		 * VDDR_SM_1P5_EN rails sit at the wrong voltage, the panel power-IC never
+		 * enables, and the first DPU command-DMA modeset stalls the NoC/AXI bus.
+		 */
+		enable-gpios = <&pmk8850_gpios 1 GPIO_ACTIVE_HIGH>,
+			       <&pmh0101_gpios 4 GPIO_ACTIVE_HIGH>;
+
+		vci-supply = <&vreg_l13b_3p0>;
+		vdd-supply = <&vreg_l11b_1p0>;
+		vddio-supply = <&vreg_l12b_1p8>;
+
+		port {
+			panel0_in: endpoint {
+				remote-endpoint = <&mdss_dsi0_out>;
+			};
+		};
+	};
+};
+
+&mdss_dsi0_out {
+	remote-endpoint = <&panel0_in>;
+	data-lanes = <0 1 2 3>;
+};
