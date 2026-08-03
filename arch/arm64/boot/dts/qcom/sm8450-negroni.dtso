@@ -1,0 +1,15 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+	model = "Qualcomm Technologies, Inc. Waipio MTP with PM8010, wly";
+	compatible = "oplus,negroni", "qcom,sm8450";
+	qcom,msm-id = <0x1e2 0x20000 0x1c9 0x10000 0x1c9 0x20000 0x228 0x10000 0x1e2 0x10000>;
+	qcom,board-id = <0x10008 0x00>;
+	oplus,project-id = <0x2084a>;
+	oplus,hw-id = <0x28 0x18 0x10 0x19 0x20>;
+
+
+	__fixups__ {};
+
+};
