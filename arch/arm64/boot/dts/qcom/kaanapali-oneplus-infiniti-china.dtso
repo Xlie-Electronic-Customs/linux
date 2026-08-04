@@ -1,16 +1,16 @@
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/arm/qcom,ids.h>
 
 /dts-v1/;
 /plugin/;
 
 / {
-	model = "Qualcomm Technologies, Inc. Canoe MTP,infiniti 2";
-	compatible = "qcom,canoe-mtp", "qcom,canoe", "qcom,canoep-mtp", "qcom,canoep", "qcom,mtp";
-	qcom,msm-id = <0x295 0x20000 0x294 0x10000 0x294 0x20000 0x1000294 0x10000 0x295 0x10000 0x1000295 0x10000 0x1000294 0x20000 0x1000295 0x20000>;
-	qcom,board-id = <0x08 0x00>;
-	oplus,project-id = <0x60ff>;
-	oplus,hw-id = <0x28 0x18 0x21 0x19 0x20>;
+	model = "OnePlus 15 (China)";
+	compatible = "oneplus,infiniti", "qcom,kaanapali";
+	qcom,msm-id = <QCOM_ID_SM8850 0x20000>; /* SM8850 v2.0 */
+	qcom,board-id = <8 0>;
+	oplus,project-id = <24831>;
 
 	__fixups__ {};
 };
