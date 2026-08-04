@@ -26,7 +26,7 @@
 
 	/* required for bootloader to select correct board */
 	qcom,msm-id = <QCOM_ID_SM8850 0x20000>; /* SM8850 v2.0 */
-	qcom,board-id = <0x00 0x00>;
+	qcom,board-id = <0 0>;
 
 	aliases {
 		serial0 = &uart7;
