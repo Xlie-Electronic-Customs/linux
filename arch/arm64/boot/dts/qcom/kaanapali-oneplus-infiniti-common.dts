@@ -165,11 +165,56 @@
 		};
 	};
 
+	pmic-glink {
+		compatible = "qcom,kaanapali-pmic-glink";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		connector@0 {
+			compatible = "usb-c-connector";
+			reg = <0>;
+			power-role = "dual";
+			data-role = "dual";
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+
+					pmic_glink_hs_in: endpoint {
+						remote-endpoint = <&usb_dwc3_hs>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+
+					pmic_glink_ss_in: endpoint {
+						remote-endpoint = <&usb_dp_qmpphy_out>;
+					};
+				};
+
+				port@2 {
+					reg = <2>;
+
+					// pmic_glink_sbu: endpoint {
+					// 	remote-endpoint = <&fsa4480_sbu_mux>;
+					// };
+				};
+
+			};
+		};
+	};
+
 };
 
 &pmih0108_e1_eusb2_repeater {
-	qcom,tune-usb2-preem = /bits/ 8 <0x3>;
-	qcom,tune-usb2-amplitude = /bits/ 8 <0xa>;
+	qcom,tune-usb2-preem = /bits/ 8 <0x4>;
+	qcom,tune-usb2-slew = /bits/ 8 <0x2>;
+	qcom,tune-usb2-disc-thres = /bits/ 8 <0x7>;
+	qcom,tune-usb2-amplitude = /bits/ 8 <0xe>;
 	qcom,squelch-detector-bp = <(-2000)>;
 	vdd18-supply = <&vreg_l15b_1p8>;
 	vdd3-supply = <&vreg_l5b_3p1>;
@@ -1232,41 +1277,14 @@
 
 
 &usb {
-	/*
-	 * Dual-role via usb-role-switch (userspace /sys/class/usb_role/).
-	 * Default stays peripheral so gadget/SSH comes up at boot unchanged.
-	 *
-	 * Downstream canoe uses UCSI over pmic-glink (SOCCP channel
-	 * PMIC_RTR_SOCCP_APPS) + usb-role-switch + usb-c-connector graph to
-	 * drive role from Type-C. Mainline has qcom,kaanapali-pmic-glink, but
-	 * Infiniti does not yet bring up SOCCP remoteproc, so automatic Type-C
-	 * role/VBUS (OTG boost via pmih0108 charger) is deferred. Until then,
-	 * echo host|device|none into the role sysfs node.
-	 *
-	 * Host without charger OTG boost will not source VBUS — use a
-	 * self-powered peripheral or a powered hub.
-	 */
-	dr_mode = "peripheral";
 	usb-role-switch;
-	role-switch-default-mode = "peripheral";
-
-	maximum-speed = "high-speed";
-	qcom,select-utmi-as-pipe-clk;
-
-	/* HS-only: drop SS phy so dwc3 does not defer on usb_dp_qmpphy
-	 * (QMP combo typec/aux-bridge path). Mass-storage/NCM at HS is enough for
-	 * bring-up; re-enable SS once pmic-glink + orientation (TLMM gpio60
-	 * usb_phy / portselect in canoe-pinctrl) are sequenced.
-	 */
-	/delete-property/ phys;
-	/delete-property/ phy-names;
-	phys = <&usb_hsphy>;
-	phy-names = "usb2-phy";
-
-	/* HS-only: usb3_lpm_capable is meaningless without the SS phy. */
-	/delete-property/ snps,usb3_lpm_capable;
+	maximum-speed = "super-speed";
 
 	status = "okay";
+};
+
+&usb_dwc3_hs {
+	remote-endpoint = <&pmic_glink_hs_in>;
 };
 
 &usb_hsphy {
@@ -1282,7 +1300,11 @@
 	vdda-phy-supply = <&vreg_l1d_1p2>;
 	vdda-pll-supply = <&vreg_l4f_0p8>;
 
-	status = "disabled";
+	status = "okay";
+};
+
+&usb_dp_qmpphy_out {
+	remote-endpoint = <&pmic_glink_ss_in>;
 };
 
 /* WiFi: WCN786x (WCN7850 family) over PCIe0, ath12k. Mirrors kaanapali-mtp.dts. */
