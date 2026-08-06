@@ -165,6 +165,9 @@ static int eusb2_repeater_init(struct phy *phy)
 	if (!of_property_read_u8(np, "qcom,tune-usb2-preem", &val))
 		regmap_write(regmap, base + EUSB2_TUNE_USB2_PREEM, val);
 
+	if (!of_property_read_u8(np, "qcom,tune-usb2-slew", &val))
+		regmap_write(regmap, base + EUSB2_TUNE_USB2_SLEW, val);
+
 	if (!of_property_read_u8(np, "qcom,tune-usb2-disc-thres", &val))
 		regmap_write(regmap, base + EUSB2_TUNE_HSDISC, val);
 
