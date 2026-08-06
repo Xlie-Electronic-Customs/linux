@@ -1149,14 +1149,28 @@
 	firmware-name = "qcom/kaanapali/OnePlus/Infiniti/adsp.mbn",
 			"qcom/kaanapali/OnePlus/Infiniti/adsp_dtb.mbn";
 
-	status = "disabled";
+	status = "okay";
 };
 
 &remoteproc_cdsp {
 	firmware-name = "qcom/kaanapali/OnePlus/Infiniti/cdsp.mbn",
 			"qcom/kaanapali/OnePlus/Infiniti/cdsp_dtb.mbn";
 
-	status = "disabled";
+	status = "okay";
+};
+
+&remoteproc_mpss {
+	firmware-name = "qcom/kaanapali/OnePlus/Infiniti/modem.mbn",
+			"qcom/kaanapali/OnePlus/Infiniti/modem_dtb.mbn";
+
+	status = "okay";
+};
+
+&remoteproc_soccp {
+	firmware-name = "qcom/kaanapali/OnePlus/Infiniti/soccp.mbn",
+			"qcom/kaanapali/OnePlus/Infiniti/soccp_dtb.mbn";
+
+	status = "okay";
 };
 
 &i2c0 {
