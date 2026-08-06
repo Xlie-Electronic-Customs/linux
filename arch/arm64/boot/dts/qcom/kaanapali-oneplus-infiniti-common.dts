@@ -1159,6 +1159,30 @@
 	status = "disabled";
 };
 
+&i2c0 {
+	clock-frequency = <400000>;
+	status = "okay";
+
+
+	tfa9874_l: codec@34 { /* Top Speaker */
+		compatible = "nxp,tfa9874";
+		reg = <0x34>;
+		reset-gpio = <&tlmm 2 GPIO_ACTIVE_HIGH>;
+		sound-name-prefix = "Speaker Left";
+		#sound-dai-cells = <1>;
+		sound-channel = <0>;
+	};
+
+	tfa9874_r: codec@35 { /* Bottom Speaker */
+		compatible = "nxp,tfa9874";
+		reg = <0x35>;
+		reset-gpio = <&tlmm 160 GPIO_ACTIVE_HIGH>;
+		sound-name-prefix = "Speaker Right";
+		#sound-dai-cells = <1>;
+		sound-channel = <1>;
+	};
+};
+
 &tlmm {
 	gpio-reserved-ranges = <36 4>,  /* NFC eSE SPI */
 			       <74 1>,  /* eSE */
