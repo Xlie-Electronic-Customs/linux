@@ -1183,6 +1183,23 @@
 	};
 };
 
+&i2c21 {
+	clock-frequency = <400000>;
+	status = "okay";
+
+	nfc: nq@28 {
+		compatible = "nxp,nxp-nci-i2c";
+		reg = <0x28>;
+		enable-gpios = <&tlmm 34 GPIO_ACTIVE_HIGH>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <75 0>;
+		interrupt-names = "nfc_irq";
+		pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&nfc_default>;
+		pinctrl-1 = <&nfc_sleep>;
+	};
+};
+
 &tlmm {
 	gpio-reserved-ranges = <36 4>,  /* NFC eSE SPI */
 			       <74 1>,  /* eSE */
@@ -1199,6 +1216,52 @@
 		pins = "gpio18";
 		function = "gpio";
 		bias-pull-down;
+	};
+
+	nfc_default: nfc-default-state {
+		nfc_int_active: nfc_int_active-state {
+			pins = "gpio75";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+
+		nfc_enable_active: nfc_enable_active-state {
+			pins = "gpio34";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+
+		nfc_clk_req_active: nfc_clk_req_active-state {
+			pins = "gpio35";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+	};
+
+	nfc_sleep: nfc-sleep-state {
+		nfc_int_suspend: nfc_int_suspend-state {
+			pins = "gpio75";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+
+		nfc_enable_suspend: nfc_enable_suspend-state {
+			pins = "gpio34";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-disable;
+		};
+
+		nfc_clk_req_suspend: nfc_clk_req_suspend-state {
+			pins = "gpio35";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-disable;
+		};
 	};
 
 	spkr_0_sd_n_active: spkr-0-sd-n-active-state {
