@@ -1578,6 +1578,7 @@ static const struct qcom_pas_data kaanapali_soccp_resource = {
 	.dtb_firmware_name = "soccp_dtb.mdt",
 	.pas_id = 51,
 	.dtb_pas_id = 0x41,
+	.minidump_id = 24,
 	.proxy_pd_names = (char*[]){
 		"cx",
 		"mx",
