@@ -12,6 +12,7 @@
 	qcom,board-id = <8 0>;
 	oplus,project-id = <24863>;
 
+	/* required for bootloader */
 	__fixups__ {};
 };
 
