@@ -36,12 +36,12 @@ struct panel_samsung_amb670yf07_1440_3216_dsc *to_panel_samsung_amb670yf07_1440_
 
 static void panel_samsung_amb670yf07_1440_3216_dsc_reset(struct panel_samsung_amb670yf07_1440_3216_dsc *ctx)
 {
-	gpiod_set_value_cansleep(ctx->reset_gpio, 0);
-	usleep_range(10000, 11000);
 	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
-	usleep_range(5000, 6000);
+	usleep_range(10000, 10100);
 	gpiod_set_value_cansleep(ctx->reset_gpio, 0);
-	usleep_range(10000, 11000);
+	usleep_range(5000, 5100);
+	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
+	usleep_range(10000, 10100);
 }
 
 static int panel_samsung_amb670yf07_1440_3216_dsc_on(struct panel_samsung_amb670yf07_1440_3216_dsc *ctx)
@@ -217,6 +217,25 @@ static int panel_samsung_amb670yf07_1440_3216_dsc_on(struct panel_samsung_amb670
 	return dsi_ctx.accum_err;
 }
 
+static int panel_samsung_amb670yf07_1440_3216_dsc_hbm_on(struct panel_samsung_amb670yf07_1440_3216_dsc *ctx)
+{
+	struct mipi_dsi_multi_context dsi_ctx = { .dsi = ctx->dsi };
+
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0x5a, 0x5a);
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0xa5, 0xa5);
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x53, 0xe0);
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x51, 0x0e, 0xff);
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0x5a, 0x5a);
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x01, 0xbd);
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbd, 0x02);
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x02, 0xb9, 0x65);
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x65, 0x00, 0xac, 0x00, 0xac, 0x00, 0xac);
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf7, 0x0f);
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0x5a, 0x5a);
+
+	return dsi_ctx.accum_err;
+}
+
 static int panel_samsung_amb670yf07_1440_3216_dsc_off(struct panel_samsung_amb670yf07_1440_3216_dsc *ctx)
 {
 	struct mipi_dsi_multi_context dsi_ctx = { .dsi = ctx->dsi };
@@ -244,6 +263,10 @@ static int panel_samsung_amb670yf07_1440_3216_dsc_prepare(struct drm_panel *pane
 		gpiod_set_value_cansleep(ctx->reset_gpio, 1);
 		return ret;
 	}
+
+	ret = panel_samsung_amb670yf07_1440_3216_dsc_hbm_on(ctx);
+	if (ret < 0)
+		dev_err(dev, "Failed to initialize panel hbm: %d\n", ret);
 
 	drm_dsc_pps_payload_pack(&pps, &ctx->dsc);
 
@@ -435,7 +458,7 @@ panel_samsung_amb670yf07_1440_3216_dsc_create_backlight(struct mipi_dsi_device *
 	const struct backlight_properties props = {
 		.type = BACKLIGHT_RAW,
 		.brightness = 400,
-		.max_brightness = 2047,
+		.max_brightness = 4095,
 	};
 
 	return devm_backlight_device_register(dev, dev_name(dev), dev, dsi,
