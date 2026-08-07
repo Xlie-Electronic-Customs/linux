@@ -1232,12 +1232,13 @@
 	nfc: sn-nci@28 {
 		compatible = "nxp,nxp-nci-i2c";
 		reg = <0x28>;
-		qcom,sn-irq = <&tlmm 46 GPIO_ACTIVE_LOW>;
-		enable-gpios = <&tlmm 34 GPIO_ACTIVE_LOW>;
-		qcom,sn-clkreq = <&tlmm 35 GPIO_ACTIVE_LOW>;
+
+		enable-gpios = <&tlmm 34 GPIO_ACTIVE_HIGH>;
+		firmware-gpios = <&tlmm 45 GPIO_ACTIVE_HIGH>;
+
 		interrupt-parent = <&tlmm>;
 		interrupts = <46 0>;
-		interrupt-names = "nfc_irq";
+
 		pinctrl-names = "default", "sleep";
 		pinctrl-0 = <&nfc_default>;
 		pinctrl-1 = <&nfc_sleep>;
