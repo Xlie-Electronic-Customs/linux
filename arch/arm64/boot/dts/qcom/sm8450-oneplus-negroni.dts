@@ -700,8 +700,8 @@
 		compatible = "panel,samsung-amb670yf07-1440-3216-dsc";
 		reg = <0>;
 
-		reset-gpios = <&tlmm 0 GPIO_ACTIVE_LOW>;
-		te-gpios = <&tlmm 86 GPIO_ACTIVE_LOW>;
+		reset-gpios = <&tlmm 3 GPIO_ACTIVE_HIGH>;
+		te-gpios = <&tlmm 86 GPIO_ACTIVE_HIGH>;
 
 		pinctrl-0 = <&sde_dsi_active &sde_te_active_sleep>;
 		pinctrl-1 = <&sde_dsi_suspend &sde_te_suspend_sleep>;
