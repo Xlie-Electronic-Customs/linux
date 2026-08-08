@@ -1492,7 +1492,7 @@
 	reset-gpios = <&tlmm 102 GPIO_ACTIVE_LOW>;
 
 	wifi@0 {
-		compatible = "pci17cb,1107";
+		compatible = "pci17cb,110e";
 		reg = <0x10000 0x0 0x0 0x0 0x0>;
 
 		vddrfacmn-supply = <&vreg_pmu_rfa_cmn>;
