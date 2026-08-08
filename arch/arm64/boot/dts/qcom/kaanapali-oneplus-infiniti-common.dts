@@ -17,6 +17,8 @@
 #include "pmk8850.dtsi"              /* SPMI0: SID-0       */
 #include "pmr735d-kaanapali.dtsi"    /* SPMI1: SID-10      */
 
+/delete-node/ &pdp_mem;
+/delete-node/ &adspslpi_mem;
 /delete-node/ &rmtfs_mem;
 
 / {
@@ -57,6 +59,16 @@
 
 		dump_device_info_mem: device_info_mem@a7f00000 {
 			reg = <0 0xa7f00000 0 0x8000>;
+			no-map;
+		};
+
+		pdp_mem: pdp@81200000 {
+			reg = <0x0 0x81200000 0x0 0x200000>;
+			no-map;
+		};
+
+		adspslpi_mem: adspslpi@a1400000 {
+			reg = <0x0 0xa1400000 0x0 0x5000000>;
 			no-map;
 		};
 
