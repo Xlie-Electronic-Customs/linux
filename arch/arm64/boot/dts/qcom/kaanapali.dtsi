@@ -451,6 +451,15 @@
 			qcom,client-id = <1>;
 			qcom,vmid = <QCOM_SCM_VMID_MSS_MSA>;
 		};
+
+		system_cma: linux,cma {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
+			reusable;
+			alignment = <0x0 0x400000>;
+			size = <0x0 0x2400000>;
+			linux,cma-default;
+		};
 	};
 
 	smp2p-adsp {
@@ -3053,7 +3062,7 @@
 			power-domain-names = "cx",
 					     "mss";
 
-			memory-region = <&mpss_mem>, <&q6_mpss_dtb_mem>,
+			memory-region = <&mpss_mem>, <&q6_mpss_dtb_mem>, <&system_cma>,
 					<&dsm_partition_1_mem>, <&dsm_partition_2_mem>;
 
 			qcom,qmp = <&aoss_qmp>;
