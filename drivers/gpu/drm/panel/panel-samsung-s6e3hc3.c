@@ -8,6 +8,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/regulator/consumer.h>
 
 #include <video/mipi_display.h>
 
@@ -26,6 +27,13 @@ struct panel_samsung_amb670yf07_1440_3216_dsc {
 	struct gpio_desc *reset_gpio;
 	struct drm_connector *connector;
 	struct drm_display_mode *current_mode;
+	struct regulator_bulk_data *supplies;
+};
+
+static const struct regulator_bulk_data panel_samsung_amb670yf07_1440_3216_dsc_supplies[] = {
+	{ .supply = "vddio" },
+	{ .supply = "vdd" },
+	{ .supply = "vci" },
 };
 
 static inline
@@ -42,6 +50,47 @@ static void panel_samsung_amb670yf07_1440_3216_dsc_reset(struct panel_samsung_am
 	usleep_range(5000, 5100);
 	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
 	usleep_range(10000, 10100);
+}
+
+static int  panel_samsung_amb670yf07_1440_3216_dsc_power_on(struct  panel_samsung_amb670yf07_1440_3216_dsc *ctx)
+{
+	int ret;
+
+	ret = regulator_enable(ctx->supplies[0].consumer);
+	if (ret)
+		return ret;
+	usleep_range(3000, 4000);
+
+	ret = regulator_enable(ctx->supplies[1].consumer);
+	if (ret)
+		goto err_dis_vddio;
+	usleep_range(3000, 4000);
+
+	ret = regulator_enable(ctx->supplies[2].consumer);
+	if (ret)
+		goto err_dis_vci;
+	usleep_range(10000, 11000);
+
+	return 0;
+
+err_dis_vci:
+	regulator_disable(ctx->supplies[1].consumer);
+
+err_dis_vddio:
+	regulator_disable(ctx->supplies[0].consumer);
+
+	return ret;
+}
+
+static void  panel_samsung_amb670yf07_1440_3216_dsc_power_off(struct  panel_samsung_amb670yf07_1440_3216_dsc *ctx)
+{
+	regulator_disable(ctx->supplies[2].consumer);
+	usleep_range(3000, 4000);
+
+	regulator_disable(ctx->supplies[1].consumer);
+	usleep_range(3000, 4000);
+
+	regulator_disable(ctx->supplies[0].consumer);
 }
 
 static int panel_samsung_amb670yf07_1440_3216_dsc_on(struct panel_samsung_amb670yf07_1440_3216_dsc *ctx)
@@ -255,13 +304,18 @@ static int panel_samsung_amb670yf07_1440_3216_dsc_prepare(struct drm_panel *pane
 	struct drm_dsc_picture_parameter_set pps;
 	int ret;
 
+	ret = panel_samsung_amb670yf07_1440_3216_dsc_power_on(ctx);
+	if (ret) {
+		dev_err(dev, "Failed to power on panel: %d\n", ret);
+		return ret;
+	}
+
 	panel_samsung_amb670yf07_1440_3216_dsc_reset(ctx);
 
 	ret = panel_samsung_amb670yf07_1440_3216_dsc_on(ctx);
 	if (ret < 0) {
 		dev_err(dev, "Failed to initialize panel: %d\n", ret);
-		gpiod_set_value_cansleep(ctx->reset_gpio, 1);
-		return ret;
+		goto err_on;
 	}
 
 	ret = panel_samsung_amb670yf07_1440_3216_dsc_hbm_on(ctx);
@@ -285,6 +339,12 @@ static int panel_samsung_amb670yf07_1440_3216_dsc_prepare(struct drm_panel *pane
 	msleep(28); /* TODO: Is this panel-dependent? */
 
 	return 0;
+
+err_on:
+	gpiod_set_value_cansleep(ctx->reset_gpio, 0);
+	panel_samsung_amb670yf07_1440_3216_dsc_power_off(ctx);
+	return ret;
+
 }
 
 static int panel_samsung_amb670yf07_1440_3216_dsc_unprepare(struct drm_panel *panel)
@@ -297,7 +357,9 @@ static int panel_samsung_amb670yf07_1440_3216_dsc_unprepare(struct drm_panel *pa
 	if (ret < 0)
 		dev_err(dev, "Failed to un-initialize panel: %d\n", ret);
 
-	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
+	gpiod_set_value_cansleep(ctx->reset_gpio, 0);
+
+	panel_samsung_amb670yf07_1440_3216_dsc_power_off(ctx);
 
 	return 0;
 }
@@ -481,6 +543,13 @@ static int panel_samsung_amb670yf07_1440_3216_dsc_probe(struct mipi_dsi_device *
 	if (IS_ERR(ctx->reset_gpio))
 		return dev_err_probe(dev, PTR_ERR(ctx->reset_gpio),
 				     "Failed to get reset-gpios\n");
+
+	ret = devm_regulator_bulk_get_const(dev,
+					    ARRAY_SIZE(panel_samsung_amb670yf07_1440_3216_dsc_supplies),
+					    panel_samsung_amb670yf07_1440_3216_dsc_supplies,
+					    &ctx->supplies);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to get panel supplies\n");
 
 	ctx->dsi = dsi;
 	mipi_dsi_set_drvdata(dsi, ctx);
