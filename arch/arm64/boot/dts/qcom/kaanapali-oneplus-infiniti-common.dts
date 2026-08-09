@@ -905,7 +905,7 @@
 	 * sha256 fc6e4d0d0cd7269b7a03c44d07dde677621c0a8d566c6b94fc20860f2e714b0b
 	 */
 	status = "okay";
-	firmware-name = "qcom/kaanapali/OnePlus/Infiniti/gen80200_zap.mbn";
+	firmware-name = "qcom/kaanapali/gen80200_zap.mbn";
 };
 
 &spi19 {
@@ -1158,30 +1158,19 @@
 };
 
 &remoteproc_adsp {
-	firmware-name = "qcom/kaanapali/OnePlus/Infiniti/adsp.mbn",
-			"qcom/kaanapali/OnePlus/Infiniti/adsp_dtb.mbn";
-
 	status = "okay";
 };
 
 &remoteproc_cdsp {
-	firmware-name = "qcom/kaanapali/OnePlus/Infiniti/cdsp.mbn",
-			"qcom/kaanapali/OnePlus/Infiniti/cdsp_dtb.mbn";
-
 	status = "okay";
 };
 
 &remoteproc_mpss {
-	firmware-name = "qcom/kaanapali/OnePlus/Infiniti/modem.mbn",
-			"qcom/kaanapali/OnePlus/Infiniti/modem_dtb.mbn";
-
 	status = "okay";
 };
 
 &remoteproc_soccp {
-	firmware-name = "qcom/kaanapali/OnePlus/Infiniti/soccp.mbn",
-			"qcom/kaanapali/OnePlus/Infiniti/soccp_dtb.mbn";
-
+	firmware-name = "soccp.mbn", "soccp_dtb.mbn";
 	status = "okay";
 };
 
