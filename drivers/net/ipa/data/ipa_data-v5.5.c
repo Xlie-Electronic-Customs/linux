@@ -67,7 +67,7 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 		.ee_id		= GSI_EE_AP,
 		.channel_id	= 12,
 		.endpoint_id	= 14,
-		.toward_ipa	= false,
+		.toward_ipa	= true,
 		.channel = {
 			.tre_count	= 256,
 			.event_count	= 256,
@@ -481,7 +481,7 @@ const struct ipa_data ipa_data_v5_5 = {
 static const struct ipa_mem_data ipa_mem_data_sm8750 = {
 	.local_count	= ARRAY_SIZE(ipa_mem_local_data),
 	.local		= ipa_mem_local_data,
-	.imem_addr	= 0x14688000,
+	.imem_addr	= 0x14683000,
 	.imem_size	= 0x00002000,
 	.smem_size	= 0x0000d800,
 };
