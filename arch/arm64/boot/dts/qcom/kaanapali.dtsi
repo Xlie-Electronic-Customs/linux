@@ -2979,8 +2979,8 @@
 				    "ipa-shared",
 				    "gsi";
 
-			interrupts-extended = <&intc GIC_SPI 655 IRQ_TYPE_EDGE_RISING 0>,
-					      <&intc GIC_SPI 432 IRQ_TYPE_LEVEL_HIGH 0>,
+			interrupts-extended = <&intc GIC_SPI 655 IRQ_TYPE_EDGE_RISING>,
+					      <&intc GIC_SPI 432 IRQ_TYPE_LEVEL_HIGH>,
 					      <&ipa_smp2p_in 0 IRQ_TYPE_EDGE_RISING>,
 					      <&ipa_smp2p_in 1 IRQ_TYPE_EDGE_RISING>;
 			interrupt-names = "ipa",
@@ -5910,12 +5910,10 @@
 			reg = <0x0 0x14683000 0x0 0x2000>;
 			ranges = <0x0 0x0 0x14683000 0x2000>;
 
-			no-memory-wc;
-
 			#address-cells = <1>;
 			#size-cells = <1>;
 
-			ipa_modem_tables: modem-tables@8000 {
+			ipa_modem_tables: modem-tables@0 {
 				reg = <0x0 0x2000>;
 			};
 
