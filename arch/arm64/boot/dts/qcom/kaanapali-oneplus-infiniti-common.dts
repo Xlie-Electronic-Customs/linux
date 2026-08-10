@@ -1171,7 +1171,7 @@
 
 &remoteproc_soccp {
 	firmware-name = "soccp.mbn", "soccp_dtb.mbn";
-	status = "okay";
+	status = "disabled";
 };
 
 &i2c0 {
@@ -1506,4 +1506,11 @@
 		vddpcie0p9-supply = <&vreg_pmu_pcie_0p9>;
 		vddpcie1p8-supply = <&vreg_pmu_pcie_1p8>;
 	};
+};
+
+&ipa {
+	qcom,gsi-loader = "self";
+	memory-region = <&ipa_fw_mem>;
+	firmware-name = "ipa_fws.mdt";
+	status = "okay";
 };
