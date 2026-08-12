@@ -30,8 +30,8 @@ enum ipa_rsrc_group_id {
 	/* Source resource group identifiers */
 	IPA_RSRC_GROUP_SRC_UL				= 0,
 	IPA_RSRC_GROUP_SRC_DL,
-	IPA_RSRC_GROUP_SRC_UNUSED_2,
-	IPA_RSRC_GROUP_SRC_UNUSED_3,
+	IPA_RSRC_GROUP_SRC_DMA,
+	IPA_RSRC_GROUP_SRC_QDSS,
 	IPA_RSRC_GROUP_SRC_URLLC,
 	IPA_RSRC_GROUP_SRC_U_RX_QC,
 	IPA_RSRC_GROUP_SRC_COUNT,	/* Last in set; not a source group */
@@ -213,6 +213,12 @@ static const struct ipa_resource ipa_resource_src[] = {
 	},
 	[IPA_RESOURCE_TYPE_SRC_HPS_DMARS] = {
 		.limits[IPA_RSRC_GROUP_SRC_UL] = {
+			.min = 0,	.max = 63,
+		},
+		.limits[IPA_RSRC_GROUP_SRC_DMA] = {
+			.min = 0,	.max = 63,
+		},
+		.limits[IPA_RSRC_GROUP_SRC_QDSS] = {
 			.min = 0,	.max = 63,
 		},
 		.limits[IPA_RSRC_GROUP_SRC_URLLC] = {
