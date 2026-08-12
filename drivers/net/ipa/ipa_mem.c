@@ -158,6 +158,11 @@ static bool ipa_mem_id_valid(struct ipa *ipa, enum ipa_mem_id mem_id)
 			return false;
 		break;
 
+	case IPA_MEM_MODEM_STATS_DROP:
+		if (version < IPA_VERSION_5_0 || version > IPA_VERSION_5_1)
+			return false;
+		break;
+
 	case IPA_MEM_STATS_V4_FILTER:
 	case IPA_MEM_STATS_V6_FILTER:
 	case IPA_MEM_STATS_V4_ROUTE:
