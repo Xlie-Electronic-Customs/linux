@@ -419,6 +419,12 @@ static const struct ipa_mem ipa_mem_local_data[] = {
 		.size		= 0x0100,
 		.canary_count	= 2,
 	},
+	{
+		.id		= IPA_MEM_MODEM_STATS_DROP,
+		.offset		= 0x4fe8,
+		.size		= 0x0018,
+		.canary_count	= 0,
+	},
 };
 
 /* Memory configuration data for an SoC having IPA v5.1 */
