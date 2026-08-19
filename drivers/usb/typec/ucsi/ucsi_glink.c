@@ -383,6 +383,11 @@ static const struct of_device_id pmic_glink_ucsi_of_quirks[] = {
 	{ .compatible = "qcom,sm8450-pmic-glink", .data = &quirk_sm8450, },
 	{ .compatible = "qcom,sm8550-pmic-glink", .data = &quirk_sm8450, },
 	{ .compatible = "qcom,x1e80100-pmic-glink", .data = &quirk_x1e80100, },
+	{ .compatible = "oplus,sm8450-pmic-glink", .data = &quirk_sm8450, },
+	{ .compatible = "oplus,sm8550-pmic-glink", .data = &quirk_sm8450, },
+	{ .compatible = "oplus,sm8650-pmic-glink", .data = &quirk_sm8450, },
+	{ .compatible = "oplus,sm8750-pmic-glink", .data = &quirk_sm8450, },
+	{ .compatible = "oplus,kaanapali-pmic-glink", .data = &quirk_sm8450, },
 	{}
 };
 

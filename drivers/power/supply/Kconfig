@@ -217,6 +217,15 @@ config BATTERY_QCOM_BATTMGR
 	  which is used on modern Qualcomm platforms to provide battery and
 	  power supply information.
 
+config BATTERY_OPLUS_BATTMGR
+	tristate "OnePlus PMIC GLINK battery manager support"
+	depends on QCOM_PMIC_GLINK
+	select AUXILIARY_BUS
+	help
+	  Say Y here to enable the OnePlus PMIC GLINK power supply driver,
+	  which is used on OnePlus devices to provide battery and
+	  power supply control.
+
 config BATTERY_OLPC
 	tristate "One Laptop Per Child battery"
 	depends on OLPC_EC
