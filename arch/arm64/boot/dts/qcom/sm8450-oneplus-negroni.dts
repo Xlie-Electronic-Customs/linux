@@ -23,7 +23,6 @@
 /delete-node/ &video_mem;
 /delete-node/ &adsp_mem;
 /delete-node/ &slpi_mem;
-/delete-node/ &mte_mem;
 /delete-node/ &rmtfs_mem;
 
 / {
