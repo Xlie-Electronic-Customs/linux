@@ -61,6 +61,7 @@ struct qcom_pas_data {
 	int lite_pas_id;
 	int lite_dtb_pas_id;
 	unsigned int minidump_id;
+	bool uses_elf64;
 	bool auto_boot;
 	bool decrypt_shutdown;
 
@@ -946,7 +947,10 @@ static int qcom_pas_probe(struct platform_device *pdev)
 
 	rproc->has_iommu = of_property_present(pdev->dev.of_node, "iommus");
 	rproc->auto_boot = desc->auto_boot;
-	rproc_coredump_set_elf_info(rproc, ELFCLASS32, EM_NONE);
+	if (desc->uses_elf64)
+		rproc_coredump_set_elf_info(rproc, ELFCLASS64, EM_NONE);
+	else
+		rproc_coredump_set_elf_info(rproc, ELFCLASS32, EM_NONE);
 
 	pas = rproc->priv;
 	pas->dev = &pdev->dev;
@@ -1487,6 +1491,7 @@ static const struct qcom_pas_data sc8180x_mpss_resource = {
 	.crash_reason_smem = 421,
 	.firmware_name = "modem.mdt",
 	.pas_id = 4,
+	.uses_elf64 = true,
 	.auto_boot = false,
 	.proxy_pd_names = (char*[]){
 		"cx",
@@ -1703,6 +1708,7 @@ static const struct qcom_pas_data sm8550_adsp_resource = {
 	.pas_id = 1,
 	.dtb_pas_id = 0x24,
 	.minidump_id = 5,
+	.uses_elf64 = true,
 	.auto_boot = true,
 	.proxy_pd_names = (char*[]){
 		"lcx",
@@ -1836,6 +1842,7 @@ static const struct qcom_pas_data sm8650_cdsp_resource = {
 	.pas_id = 18,
 	.dtb_pas_id = 0x25,
 	.minidump_id = 7,
+	.uses_elf64 = true,
 	.auto_boot = true,
 	.proxy_pd_names = (char*[]){
 		"cx",
@@ -1885,6 +1892,7 @@ static const struct qcom_pas_data sm8750_mpss_resource = {
 	.pas_id = 4,
 	.dtb_pas_id = 0x26,
 	.minidump_id = 3,
+	.uses_elf64 = true,
 	.auto_boot = false,
 	.decrypt_shutdown = true,
 	.proxy_pd_names = (char*[]){
@@ -1928,6 +1936,7 @@ static const struct qcom_pas_data kaanapali_soccp_resource = {
 		NULL
 	},
 	.ssr_name = "soccp",
+	.uses_elf64 = true,
 	.sysmon_name = "soccp",
 	.auto_boot = true,
 	.early_boot = true,
