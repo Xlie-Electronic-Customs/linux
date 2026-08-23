@@ -2480,7 +2480,10 @@ DECLARE_ADRENO_REGLIST_PIPE_LIST(a840_dyn_pwrup_reglist);
 
 static const struct adreno_info a8xx_gpus[] = {
 	{
-		.chip_ids = ADRENO_CHIP_IDS(0x44050001),
+		.chip_ids = ADRENO_CHIP_IDS(
+			0x44050000,
+			0x44050001
+		),
 		.family = ADRENO_8XX_GEN1,
 		.fw = {
 			[ADRENO_FW_SQE] = "gen80000_sqe.fw",
