@@ -1271,7 +1271,7 @@
 
 		gpi_dma0: dma-controller@900000 {
 			compatible = "qcom,sm8450-gpi-dma", "qcom,sm6350-gpi-dma";
-			#dma-cells = <3>;
+			#dma-cells = <5>;
 			reg = <0 0x00900000 0 0x60000>;
 			interrupts = <GIC_SPI 244 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 245 IRQ_TYPE_LEVEL_HIGH>,
@@ -1287,6 +1287,7 @@
 				     <GIC_SPI 255 IRQ_TYPE_LEVEL_HIGH>;
 			dma-channels = <12>;
 			dma-channel-mask = <0x7e>;
+			dma-coherent;
 			iommus = <&apps_smmu 0x5b6 0x0>;
 			status = "disabled";
 		};
@@ -1319,8 +1320,8 @@
 						<&system_noc MASTER_A2NOC_SNOC 0 &gem_noc SLAVE_LLCC 0>,
 						<&aggre2_noc MASTER_QUP_0 0 &mc_virt SLAVE_EBI1 0>;
 				interconnect-names = "qup-core", "qup-config", "qup-memory";
-				dmas = <&gpi_dma0 0 0 QCOM_GPI_I2C>,
-				       <&gpi_dma0 1 0 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma0 0 0 QCOM_GPI_I2C 64 0>,
+				       <&gpi_dma0 1 0 QCOM_GPI_I2C 64 0>;
 				dma-names = "tx", "rx";
 				status = "disabled";
 			};
@@ -1339,8 +1340,8 @@
 						<&system_noc MASTER_A2NOC_SNOC 0 &gem_noc SLAVE_LLCC 0>,
 						<&aggre2_noc MASTER_QUP_0 0 &mc_virt SLAVE_EBI1 0>;
 				interconnect-names = "qup-core", "qup-config", "qup-memory";
-				dmas = <&gpi_dma0 0 0 QCOM_GPI_SPI>,
-				       <&gpi_dma0 1 0 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma0 0 0 QCOM_GPI_SPI 64 0>,
+				       <&gpi_dma0 1 0 QCOM_GPI_SPI 64 0>;
 				dma-names = "tx", "rx";
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1361,8 +1362,8 @@
 						<&system_noc MASTER_A2NOC_SNOC 0 &gem_noc SLAVE_LLCC 0>,
 						<&aggre2_noc MASTER_QUP_0 0 &mc_virt SLAVE_EBI1 0>;
 				interconnect-names = "qup-core", "qup-config", "qup-memory";
-				dmas = <&gpi_dma0 0 1 QCOM_GPI_I2C>,
-				       <&gpi_dma0 1 1 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma0 0 1 QCOM_GPI_I2C 64 0>,
+				       <&gpi_dma0 1 1 QCOM_GPI_I2C 64 0>;
 				dma-names = "tx", "rx";
 				status = "disabled";
 			};
@@ -1379,8 +1380,8 @@
 						<&system_noc MASTER_A2NOC_SNOC 0 &gem_noc SLAVE_LLCC 0>,
 						<&aggre2_noc MASTER_QUP_0 0 &mc_virt SLAVE_EBI1 0>;
 				interconnect-names = "qup-core", "qup-config", "qup-memory";
-				dmas = <&gpi_dma0 0 1 QCOM_GPI_SPI>,
-				       <&gpi_dma0 1 1 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma0 0 1 QCOM_GPI_SPI 64 0>,
+				       <&gpi_dma0 1 1 QCOM_GPI_SPI 64 0>;
 				dma-names = "tx", "rx";
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1401,8 +1402,8 @@
 						<&system_noc MASTER_A2NOC_SNOC 0 &gem_noc SLAVE_LLCC 0>,
 						<&aggre2_noc MASTER_QUP_0 0 &mc_virt SLAVE_EBI1 0>;
 				interconnect-names = "qup-core", "qup-config", "qup-memory";
-				dmas = <&gpi_dma0 0 2 QCOM_GPI_I2C>,
-				       <&gpi_dma0 1 2 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma0 0 2 QCOM_GPI_I2C 64 0>,
+				       <&gpi_dma0 1 2 QCOM_GPI_I2C 64 0>;
 				dma-names = "tx", "rx";
 				status = "disabled";
 			};
@@ -1419,8 +1420,8 @@
 						<&system_noc MASTER_A2NOC_SNOC 0 &gem_noc SLAVE_LLCC 0>,
 						<&aggre2_noc MASTER_QUP_0 0 &mc_virt SLAVE_EBI1 0>;
 				interconnect-names = "qup-core", "qup-config", "qup-memory";
-				dmas = <&gpi_dma0 0 2 QCOM_GPI_SPI>,
-				       <&gpi_dma0 1 2 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma0 0 2 QCOM_GPI_SPI 64 0>,
+				       <&gpi_dma0 1 2 QCOM_GPI_SPI 64 0>;
 				dma-names = "tx", "rx";
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1442,8 +1443,8 @@
 						<&system_noc MASTER_A2NOC_SNOC 0 &gem_noc SLAVE_LLCC 0>,
 						<&aggre2_noc MASTER_QUP_0 0 &mc_virt SLAVE_EBI1 0>;
 				interconnect-names = "qup-core", "qup-config", "qup-memory";
-				dmas = <&gpi_dma0 0 3 QCOM_GPI_I2C>,
-				       <&gpi_dma0 1 3 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma0 0 3 QCOM_GPI_I2C 64 0>,
+				       <&gpi_dma0 1 3 QCOM_GPI_I2C 64 0>;
 				dma-names = "tx", "rx";
 				status = "disabled";
 			};
@@ -1460,8 +1461,8 @@
 						<&system_noc MASTER_A2NOC_SNOC 0 &gem_noc SLAVE_LLCC 0>,
 						<&aggre2_noc MASTER_QUP_0 0 &mc_virt SLAVE_EBI1 0>;
 				interconnect-names = "qup-core", "qup-config", "qup-memory";
-				dmas = <&gpi_dma0 0 3 QCOM_GPI_SPI>,
-				       <&gpi_dma0 1 3 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma0 0 3 QCOM_GPI_SPI 64 0>,
+				       <&gpi_dma0 1 3 QCOM_GPI_SPI 64 0>;
 				dma-names = "tx", "rx";
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1482,8 +1483,8 @@
 						<&system_noc MASTER_A2NOC_SNOC 0 &gem_noc SLAVE_LLCC 0>,
 						<&aggre2_noc MASTER_QUP_0 0 &mc_virt SLAVE_EBI1 0>;
 				interconnect-names = "qup-core", "qup-config", "qup-memory";
-				dmas = <&gpi_dma0 0 4 QCOM_GPI_I2C>,
-				       <&gpi_dma0 1 4 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma0 0 4 QCOM_GPI_I2C 64 2>,
+				       <&gpi_dma0 1 4 QCOM_GPI_I2C 64 2>;
 				dma-names = "tx", "rx";
 				status = "disabled";
 			};
@@ -1502,8 +1503,8 @@
 						<&system_noc MASTER_A2NOC_SNOC 0 &gem_noc SLAVE_LLCC 0>,
 						<&aggre2_noc MASTER_QUP_0 0 &mc_virt SLAVE_EBI1 0>;
 				interconnect-names = "qup-core", "qup-config", "qup-memory";
-				dmas = <&gpi_dma0 0 4 QCOM_GPI_SPI>,
-				       <&gpi_dma0 1 4 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma0 0 4 QCOM_GPI_SPI 64 2>,
+				       <&gpi_dma0 1 4 QCOM_GPI_SPI 64 2>;
 				dma-names = "tx", "rx";
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1524,8 +1525,8 @@
 						<&system_noc MASTER_A2NOC_SNOC 0 &gem_noc SLAVE_LLCC 0>,
 						<&aggre2_noc MASTER_QUP_0 0 &mc_virt SLAVE_EBI1 0>;
 				interconnect-names = "qup-core", "qup-config", "qup-memory";
-				dmas = <&gpi_dma0 0 5 QCOM_GPI_I2C>,
-				       <&gpi_dma0 1 5 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma0 0 5 QCOM_GPI_I2C 64 0>,
+				       <&gpi_dma0 1 5 QCOM_GPI_I2C 64 0>;
 				dma-names = "tx", "rx";
 				status = "disabled";
 			};
@@ -1542,8 +1543,8 @@
 						<&system_noc MASTER_A2NOC_SNOC 0 &gem_noc SLAVE_LLCC 0>,
 						<&aggre2_noc MASTER_QUP_0 0 &mc_virt SLAVE_EBI1 0>;
 				interconnect-names = "qup-core", "qup-config", "qup-memory";
-				dmas = <&gpi_dma0 0 5 QCOM_GPI_SPI>,
-				       <&gpi_dma0 1 5 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma0 0 5 QCOM_GPI_SPI 64 0>,
+				       <&gpi_dma0 1 5 QCOM_GPI_SPI 64 0>;
 				dma-names = "tx", "rx";
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -1565,8 +1566,8 @@
 						<&system_noc MASTER_A2NOC_SNOC 0 &gem_noc SLAVE_LLCC 0>,
 						<&aggre2_noc MASTER_QUP_0 0 &mc_virt SLAVE_EBI1 0>;
 				interconnect-names = "qup-core", "qup-config", "qup-memory";
-				dmas = <&gpi_dma0 0 6 QCOM_GPI_I2C>,
-				       <&gpi_dma0 1 6 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma0 0 6 QCOM_GPI_I2C 64 0>,
+				       <&gpi_dma0 1 6 QCOM_GPI_I2C 64 0>;
 				dma-names = "tx", "rx";
 				status = "disabled";
 			};
@@ -1583,8 +1584,8 @@
 						<&system_noc MASTER_A2NOC_SNOC 0 &gem_noc SLAVE_LLCC 0>,
 						<&aggre2_noc MASTER_QUP_0 0 &mc_virt SLAVE_EBI1 0>;
 				interconnect-names = "qup-core", "qup-config", "qup-memory";
-				dmas = <&gpi_dma0 0 6 QCOM_GPI_SPI>,
-				       <&gpi_dma0 1 6 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma0 0 6 QCOM_GPI_SPI 64 0>,
+				       <&gpi_dma0 1 6 QCOM_GPI_SPI 64 0>;
 				dma-names = "tx", "rx";
 				#address-cells = <1>;
 				#size-cells = <0>;
