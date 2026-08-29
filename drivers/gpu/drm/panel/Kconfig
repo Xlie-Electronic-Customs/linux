@@ -1444,6 +1444,14 @@ config DRM_PANEL_XIAOMI_P336020B
 	help
 	  Say Y here if you want to enable support for the Xiaomi P336020B cmd mode dsc dsi panel.
 
+config DRM_PANEL_XIAOMI_N1142020A
+	tristate "Xiaomi N1142020A cmd mode dsc dsi panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y here if you want to enable support for the Xiaomi N1142020A cmd mode dsc dsi panel.
+
 config DRM_PANEL_ONEPLUS_AA601
 	tristate "OnePlus AA601 P 7 A0020 DSC cmd mode AMOLED panel"
 	depends on OF
