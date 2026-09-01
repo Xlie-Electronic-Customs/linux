@@ -513,6 +513,9 @@ by a particular renderpass/blit.
 	<reg32 offset="0x0ad0" name="CP_BV_APRIV_CNTL" variants="A7XX"/>
 	<reg32 offset="0x0ada" name="CP_BV_CHICKEN_DBG" variants="A7XX"/>
 
+	<reg32 offset="0x0b06" name="CP_LPAC_RB_RPTR" variants="A7XX"/>
+	<reg32 offset="0x0b07" name="CP_LPAC_RB_WPTR" variants="A7XX"/>
+	<reg32 offset="0x0b09" name="CP_LPAC_PROTECT_CNTL" variants="A7XX"/>
 	<reg32 offset="0x0b0a" name="CP_LPAC_DRAW_STATE_ADDR" variants="A7XX"/>
 	<reg32 offset="0x0b0b" name="CP_LPAC_DRAW_STATE_DATA" variants="A7XX"/>
 	<reg32 offset="0x0b0c" name="CP_LPAC_ROQ_DBG_ADDR" variants="A7XX"/>
