@@ -1589,6 +1589,9 @@ static int dm_suspend(struct amdgpu_ip_block *ip_block)
 		res = amdgpu_dm_commit_zero_streams(dm->dc);
 		if (res != DC_OK) {
 			drm_err(adev_to_drm(adev), "Failed to commit zero streams: %d\n", res);
+			dc_state_release(dm->cached_dc_state);
+			dm->cached_dc_state = NULL;
+			mutex_unlock(&dm->dc_lock);
 			return -EINVAL;
 		}
 
@@ -1884,6 +1887,9 @@ static int dm_resume(struct amdgpu_ip_block *ip_block)
 		r = dm_dmub_hw_init(adev);
 		if (r) {
 			drm_err(adev_to_drm(adev), "DMUB interface failed to initialize: status=%d\n", r);
+			dc_state_release(dm->cached_dc_state);
+			dm->cached_dc_state = NULL;
+			mutex_unlock(&dm->dc_lock);
 			return r;
 		}
 
@@ -3873,7 +3879,7 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_commit *state,
 			continue;
 
 		bundle->surface_updates[planes_count].surface = dc_plane;
-		if (new_pcrtc_state->color_mgmt_changed) {
+		if (new_pcrtc_state->color_mgmt_changed || new_plane_state->color_mgmt_changed) {
 			bundle->surface_updates[planes_count].gamma = &dc_plane->gamma_correction;
 			bundle->surface_updates[planes_count].in_transfer_func = &dc_plane->in_transfer_func;
 			bundle->surface_updates[planes_count].gamut_remap_matrix = &dc_plane->gamut_remap_matrix;
@@ -5690,6 +5696,10 @@ static bool should_reset_plane(struct drm_atomic_commit *state,
 
 	/* CRTC Degamma changes currently require us to recreate planes. */
 	if (new_crtc_state->color_mgmt_changed)
+		return true;
+
+	/* Plane color pipeline or its colorop changes. */
+	if (new_plane_state->color_mgmt_changed)
 		return true;
 
 	/*
