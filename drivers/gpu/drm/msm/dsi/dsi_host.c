@@ -1874,6 +1874,7 @@ static int dsi_host_parse_lane_data(struct msm_dsi_host *msm_host,
 static int dsi_populate_dsc_params(struct msm_dsi_host *msm_host, struct drm_dsc_config *dsc)
 {
 	int ret;
+	enum drm_dsc_params_type type;
 
 	if (dsc->bits_per_pixel & 0xf) {
 		DRM_DEV_ERROR(&msm_host->pdev->dev, "DSI does not support fractional bits_per_pixel\n");
@@ -1898,14 +1899,24 @@ static int dsi_populate_dsc_params(struct msm_dsi_host *msm_host, struct drm_dsc
 	}
 
 	dsc->simple_422 = 0;
-	dsc->convert_rgb = 1;
+	dsc->convert_rgb = !(dsc->native_422 | dsc->native_420);
 	dsc->vbr_enable = 0;
 
 	drm_dsc_set_const_params(dsc);
 	drm_dsc_set_rc_buf_thresh(dsc);
 
-	/* DPU supports only pre-SCR panels */
-	ret = drm_dsc_setup_rc_params(dsc, DRM_DSC_1_1_PRE_SCR);
+	if (dsc->dsc_version_minor == 0x2) {
+		if (dsc->native_422)
+			type = DRM_DSC_1_2_422;
+		else if (dsc->native_420)
+			type = DRM_DSC_1_2_420;
+		else
+			type = DRM_DSC_1_2_444;
+	}
+	else
+		type = DRM_DSC_1_1_PRE_SCR;
+
+	ret = drm_dsc_setup_rc_params(dsc, type);
 	if (ret) {
 		DRM_DEV_ERROR(&msm_host->pdev->dev, "could not find DSC RC parameters\n");
 		return ret;
