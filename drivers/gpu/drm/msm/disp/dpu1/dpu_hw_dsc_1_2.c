@@ -124,6 +124,9 @@ static void dpu_hw_dsc_config_1_2(struct dpu_hw_dsc *hw_dsc,
 
 	data |= (_dsc_calc_output_buf_max_addr(hw_dsc, num_active_slice_per_enc) << 18);
 
+	if (dsc->mdss_major_ver >= 10 && dsc->bits_per_component > 8)
+		data |= BIT(12);
+
 	DPU_REG_WRITE(hw, sblk->enc.base + ENC_DF_CTRL, data);
 
 	data = (dsc->dsc_version_minor & 0xf) << 28;
@@ -232,10 +235,10 @@ static void dpu_hw_dsc_config_1_2(struct dpu_hw_dsc *hw_dsc,
 		data |= BIT(12);
 	if (mode & DSC_MODE_MULTIPLEX)
 		data |= BIT(13);
-	if (!(mode & DSC_MODE_VIDEO))
-		data |= BIT(17);
 
 	DPU_REG_WRITE(hw, sblk->ctl.base + DSC_CFG, data);
+
+	wmb(); /* ensure the register is committed */
 }
 
 static void dpu_hw_dsc_config_thresh_1_2(struct dpu_hw_dsc *hw_dsc,
