@@ -267,6 +267,8 @@ struct drm_dsc_config {
 	 * Offset adjustment for second line in Native 4:2:0 mode
 	 */
 	u16 second_line_offset_adj;
+
+	u8 mdss_major_ver;
 };
 
 /**
