@@ -707,8 +707,11 @@ static int oneplus_aa601_probe(struct mipi_dsi_device *dsi)
 	mipi_dsi_set_drvdata(dsi, ctx);
 
 	dsi->lanes = 4;
-	dsi->format = MIPI_DSI_FMT_RGB101010;
-	dsi->mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS;
+	dsi->format = MIPI_DSI_FMT_RGB888;
+	dsi->mode_flags = MIPI_DSI_MODE_VIDEO_BURST |
+			  MIPI_DSI_MODE_NO_EOT_PACKET |
+			  MIPI_DSI_CLOCK_NON_CONTINUOUS |
+			  MIPI_DSI_MODE_DSC_ALL_SLICES_IN_PKT;
 
 	ctx->panel.prepare_prev_first = true;
 
@@ -726,12 +729,12 @@ static int oneplus_aa601_probe(struct mipi_dsi_device *dsi)
 
 	ctx->dsc.slice_height = 22;
 	ctx->dsc.slice_width = 636;
-	ctx->dsi->dsc_slice_per_pkt = 2;
 	ctx->dsc.slice_count = 2;
-	ctx->dsc.convert_rgb = true;
+
 	ctx->dsc.bits_per_component = 10;
 	ctx->dsc.bits_per_pixel = 8 << 4; /* 4 fractional bits */
 	ctx->dsc.block_pred_enable = true;
+	// ctx->dsc.native_422 = 1; /* it must be enabled but currently it calls artifacts */
 
 	ret = mipi_dsi_attach(dsi);
 	if (ret < 0) {
