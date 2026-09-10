@@ -258,5 +258,6 @@ extern const struct ipa_data ipa_data_v5_2;
 extern const struct ipa_data ipa_data_v5_5;
 extern const struct ipa_data ipa_data_v5_5_sm8750;
 extern const struct ipa_data ipa_data_v5_5_kaanapali;
+extern const struct ipa_data ipa_data_v6_0;
 
 #endif /* _IPA_DATA_H_ */
