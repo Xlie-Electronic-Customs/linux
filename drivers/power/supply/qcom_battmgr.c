@@ -1662,8 +1662,6 @@ static void qcom_battmgr_notification(struct qcom_battmgr *battmgr,
 		break;
         case NOTIF_TYPEC_STATE_CHANGE:
         case NOTIF_PLUGIN_IRQ:
-                power_supply_changed(battmgr->usb_psy);
-                power_supply_changed(battmgr->bat_psy);
                 /*
                  * The ADSP may not have updated USB_ONLINE yet, so the
                  * above notifications may carry stale data.  Schedule
@@ -1676,8 +1674,8 @@ static void qcom_battmgr_notification(struct qcom_battmgr *battmgr,
                  * interfere with PD negotiation.  The recheck worker
                  * resets the flag only when USB_ONLINE actually goes 0.
                  */
-                mod_delayed_work(system_wq, &battmgr->voocphy_recheck_work,
-                                 msecs_to_jiffies(500));
+                // mod_delayed_work(system_wq, &battmgr->voocphy_recheck_work,
+                //                  msecs_to_jiffies(500));
                 break;
         case NOTIF_CHG_STATUS_GET:
                 /*
@@ -1689,7 +1687,7 @@ static void qcom_battmgr_notification(struct qcom_battmgr *battmgr,
                 break;
         case NOTIF_CHG_STATUS_SET:
         case NOTIF_CP_MOS_DISABLE:
-                power_supply_changed(battmgr->bat_psy);
+                // power_supply_changed(battmgr->bat_psy);
                 break;
         case NOTIF_ADSP_SUSPEND_CHG:
                 /* ADSP tells AP to suspend charging */
@@ -1706,26 +1704,28 @@ static void qcom_battmgr_notification(struct qcom_battmgr *battmgr,
                 break;
         case NOTIF_VOOC_VBUS_ADC_ENABLE:
                 dev_info(battmgr->dev, "vooc: VBUS ADC enable (handshake starting)\n");
-                power_supply_changed(battmgr->bat_psy);
+                // power_supply_changed(battmgr->bat_psy);
                 break;
         case NOTIF_PD_SVOOC:
                 dev_info(battmgr->dev, "vooc: PD-SVOOC adapter detected\n");
-                power_supply_changed(battmgr->usb_psy);
+                // power_supply_changed(battmgr->usb_psy);
                 break;
         case NOTIF_VOOC_CHG_PUMP_0:
         case NOTIF_VOOC_CHG_PUMP_1:
                 dev_dbg(battmgr->dev, "vooc: charge pump event %#x\n", notification);
-                power_supply_changed(battmgr->bat_psy);
+                // power_supply_changed(battmgr->bat_psy);
                 break;
 	case BC_OTG_ENABLE:
 		oplus_set_otg_ovp_en_val(battmgr, 1);
 		oplus_set_otg_boost_en_val(battmgr, 1);
 		battmgr->otg_enabled = true;
+		power_supply_changed(battmgr->usb_psy);
 		break;
 	case BC_OTG_DISABLE:
 		oplus_set_otg_ovp_en_val(battmgr, 0);
 		oplus_set_otg_boost_en_val(battmgr, 0);
 		battmgr->otg_enabled = false;
+		power_supply_changed(battmgr->usb_psy);
 		break;
 	default:
 		dev_err(battmgr->dev, "unknown notification: %#x\n", notification);
@@ -2197,7 +2197,7 @@ static void qcom_battmgr_voocphy_status_worker(struct work_struct *work)
                 battmgr->last_configured_adap_type = -1;
         }
 
-        power_supply_changed(battmgr->bat_psy);
+        // power_supply_changed(battmgr->bat_psy);
 }
 
 /*
@@ -2497,8 +2497,6 @@ static void qcom_battmgr_voocphy_recheck(struct work_struct *work)
                         battmgr->vooc_limits_set = false;
                         battmgr->adsp_suspended_chg = false;
                         battmgr->last_configured_adap_type = -1;
-                        power_supply_changed(battmgr->usb_psy);
-                        power_supply_changed(battmgr->bat_psy);
                 }
                 goto reschedule;
         }
