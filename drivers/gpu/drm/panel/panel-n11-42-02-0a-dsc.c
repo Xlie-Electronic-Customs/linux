@@ -34,11 +34,11 @@ struct n11_42_02_0a_dsc *to_n11_42_02_0a_dsc(struct drm_panel *panel)
 static void n11_42_02_0a_dsc_reset(struct n11_42_02_0a_dsc *ctx)
 {
 	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
-	usleep_range(11000, 12000);
+	usleep_range(11000, 11100);
 	gpiod_set_value_cansleep(ctx->reset_gpio, 0);
-	usleep_range(1000, 2000);
+	usleep_range(1000, 1100);
 	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
-	usleep_range(11000, 12000);
+	usleep_range(11000, 11100);
 }
 
 static int n11_42_02_0a_dsc_on(struct n11_42_02_0a_dsc *ctx)
@@ -237,6 +237,9 @@ static int n11_42_02_0a_dsc_on(struct n11_42_02_0a_dsc *ctx)
 				     0x10);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x6f, 0x02);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xe4, 0x00, 0x00);
+	mipi_dsi_dcs_exit_sleep_mode_multi(&dsi_ctx);
+	mipi_dsi_msleep(&dsi_ctx, 120);
+	mipi_dsi_dcs_set_display_on_multi(&dsi_ctx);
 
 	return dsi_ctx.accum_err;
 }
@@ -269,20 +272,6 @@ static int n11_42_02_0a_dsc_prepare(struct drm_panel *panel)
 		gpiod_set_value_cansleep(ctx->reset_gpio, 1);
 		return ret;
 	}
-
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x2f, 0x02);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, MIPI_DCS_SET_GAMMA_CURVE, 0x02);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x8b, 0x00);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0,
-				     0x55, 0xaa, 0x52, 0x08, 0x00);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x6f, 0x03);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc0, 0x10);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x6f, 0x31);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xdf, 0x21);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0,
-				     0x55, 0xaa, 0x52, 0x08, 0x02);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xcc, 0x30);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xce, 0x01);
 
 	drm_dsc_pps_payload_pack(&pps, &ctx->dsc);
 
@@ -423,8 +412,8 @@ static int n11_42_02_0a_dsc_probe(struct mipi_dsi_device *dsi)
 	dsi->lanes = 4;
 	dsi->format = MIPI_DSI_FMT_RGB888;
 	dsi->mode_flags = MIPI_DSI_MODE_VIDEO_BURST |
-			  MIPI_DSI_CLOCK_NON_CONTINUOUS | MIPI_DSI_MODE_LPM;
-
+			  MIPI_DSI_CLOCK_NON_CONTINUOUS | MIPI_DSI_MODE_LPM |
+			  MIPI_DSI_MODE_DSC_ALL_SLICES_IN_PKT;
 	ctx->panel.prepare_prev_first = true;
 
 	ctx->panel.backlight = n11_42_02_0a_dsc_create_backlight(dsi);
