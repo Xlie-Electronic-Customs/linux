@@ -904,46 +904,46 @@
 	};
 };
 
-// &mdss {
-// 	status = "okay";
-// };
-//
-// &mdss_dsi0 {
-// 	vdda-supply = <&vreg_l3e_1p2>;
-// 	status = "okay";
-//
-// 	panel@0 {
-// 		compatible = "mdss,n11-42-02-0a-dsc";
-// 		reg = <0>;
-//
-// 		pinctrl-names = "default", "sleep";
-// 		pinctrl-0 = <&sde_dsi_active>, <&sde_te>;
-// 		pinctrl-1 = <&sde_dsi_suspend>, <&sde_te>;
-//
-// 		vddio-supply = <&vreg_l12b_1p8>;
-// 		vci-supply = <&vreg_l13b_3p0>;
-// 		vdd-supply = <&vreg_l11b_1p2>;
-//
-// 		reset-gpios = <&tlmm 133 GPIO_ACTIVE_HIGH>;
-// 		te-gpios = <&tlmm 86 GPIO_ACTIVE_HIGH>;
-//
-// 		port {
-// 			panel0_in: endpoint {
-// 				remote-endpoint = <&mdss_dsi0_out>;
-// 			};
-// 		};
-// 	};
-// };
-//
-// &mdss_dsi0_out {
-// 	remote-endpoint = <&panel0_in>;
-// 	data-lanes = <0 1 2 3>;
-// };
-//
-// &mdss_dsi0_phy {
-// 	vdds-supply = <&vreg_l1e_0p88>;
-// 	status = "okay";
-// };
+&mdss {
+	status = "okay";
+};
+
+&mdss_dsi0 {
+	vdda-supply = <&vreg_l3e_1p2>;
+	status = "okay";
+
+	panel@0 {
+		compatible = "mdss,n11-42-02-0a-dsc";
+		reg = <0>;
+
+		pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&sde_dsi_active>, <&sde_te>;
+		pinctrl-1 = <&sde_dsi_suspend>, <&sde_te>;
+
+		vddio-supply = <&vreg_l12b_1p8>;
+		vci-supply = <&vreg_l13b_3p0>;
+		vdd-supply = <&vreg_l11b_1p2>;
+
+		reset-gpios = <&tlmm 133 GPIO_ACTIVE_HIGH>;
+		te-gpios = <&tlmm 86 GPIO_ACTIVE_HIGH>;
+
+		port {
+			panel0_in: endpoint {
+				remote-endpoint = <&mdss_dsi0_out>;
+			};
+		};
+	};
+};
+
+&mdss_dsi0_out {
+	remote-endpoint = <&panel0_in>;
+	data-lanes = <0 1 2 3>;
+};
+
+&mdss_dsi0_phy {
+	vdds-supply = <&vreg_l1e_0p88>;
+	status = "okay";
+};
 
 
 &pcie0 {
@@ -1305,5 +1305,5 @@
 
 
 &dispcc {
-	status = "disabled";
+	status = "okay";
 };
