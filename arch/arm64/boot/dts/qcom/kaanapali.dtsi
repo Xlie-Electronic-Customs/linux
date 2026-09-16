@@ -2798,14 +2798,14 @@
 				opp-191000000 {
 					opp-hz = /bits/ 64 <191000000>;
 					opp-level = <RPMH_REGULATOR_LEVEL_LOW_SVS_D2_1>;
-					opp-peak-kBps = <2136718>;
+					opp-peak-kBps = <5285156>;
 					opp-supported-hw = <0xf>;
 				};
 
 				opp-222000000 {
 					opp-hz = /bits/ 64 <222000000>;
 					opp-level = <RPMH_REGULATOR_LEVEL_LOW_SVS_D2>;
-					opp-peak-kBps = <2136718>;
+					opp-peak-kBps = <5285156>;
 					opp-supported-hw = <0xf>;
 				};
 
@@ -2836,7 +2836,7 @@
 				opp-422000000 {
 					opp-hz = /bits/ 64 <422000000>;
 					opp-level = <RPMH_REGULATOR_LEVEL_LOW_SVS>;
-					opp-peak-kBps = <5285156>;
+					opp-peak-kBps = <6074218>;
 					qcom,opp-acd-level = <0xa22c5ffd>;
 					opp-supported-hw = <0xf>;
 				};
