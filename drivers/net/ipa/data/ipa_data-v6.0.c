@@ -187,16 +187,16 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 static const struct ipa_resource ipa_resource_src[] = {
 	[IPA_RESOURCE_TYPE_SRC_PKT_CONTEXTS] = {
 		.limits[IPA_RSRC_GROUP_SRC_UL] = {
-			.min = 3,	.max = 9,
+			.min = 3,	.max = 13,
 		},
 		.limits[IPA_RSRC_GROUP_SRC_DL] = {
-			.min = 4,	.max = 10,
+			.min = 4,	.max = 14,
 		},
 		.limits[IPA_RSRC_GROUP_SRC_URLLC] = {
-			.min = 1,	.max = 63,
+			.min = 2,	.max = 63,
 		},
 		.limits[IPA_RSRC_GROUP_SRC_U_RX_QC] = {
-			.min = 0,	.max = 63,
+			.min = 1,	.max = 1,
 		},
 	},
 	[IPA_RESOURCE_TYPE_SRC_DESCRIPTOR_LISTS] = {
@@ -209,6 +209,9 @@ static const struct ipa_resource ipa_resource_src[] = {
 		.limits[IPA_RSRC_GROUP_SRC_URLLC] = {
 			.min = 10,	.max = 10,
 		},
+		.limits[IPA_RSRC_GROUP_SRC_U_RX_QC] = {
+			.min = 1,	.max = 1,
+		},
 	},
 	[IPA_RESOURCE_TYPE_SRC_DESCRIPTOR_BUFF] = {
 		.limits[IPA_RSRC_GROUP_SRC_UL] = {
@@ -219,6 +222,9 @@ static const struct ipa_resource ipa_resource_src[] = {
 		},
 		.limits[IPA_RSRC_GROUP_SRC_URLLC] = {
 			.min = 20,	.max = 20,
+		},
+		.limits[IPA_RSRC_GROUP_SRC_U_RX_QC] = {
+			.min = 1,	.max = 1,
 		},
 	},
 	[IPA_RESOURCE_TYPE_SRC_HPS_DMARS] = {
@@ -245,6 +251,9 @@ static const struct ipa_resource ipa_resource_src[] = {
 		.limits[IPA_RSRC_GROUP_SRC_URLLC] = {
 			.min = 16,	.max = 16,
 		},
+		.limits[IPA_RSRC_GROUP_SRC_U_RX_QC] = {
+			.min = 1,	.max = 1,
+		},
 	},
 };
 
@@ -258,7 +267,7 @@ static const struct ipa_resource ipa_resource_dst[] = {
 			.min = 5,	.max = 5,
 		},
 		.limits[IPA_RSRC_GROUP_DST_DRB_IP] = {
-			.min = 39,	.max = 39,
+			.min = 37,	.max = 37,
 		},
 	},
 	[IPA_RESOURCE_TYPE_DST_DPS_DMARS] = {
