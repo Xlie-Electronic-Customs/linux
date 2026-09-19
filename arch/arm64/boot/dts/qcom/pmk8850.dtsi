@@ -66,5 +66,10 @@
 				bits = <1 7>;
 			};
 		};
+
+		pmk8850_sdam_46: sdam@9d00 {
+			compatible = "qcom,spmi-sdam";
+			reg = <0x9d00>;
+		};
 	};
 };
