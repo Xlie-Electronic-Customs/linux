@@ -944,18 +944,13 @@
 };
 
 &gpu_zap_shader {
-	/*
-	 * Enable zap PAS (stock qcom_mdt_load + pas_auth_and_reset). The SEA
-	 * on dma_alloc_coherent(__scm->dev) was fixed by Mu-Silicium EFI
-	 * memory-map Reserv carveouts (not by use_tzmem). SECVID_TRUST_CNTL=0
-	 * alone is ignored by TZ → hangcheck 00880005 without zap.
-	 * gpu_microcode_mem is 8 KiB (same as canoe.dtsi); LOAD segment of
-	 * Infiniti zap is ~1 KiB — no enlarge needed.
-	 * Blob: qcom/kaanapali/OnePlus/Infiniti/gen80200_zap.mbn
-	 * sha256 fc6e4d0d0cd7269b7a03c44d07dde677621c0a8d566c6b94fc20860f2e714b0b
-	 */
 	status = "okay";
-	firmware-name = "qcom/kaanapali/gen80200_zap.mbn";
+	firmware-name = "qcom/kaanapali/OnePlus/Infiniti/gen80200_zap.mbn";
+};
+
+&iris {
+	status = "okay";
+	firmware-name = "qcom/kaanapali/OnePlus/Infiniti/vpu40_2v.mbn";
 };
 
 &spi19 {
