@@ -8,6 +8,10 @@
 #include <dt-bindings/arm/qcom,ids.h>
 #include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
+#include <dt-bindings/iio/qcom,spmi-adc7-pm8350.h>
+#include <dt-bindings/iio/qcom,spmi-adc7-pm8350b.h>
+#include <dt-bindings/iio/qcom,spmi-adc7-pmk8350.h>
+#include <dt-bindings/iio/qcom,spmi-adc7-pmr735a.h>
 #include <dt-bindings/leds/common.h>
 #include <dt-bindings/media/video-interfaces.h>
 
@@ -780,6 +784,128 @@
 
 &pmk8350_sdam_2 {
 	status = "okay";
+
+	hap_cl_brake: cl_brake@7c {
+		reg = <0x7c 0x1>;
+		bits = <0 8>;
+	};
+};
+
+&pm8350b_haptics {
+	nvmem-cell-names = "hap_cl_brake";
+	nvmem-cells = <&hap_cl_brake>;
+	nvmem-names = "hap_cfg_sdam";
+	nvmem = <&pmk8350_sdam_46>;
+	qcom,pbs-client = <&pm8350b_pbs2>;
+
+	qcom,vmax-mv = <1680>;
+	qcom,cl-vmax-mv = <1680>;
+	qcom,lra-period-us = <5882>;
+	qcom,fifo-vmax-mv = <8500>;
+	qcom,old-steady-vmax-mv = <8500>;
+	qcom,cal-data-restore;
+	qcom,fifo-empty-threshold = <480>;
+	//#endif
+	qcom,vibrator-type = <8151>;//sla0815
+
+	qcom,fifo-vmax-mv = <8700>;
+	qcom,old-steady-vmax-mv = <8700>;//8.7v
+
+	status = "okay";
+};
+
+&pmk8350_vadc {
+	status = "okay";
+
+	channel@3 {
+		reg = <PMK8350_ADC7_DIE_TEMP>;
+		label = "pmk8350_die_temp";
+	};
+
+	channel@44 {
+		reg = <PMK8350_ADC7_AMUX_THM1_100K_PU>;
+		qcom,hw-settle-time = <200>;
+		qcom,ratiometric;
+		label = "pmk8350_xo_therm";
+	};
+
+	channel@103 {
+		reg = <PM8350_ADC7_DIE_TEMP(1)>;
+		label = "pm8350_die_temp";
+	};
+
+	channel@144 {
+		reg = <PM8350_ADC7_AMUX_THM1_100K_PU(1)>;
+		qcom,hw-settle-time = <200>;
+		qcom,ratiometric;
+		label = "skin_msm_temp";
+	};
+
+	channel@145 {
+		reg = <PM8350_ADC7_AMUX_THM2_100K_PU(1)>;
+		qcom,hw-settle-time = <200>;
+		qcom,ratiometric;
+		label = "camera_temp";
+	};
+
+	channel@146 {
+		reg = <PM8350_ADC7_AMUX_THM3_100K_PU(1)>;
+		qcom,hw-settle-time = <200>;
+		qcom,ratiometric;
+		label = "therm1_temp";
+	};
+
+	channel@147 {
+		reg = <PM8350_ADC7_AMUX_THM4_100K_PU(1)>;
+		qcom,hw-settle-time = <200>;
+		qcom,ratiometric;
+		label = "wide_rfc_temp";
+	};
+
+	channel@148 {
+		reg = <PM8350_ADC7_AMUX_THM5_100K_PU(1)>;
+		qcom,hw-settle-time = <200>;
+		qcom,ratiometric;
+		label = "rear_tof_temp";
+	};
+
+	channel@14c {
+		reg = <PM8350_ADC7_GPIO3_100K_PU(1)>;
+		qcom,hw-settle-time = <200>;
+		qcom,ratiometric;
+		label = "therm2_temp";
+	};
+
+	channel@303 {
+		reg = <PM8350B_ADC7_DIE_TEMP>;
+		label = "pm8350b_die_temp";
+	};
+
+	channel@348 {
+		reg = <PM8350B_ADC7_AMUX_THM5_100K_PU>;
+		qcom,hw-settle-time = <200>;
+		qcom,ratiometric;
+		label = "usb_conn_temp";
+	};
+
+	channel@403 {
+		reg = <PMR735A_ADC7_DIE_TEMP>;
+		label = "pmr735a_die_temp";
+	};
+
+	channel@44a {
+		reg = <PMR735A_ADC7_GPIO1_100K_PU>;
+		qcom,hw-settle-time = <200>;
+		qcom,ratiometric;
+		label = "qtm_w_temp";
+	};
+
+	channel@44b {
+		reg = <PMR735A_ADC7_GPIO2_100K_PU>;
+		qcom,hw-settle-time = <200>;
+		qcom,ratiometric;
+		label = "qtm_n_temp";
+	};
 };
 
 &pon_pwrkey {
