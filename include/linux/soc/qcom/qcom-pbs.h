@@ -10,21 +10,23 @@
 #include <linux/types.h>
 
 struct device_node;
-struct pbs_dev;
 
 #if IS_ENABLED(CONFIG_QCOM_PBS)
-int qcom_pbs_trigger_event(struct pbs_dev *pbs, u8 bitmap);
-struct pbs_dev *get_pbs_client_device(struct device *client_dev);
+int qcom_pbs_trigger_event(struct device_node *dev_node, u8 bitmap);
+int qcom_pbs_trigger_single_event(struct device_node *dev_node);
 #else
-static inline int qcom_pbs_trigger_event(struct pbs_dev *pbs, u8 bitmap)
+static inline int qcom_pbs_trigger_event(struct device_node *dev_node,
+					 u8 bitmap)
 {
 	return -ENODEV;
 }
 
-static inline struct pbs_dev *get_pbs_client_device(struct device *client_dev)
+static inline int qcom_pbs_trigger_single_event(
+	struct device_node *dev_node)
 {
-	return ERR_PTR(-ENODEV);
+	return -ENODEV;
 }
+
 #endif
 
 #endif
