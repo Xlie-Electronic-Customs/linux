@@ -3,62 +3,189 @@
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include <linux/cleanup.h>
 #include <linux/delay.h>
-#include <linux/err.h>
 #include <linux/module.h>
-#include <linux/of.h>
-#include <linux/platform_device.h>
-#include <linux/of_platform.h>
-#include <linux/regmap.h>
+#include <linux/slab.h>
 #include <linux/spmi.h>
+#include <linux/platform_device.h>
+#include <linux/regmap.h>
+#include <linux/err.h>
+#include <linux/of.h>
 #include <linux/soc/qcom/qcom-pbs.h>
 
 #define PBS_CLIENT_TRIG_CTL		0x42
 #define PBS_CLIENT_SW_TRIG_BIT		BIT(7)
 #define PBS_CLIENT_SCRATCH1		0x50
 #define PBS_CLIENT_SCRATCH2		0x51
-#define PBS_CLIENT_SCRATCH2_ERROR	0xFF
 
-#define RETRIES				2000
-#define DELAY				1100
+static LIST_HEAD(pbs_dev_list);
+static DEFINE_MUTEX(pbs_list_lock);
 
-struct pbs_dev {
+struct qcom_pbs {
+	struct platform_device	*pdev;
 	struct device		*dev;
+	struct device_node	*dev_node;
 	struct regmap		*regmap;
-	struct mutex		lock;
-	struct device_link	*link;
+	struct mutex		pbs_lock;
+	struct list_head	link;
 
 	u32			base;
 };
 
-static int qcom_pbs_wait_for_ack(struct pbs_dev *pbs, u8 bit_pos)
+static int qcom_pbs_read(struct qcom_pbs *pbs, u32 address,
+					u8 *val, int count)
 {
-	unsigned int val;
-	int ret;
+	int rc = 0;
+	struct platform_device *pdev = pbs->pdev;
 
-	ret = regmap_read_poll_timeout(pbs->regmap,  pbs->base + PBS_CLIENT_SCRATCH2,
-				       val, val & BIT(bit_pos), DELAY, DELAY * RETRIES);
+	rc = regmap_bulk_read(pbs->regmap, address, val, count);
+	if (rc)
+		pr_err("Failed to read address=0x%02x sid=0x%02x rc=%d\n",
+			address, to_spmi_device(pdev->dev.parent)->usid, rc);
 
-	if (ret < 0) {
-		dev_err(pbs->dev, "Timeout for PBS ACK/NACK for bit %u\n", bit_pos);
+	return rc;
+}
+
+static int qcom_pbs_write(struct qcom_pbs *pbs, u16 address,
+					u8 *val, int count)
+{
+	int rc = 0;
+	struct platform_device *pdev = pbs->pdev;
+
+	rc = regmap_bulk_write(pbs->regmap, address, val, count);
+	if (rc < 0)
+		pr_err("Failed to write address =0x%02x sid=0x%02x rc=%d\n",
+			  address, to_spmi_device(pdev->dev.parent)->usid, rc);
+	else
+		pr_debug("Wrote 0x%02X to addr 0x%04x\n", *val, address);
+
+	return rc;
+}
+
+static int qcom_pbs_masked_write(struct qcom_pbs *pbs, u16 address,
+						   u8 mask, u8 val)
+{
+	int rc;
+
+	rc = regmap_update_bits(pbs->regmap, address, mask, val);
+	if (rc < 0)
+		pr_err("Failed to write address 0x%04X, rc = %d\n",
+					address, rc);
+	else
+		pr_debug("Wrote 0x%02X to addr 0x%04X\n",
+			val, address);
+
+	return rc;
+}
+
+static struct qcom_pbs *get_pbs_client_node(struct device_node *dev_node)
+{
+	struct qcom_pbs *pbs;
+
+	mutex_lock(&pbs_list_lock);
+	list_for_each_entry(pbs, &pbs_dev_list, link) {
+		if (dev_node == pbs->dev_node) {
+			mutex_unlock(&pbs_list_lock);
+			return pbs;
+		}
+	}
+
+	mutex_unlock(&pbs_list_lock);
+	return ERR_PTR(-EINVAL);
+}
+
+static int qcom_pbs_wait_for_ack(struct qcom_pbs *pbs, u8 bit_pos)
+{
+	int rc = 0;
+	u16 retries = 2000, dly = 1000;
+	u8 val;
+
+	while (retries--) {
+		rc = qcom_pbs_read(pbs, pbs->base +
+					PBS_CLIENT_SCRATCH2, &val, 1);
+		if (rc < 0) {
+			pr_err("Failed to read register %x rc = %d\n",
+						PBS_CLIENT_SCRATCH2, rc);
+			return rc;
+		}
+
+		if (val == 0xFF) {
+			val = 0;
+			/* PBS error - clear SCRATCH2 register */
+			rc = qcom_pbs_write(pbs, pbs->base +
+					PBS_CLIENT_SCRATCH2, &val, 1);
+			if (rc < 0) {
+				pr_err("Failed to clear register %x rc=%d\n",
+						PBS_CLIENT_SCRATCH2, rc);
+				return rc;
+			}
+
+			pr_err("NACK from PBS for bit %d\n", bit_pos);
+			return -EINVAL;
+		}
+
+		if (val & BIT(bit_pos)) {
+			pr_debug("PBS sequence for bit %d executed!\n",
+						 bit_pos);
+			break;
+		}
+
+		usleep_range(dly, dly + 100);
+	}
+
+	if (!retries) {
+		pr_err("Timeout for PBS ACK/NACK for bit %d\n", bit_pos);
 		return -ETIMEDOUT;
 	}
 
-	if (val == PBS_CLIENT_SCRATCH2_ERROR) {
-		ret = regmap_write(pbs->regmap, pbs->base + PBS_CLIENT_SCRATCH2, 0);
-		dev_err(pbs->dev, "NACK from PBS for bit %u\n", bit_pos);
-		return -EINVAL;
-	}
-
-	dev_dbg(pbs->dev, "PBS sequence for bit %u executed!\n", bit_pos);
 	return 0;
 }
 
 /**
- * qcom_pbs_trigger_event() - Trigger the PBS RAM sequence
- * @pbs: Pointer to PBS device
- * @bitmap: bitmap
+ * qcom_pbs_trigger_single_event - trigger PBS sequence which is connected
+ * directly to SW_TRIGGER bit without using bitmap.
+ *
+ * Returns = 0 enable SW_TRIGGER in PBS client successfully.
+ *
+ * Returns < 0 for errors.
+ *
+ * This function is used to trigger the PBS that is hooked on the
+ * SW_TRIGGER directly in PBS client.
+ */
+int qcom_pbs_trigger_single_event(struct device_node *dev_node)
+{
+	struct qcom_pbs *pbs_dev;
+	int rc;
+
+	if (!dev_node)
+		return -EINVAL;
+
+	pbs_dev = get_pbs_client_node(dev_node);
+	if (IS_ERR(pbs_dev)) {
+		rc = PTR_ERR(pbs_dev);
+		pr_err("Unable to find the PBS dev_node, rc=%d\n", rc);
+		return rc;
+	}
+
+	mutex_lock(&pbs_dev->pbs_lock);
+	rc = qcom_pbs_masked_write(pbs_dev, pbs_dev->base +
+				PBS_CLIENT_TRIG_CTL, PBS_CLIENT_SW_TRIG_BIT,
+				PBS_CLIENT_SW_TRIG_BIT);
+	if (rc < 0)
+		pr_err("Failed to write register %x rc=%d\n",
+				PBS_CLIENT_TRIG_CTL, rc);
+	mutex_unlock(&pbs_dev->pbs_lock);
+
+	return rc;
+}
+EXPORT_SYMBOL(qcom_pbs_trigger_single_event);
+
+/**
+ * qcom_pbs_trigger_event - Trigger the PBS RAM sequence
+ *
+ * Returns = 0 If the PBS RAM sequence executed successfully.
+ *
+ * Returns < 0 for errors.
  *
  * This function is used to trigger the PBS RAM sequence to be
  * executed by the client driver.
@@ -69,160 +196,185 @@ static int qcom_pbs_wait_for_ack(struct pbs_dev *pbs, u8 bit_pos)
  * 3. Checking the equivalent bit in PBS_CLIENT_SCRATCH2 for the
  *    completion of the sequence.
  * 4. If PBS_CLIENT_SCRATCH2 == 0xFF, the PBS sequence failed to execute
- *
- * Return: 0 on success, < 0 on failure
  */
-int qcom_pbs_trigger_event(struct pbs_dev *pbs, u8 bitmap)
+int qcom_pbs_trigger_event(struct device_node *dev_node, u8 bitmap)
 {
-	unsigned int val;
-	u16 bit_pos;
-	int ret;
+	struct qcom_pbs *pbs;
+	int rc = 0;
+	u16 bit_pos = 0;
+	u8 val, mask  = 0;
 
-	if (WARN_ON(!bitmap))
+	if (!dev_node)
 		return -EINVAL;
 
-	if (IS_ERR_OR_NULL(pbs))
+	if (!bitmap) {
+		pr_err("Invalid bitmap passed by client\n");
 		return -EINVAL;
+	}
 
-	guard(mutex)(&pbs->lock);
-	ret = regmap_read(pbs->regmap, pbs->base + PBS_CLIENT_SCRATCH2, &val);
-	if (ret < 0)
-		return ret;
+	pbs = get_pbs_client_node(dev_node);
+	if (IS_ERR_OR_NULL(pbs)) {
+		pr_err("Unable to find the PBS dev_node\n");
+		return -EINVAL;
+	}
 
-	if (val == PBS_CLIENT_SCRATCH2_ERROR) {
+	mutex_lock(&pbs->pbs_lock);
+	rc = qcom_pbs_read(pbs, pbs->base + PBS_CLIENT_SCRATCH2, &val, 1);
+	if (rc < 0) {
+		pr_err("read register %x failed rc = %d\n",
+					PBS_CLIENT_SCRATCH2, rc);
+		goto out;
+	}
+
+	if (val == 0xFF) {
+		val = 0;
 		/* PBS error - clear SCRATCH2 register */
-		ret = regmap_write(pbs->regmap, pbs->base + PBS_CLIENT_SCRATCH2, 0);
-		if (ret < 0)
-			return ret;
+		rc = qcom_pbs_write(pbs, pbs->base + PBS_CLIENT_SCRATCH2, &val,
+				    1);
+		if (rc < 0) {
+			pr_err("Failed to clear register %x rc=%d\n",
+						PBS_CLIENT_SCRATCH2, rc);
+			goto out;
+		}
 	}
 
 	for (bit_pos = 0; bit_pos < 8; bit_pos++) {
-		if (!(bitmap & BIT(bit_pos)))
-			continue;
+		if (bitmap & BIT(bit_pos)) {
+			/*
+			 * Clear the PBS sequence bit position in
+			 * PBS_CLIENT_SCRATCH2 mask register.
+			 */
+			rc = qcom_pbs_masked_write(pbs, pbs->base +
+					 PBS_CLIENT_SCRATCH2, BIT(bit_pos), 0);
+			if (rc < 0) {
+				pr_err("Failed to clear %x reg bit rc=%d\n",
+						PBS_CLIENT_SCRATCH2, rc);
+				goto error;
+			}
 
-		/* Clear the PBS sequence bit position */
-		ret = regmap_update_bits(pbs->regmap, pbs->base + PBS_CLIENT_SCRATCH2,
-					 BIT(bit_pos), 0);
-		if (ret < 0)
-			break;
+			/*
+			 * Set the PBS sequence bit position in
+			 * PBS_CLIENT_SCRATCH1 register.
+			 */
+			val = mask = BIT(bit_pos);
+			rc = qcom_pbs_masked_write(pbs, pbs->base +
+						PBS_CLIENT_SCRATCH1, mask, val);
+			if (rc < 0) {
+				pr_err("Failed to set %x reg bit rc=%d\n",
+						PBS_CLIENT_SCRATCH1, rc);
+				goto error;
+			}
 
-		/* Set the PBS sequence bit position */
-		ret = regmap_update_bits(pbs->regmap, pbs->base + PBS_CLIENT_SCRATCH1,
-					 BIT(bit_pos), BIT(bit_pos));
-		if (ret < 0)
-			break;
+			/* Initiate the SW trigger */
+			val = mask = PBS_CLIENT_SW_TRIG_BIT;
+			rc = qcom_pbs_masked_write(pbs, pbs->base +
+						PBS_CLIENT_TRIG_CTL, mask, val);
+			if (rc < 0) {
+				pr_err("Failed to write register %x rc=%d\n",
+						PBS_CLIENT_TRIG_CTL, rc);
+				goto error;
+			}
 
-		/* Initiate the SW trigger */
-		ret = regmap_update_bits(pbs->regmap, pbs->base + PBS_CLIENT_TRIG_CTL,
-					 PBS_CLIENT_SW_TRIG_BIT, PBS_CLIENT_SW_TRIG_BIT);
-		if (ret < 0)
-			break;
+			rc = qcom_pbs_wait_for_ack(pbs, bit_pos);
+			if (rc < 0) {
+				pr_err("Error during wait_for_ack\n");
+				goto error;
+			}
 
-		ret = qcom_pbs_wait_for_ack(pbs, bit_pos);
-		if (ret < 0)
-			break;
+			/*
+			 * Clear the PBS sequence bit position in
+			 * PBS_CLIENT_SCRATCH1 register.
+			 */
+			rc = qcom_pbs_masked_write(pbs, pbs->base +
+					PBS_CLIENT_SCRATCH1, BIT(bit_pos), 0);
+			if (rc < 0) {
+				pr_err("Failed to clear %x reg bit rc=%d\n",
+						PBS_CLIENT_SCRATCH1, rc);
+				goto error;
+			}
 
-		/* Clear the PBS sequence bit position */
-		regmap_update_bits(pbs->regmap, pbs->base + PBS_CLIENT_SCRATCH1, BIT(bit_pos), 0);
-		regmap_update_bits(pbs->regmap, pbs->base + PBS_CLIENT_SCRATCH2, BIT(bit_pos), 0);
+			/*
+			 * Clear the PBS sequence bit position in
+			 * PBS_CLIENT_SCRATCH2 mask register.
+			 */
+			rc = qcom_pbs_masked_write(pbs, pbs->base +
+					PBS_CLIENT_SCRATCH2, BIT(bit_pos), 0);
+			if (rc < 0) {
+				pr_err("Failed to clear %x reg bit rc=%d\n",
+						PBS_CLIENT_SCRATCH2, rc);
+				goto error;
+			}
+
+		}
 	}
 
+error:
 	/* Clear all the requested bitmap */
-	return regmap_update_bits(pbs->regmap, pbs->base + PBS_CLIENT_SCRATCH1, bitmap, 0);
+	rc = qcom_pbs_masked_write(pbs, pbs->base + PBS_CLIENT_SCRATCH1,
+						bitmap, 0);
+	if (rc < 0)
+		pr_err("Failed to clear %x reg bit rc=%d\n",
+					PBS_CLIENT_SCRATCH1, rc);
+out:
+	mutex_unlock(&pbs->pbs_lock);
+
+	return rc;
 }
-EXPORT_SYMBOL_GPL(qcom_pbs_trigger_event);
-
-/**
- * get_pbs_client_device() - Get the PBS device used by client
- * @dev: Client device
- *
- * This function is used to get the PBS device that is being
- * used by the client.
- *
- * Return: pbs_dev on success, ERR_PTR on failure
- */
-struct pbs_dev *get_pbs_client_device(struct device *dev)
-{
-	struct platform_device *pdev;
-	struct pbs_dev *pbs;
-
-	struct device_node *pbs_dev_node __free(device_node) = of_parse_phandle(dev->of_node,
-										"qcom,pbs", 0);
-	if (!pbs_dev_node) {
-		dev_err(dev, "Missing qcom,pbs property\n");
-		return ERR_PTR(-ENODEV);
-	}
-
-	pdev = of_find_device_by_node(pbs_dev_node);
-	if (!pdev) {
-		dev_err(dev, "Unable to find PBS dev_node\n");
-		return ERR_PTR(-EPROBE_DEFER);
-	}
-
-	pbs = platform_get_drvdata(pdev);
-	if (!pbs) {
-		dev_err(dev, "Cannot get pbs instance from %s\n", dev_name(&pdev->dev));
-		platform_device_put(pdev);
-		return ERR_PTR(-EPROBE_DEFER);
-	}
-
-	pbs->link = device_link_add(dev, &pdev->dev, DL_FLAG_AUTOREMOVE_SUPPLIER);
-	if (!pbs->link) {
-		dev_err(&pdev->dev, "Failed to create device link to consumer %s\n", dev_name(dev));
-		platform_device_put(pdev);
-		return ERR_PTR(-EINVAL);
-	}
-
-	platform_device_put(pdev);
-
-	return pbs;
-}
-EXPORT_SYMBOL_GPL(get_pbs_client_device);
+EXPORT_SYMBOL(qcom_pbs_trigger_event);
 
 static int qcom_pbs_probe(struct platform_device *pdev)
 {
-	struct pbs_dev *pbs;
-	u32 val;
-	int ret;
+	int rc = 0;
+	u32 val = 0;
+	struct qcom_pbs *pbs;
 
 	pbs = devm_kzalloc(&pdev->dev, sizeof(*pbs), GFP_KERNEL);
 	if (!pbs)
 		return -ENOMEM;
 
+	pbs->pdev = pdev;
 	pbs->dev = &pdev->dev;
-	pbs->regmap = dev_get_regmap(pbs->dev->parent, NULL);
+	pbs->dev_node = pdev->dev.of_node;
+	pbs->regmap = dev_get_regmap(pdev->dev.parent, NULL);
 	if (!pbs->regmap) {
-		dev_err(pbs->dev, "Couldn't get parent's regmap\n");
+		dev_err(&pdev->dev, "Couldn't get parent's regmap\n");
 		return -EINVAL;
 	}
 
-	ret = device_property_read_u32(pbs->dev, "reg", &val);
-	if (ret < 0) {
-		dev_err(pbs->dev, "Couldn't find reg, ret = %d\n", ret);
-		return ret;
+	rc = of_property_read_u32(pdev->dev.of_node, "reg", &val);
+	if (rc < 0) {
+		dev_err(&pdev->dev,
+			"Couldn't find reg in node = %s rc = %d\n",
+			pdev->dev.of_node->full_name, rc);
+		return rc;
 	}
-	pbs->base = val;
-	mutex_init(&pbs->lock);
 
-	platform_set_drvdata(pdev, pbs);
+	pbs->base = val;
+	mutex_init(&pbs->pbs_lock);
+
+	dev_set_drvdata(&pdev->dev, pbs);
+
+	mutex_lock(&pbs_list_lock);
+	list_add(&pbs->link, &pbs_dev_list);
+	mutex_unlock(&pbs_list_lock);
 
 	return 0;
 }
 
 static const struct of_device_id qcom_pbs_match_table[] = {
-	{ .compatible = "qcom,pbs" },
+	{ .compatible = "qcom,qcom-pbs" },
 	{}
 };
 MODULE_DEVICE_TABLE(of, qcom_pbs_match_table);
 
 static struct platform_driver qcom_pbs_driver = {
-	.driver = {
-		.name		= "qcom-pbs",
+	.driver	= {
+		.name		= "qcom,qcom-pbs",
 		.of_match_table	= qcom_pbs_match_table,
 	},
-	.probe = qcom_pbs_probe,
+	.probe	= qcom_pbs_probe,
 };
-module_platform_driver(qcom_pbs_driver)
+module_platform_driver(qcom_pbs_driver);
 
 MODULE_DESCRIPTION("QCOM PBS DRIVER");
 MODULE_LICENSE("GPL");
