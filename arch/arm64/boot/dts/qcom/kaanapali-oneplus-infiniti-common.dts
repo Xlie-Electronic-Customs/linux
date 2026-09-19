@@ -235,6 +235,26 @@
 	status = "okay";
 };
 
+&pmih0108_haptics {
+	nvmem-names = "hap_cfg_sdam";
+	nvmem = <&pmk8850_sdam_46>;
+
+	qcom,vmax-mv = <1600>;
+	qcom,cl-vmax-mv = <1700>;
+	qcom,lra-period-us = <7692>;
+	qcom,fifo-vmax-mv = <8300>;
+	qcom,old-steady-vmax-mv = <8300>;
+	qcom,brake-mode = <BRAKE_OPEN_LOOP>;
+	qcom,cal-data-restore;
+	qcom,fifo-empty-threshold = <480>;
+	qcom,vibrator-type = <816>;//0816B
+	qcom,vbat-low-soc = <5>;
+	qcom,vbat-low-soc-cold = <20>;
+	qcom,vbat-low-temp = <(-50)>;/*-5C*/
+	qcom,vbat-low-fifo-vmax-mv = <7055>;
+	oplus,livetap_support;
+};
+
 /*
  * SPMI1 PMICs not present on the Infiniti variant. The downstream canoe DT
  * (a multi-SKU superset) declares pmd8028 @ SID 0x4 and pm8010_n @ SID 0xd, but
@@ -1201,7 +1221,7 @@
 
 &remoteproc_soccp {
 	firmware-name = "soccp.mbn", "soccp_dtb.mbn";
-	status = "disabled";
+	status = "okay";
 };
 
 &i2c0 {
