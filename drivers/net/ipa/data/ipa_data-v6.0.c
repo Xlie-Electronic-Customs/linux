@@ -31,8 +31,8 @@ enum ipa_rsrc_group_id {
 	/* Source resource group identifiers */
 	IPA_RSRC_GROUP_SRC_UL				= 0,
 	IPA_RSRC_GROUP_SRC_DL,
-	IPA_RSRC_GROUP_SRC_UNUSED_2,
-	IPA_RSRC_GROUP_SRC_UNUSED_3,
+	IPA_RSRC_GROUP_SRC_DMA,
+	IPA_RSRC_GROUP_SRC_QDSS,
 	IPA_RSRC_GROUP_SRC_URLLC,
 	IPA_RSRC_GROUP_SRC_U_RX_QC,
 	IPA_RSRC_GROUP_SRC_COUNT,	/* Last in set; not a source group */
@@ -40,10 +40,10 @@ enum ipa_rsrc_group_id {
 	/* Destination resource group identifiers */
 	IPA_RSRC_GROUP_DST_UL				= 0,
 	IPA_RSRC_GROUP_DST_DL,
-	IPA_RSRC_GROUP_DST_DMA,
-	IPA_RSRC_GROUP_DST_QDSS,
-	IPA_RSRC_GROUP_DST_CV2X,
-	IPA_RSRC_GROUP_DST_UC,
+	IPA_RSRC_GROUP_DST_UNUSED_2,
+	IPA_RSRC_GROUP_DST_UNUSED_3,
+	IPA_RSRC_GROUP_DST_UNUSED_4,
+	IPA_RSRC_GROUP_DST_UNUSED_5,
 	IPA_RSRC_GROUP_DST_DRB_IP,
 	IPA_RSRC_GROUP_DST_COUNT,	/* Last; not a destination group */
 };
@@ -67,7 +67,7 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 	[IPA_ENDPOINT_AP_COMMAND_TX] = {
 		.ee_id		= GSI_EE_AP,
 		.channel_id	= 12,
-		.endpoint_id	= 14,
+		.endpoint_id	= 19,
 		.toward_ipa	= true,
 		.channel = {
 			.tre_count	= 256,
@@ -87,8 +87,8 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 	},
 	[IPA_ENDPOINT_AP_LAN_RX] = {
 		.ee_id		= GSI_EE_AP,
-		.channel_id	= 13,
-		.endpoint_id	= 16,
+		.channel_id	= 34,
+		.endpoint_id	= 46,
 		.toward_ipa	= false,
 		.channel = {
 			.tre_count	= 256,
@@ -126,7 +126,7 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 				.qmap		= true,
 				.status_enable	= true,
 				.tx = {
-					.seq_type = IPA_SEQ_2_PASS_SKIP_LAST_UC,
+					.seq_type = 0x1b,
 					.status_endpoint =
 						IPA_ENDPOINT_MODEM_AP_RX,
 				},
@@ -136,7 +136,7 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 	[IPA_ENDPOINT_AP_MODEM_RX] = {
 		.ee_id		= GSI_EE_AP,
 		.channel_id	= 1,
-		.endpoint_id	= 23,
+		.endpoint_id	= 30,
 		.toward_ipa	= false,
 		.channel = {
 			.tre_count	= 256,
@@ -160,7 +160,7 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 	[IPA_ENDPOINT_MODEM_AP_TX] = {
 		.ee_id		= GSI_EE_MODEM,
 		.channel_id	= 0,
-		.endpoint_id	= 12,
+		.endpoint_id	= 17,
 		.toward_ipa	= true,
 		.endpoint = {
 			.filter_support	= true,
@@ -168,14 +168,14 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 	},
 	[IPA_ENDPOINT_MODEM_AP_RX] = {
 		.ee_id		= GSI_EE_MODEM,
-		.channel_id	= 7,
-		.endpoint_id	= 21,
+		.channel_id	= 8,
+		.endpoint_id	= 27,
 		.toward_ipa	= false,
 	},
 	[IPA_ENDPOINT_MODEM_DL_NLO_TX] = {
 		.ee_id		= GSI_EE_MODEM,
 		.channel_id	= 2,
-		.endpoint_id	= 15,
+		.endpoint_id	= 20,
 		.toward_ipa	= true,
 		.endpoint = {
 			.filter_support	= true,
@@ -232,6 +232,12 @@ static const struct ipa_resource ipa_resource_src[] = {
 			.min = 0,	.max = 63,
 		},
 		.limits[IPA_RSRC_GROUP_SRC_DL] = {
+			.min = 0,	.max = 63,
+		},
+		.limits[IPA_RSRC_GROUP_SRC_DMA] = {
+			.min = 0,	.max = 63,
+		},
+		.limits[IPA_RSRC_GROUP_SRC_QDSS] = {
 			.min = 0,	.max = 63,
 		},
 		.limits[IPA_RSRC_GROUP_SRC_URLLC] = {
