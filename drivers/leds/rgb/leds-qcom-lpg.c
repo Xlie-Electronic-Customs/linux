@@ -176,7 +176,6 @@ struct lpg_led {
  * @lut_base:	base address of the LUT block (optional)
  * @lut_size:	number of entries in the LUT block
  * @lut_bitmap:	allocation bitmap for LUT entries
- * @pbs_dev:	PBS device
  * @lpg_chan_sdam:	LPG SDAM peripheral device
  * @lut_sdam:	LUT SDAM peripheral device
  * @pbs_en_bitmap:	bitmap for tracking PBS triggers
@@ -201,7 +200,6 @@ struct lpg {
 	u32 lut_size;
 	unsigned long *lut_bitmap;
 
-	struct pbs_dev *pbs_dev;
 	struct nvmem_device *lpg_chan_sdam;
 	struct nvmem_device *lut_sdam;
 	unsigned long pbs_en_bitmap;
@@ -292,7 +290,7 @@ static int lpg_set_pbs_trigger(struct lpg *lpg, unsigned int lut_mask)
 			if (rc < 0)
 				return rc;
 		} else {
-			rc = qcom_pbs_trigger_event(lpg->pbs_dev, val);
+			rc = qcom_pbs_trigger_event(lpg->dev->of_node, val);
 			if (rc < 0)
 				return rc;
 		}
@@ -1558,13 +1556,7 @@ static int lpg_init_sdam(struct lpg *lpg)
 		return dev_err_probe(lpg->dev, PTR_ERR(lpg->lpg_chan_sdam),
 				"Failed to get LPG chan SDAM device\n");
 
-	if (sdam_count == 1) {
-		/* Get PBS device node if single SDAM device */
-		lpg->pbs_dev = get_pbs_client_device(lpg->dev);
-		if (IS_ERR(lpg->pbs_dev))
-			return dev_err_probe(lpg->dev, PTR_ERR(lpg->pbs_dev),
-					"Failed to get PBS client device\n");
-	} else if (sdam_count == 2) {
+	if (sdam_count == 2) {
 		/* Get the 2nd SDAM device for LUT pattern */
 		lpg->lut_sdam = devm_nvmem_device_get(lpg->dev, "lut_sdam");
 		if (IS_ERR(lpg->lut_sdam))
