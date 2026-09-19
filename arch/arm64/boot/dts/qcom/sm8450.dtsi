@@ -3249,14 +3249,18 @@
 			};
 		};
 
-		venus: video-codec@aa00000 {
-			compatible = "qcom,sm8250-venus";
+		iris: video-codec@aa00000 {
+			compatible = "qcom,sm8450-venus";
 			reg = <0 0x0aa00000 0 0xf0000>;
 			interrupts = <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>;
 			power-domains = <&videocc VIDEO_CC_MVS0C_GDSC>,
 					<&videocc VIDEO_CC_MVS0_GDSC>,
-					<&rpmhpd RPMHPD_MX>;
-			power-domain-names = "venus", "vcodec0", "mx";
+					<&rpmhpd RPMHPD_MX>,
+					<&rpmhpd RPMHPD_MMCX>;
+			power-domain-names = "venus",
+					     "vcodec0",
+					     "mx",
+					     "mmcx";
 			operating-points-v2 = <&venus_opp_table>;
 
 			clocks = <&gcc GCC_VIDEO_AXI0_CLK>,
@@ -3264,11 +3268,12 @@
 				 <&videocc VIDEO_CC_MVS0_CLK>;
 			clock-names = "iface", "core", "vcodec0_core";
 
-			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ALWAYS &config_noc SLAVE_VENUS_CFG QCOM_ICC_TAG_ALWAYS>,
-					<&mmss_noc MASTER_VIDEO QCOM_ICC_TAG_ALWAYS &mc_virt SLAVE_LLCC QCOM_ICC_TAG_ALWAYS>;
+			interconnects = <&gem_noc MASTER_APPSS_PROC 0 &config_noc SLAVE_VENUS_CFG 0>,
+					<&mmss_noc MASTER_VIDEO 0 &gem_noc SLAVE_LLCC 0>;
 			interconnect-names = "cpu-cfg", "video-mem";
 
-			iommus = <&apps_smmu 0x2180 0x0400>;
+			iommus = <&apps_smmu 0x2180 0x0400>,
+			 <&apps_smmu 0x2187 0x400>;
 			memory-region = <&video_mem>;
 
 			resets = <&gcc GCC_VIDEO_AXI0_CLK_ARES>,
@@ -3281,7 +3286,7 @@
 				compatible = "operating-points-v2";
 
 				opp-240000000 {
-					opp-hz = /bits/ 64 <240000000>;
+					opp-hz = /bits/ 64 <239999999>;
 					required-opps = <&rpmhpd_opp_svs>,
 							<&rpmhpd_opp_low_svs>;
 				};
@@ -3294,7 +3299,7 @@
 
 				opp-366000000 {
 					opp-hz = /bits/ 64 <366000000>;
-					required-opps = <&rpmhpd_opp_svs>,
+					required-opps = <&rpmhpd_opp_svs_l1>,
 							<&rpmhpd_opp_svs_l1>;
 				};
 
