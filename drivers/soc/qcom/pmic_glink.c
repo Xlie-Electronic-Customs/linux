@@ -21,6 +21,7 @@ enum {
 	PMIC_GLINK_CLIENT_BATT = 0,
 	PMIC_GLINK_CLIENT_ALTMODE,
 	PMIC_GLINK_CLIENT_UCSI,
+	OPLUS_PMIC_GLINK_CLIENT_BATT,
 };
 
 struct pmic_glink_data {
@@ -341,6 +342,12 @@ static int pmic_glink_probe(struct platform_device *pdev)
 			goto out_release_altmode_aux;
 	}
 
+	else if (pg->data->client_mask & BIT(OPLUS_PMIC_GLINK_CLIENT_BATT)) {
+		ret = pmic_glink_add_aux_device(pg, &pg->ps_aux, "oplus-power-supply");
+		if (ret)
+			goto out_release_altmode_aux;
+	}
+
 	if (pg->data->charger_pdr_service_name && pg->data->charger_pdr_service_path) {
 		service = pdr_add_lookup(pg->pdr, pg->data->charger_pdr_service_name,
 					 pg->data->charger_pdr_service_path);
@@ -358,7 +365,7 @@ static int pmic_glink_probe(struct platform_device *pdev)
 	return 0;
 
 out_release_aux_devices:
-	if (pg->data->client_mask & BIT(PMIC_GLINK_CLIENT_BATT))
+	if (pg->data->client_mask & BIT(PMIC_GLINK_CLIENT_BATT) || pg->data->client_mask & BIT(OPLUS_PMIC_GLINK_CLIENT_BATT))
 		pmic_glink_del_aux_device(pg, &pg->ps_aux);
 out_release_altmode_aux:
 	if (pg->data->client_mask & BIT(PMIC_GLINK_CLIENT_ALTMODE))
@@ -378,7 +385,7 @@ static void pmic_glink_remove(struct platform_device *pdev)
 
 	pdr_handle_release(pg->pdr);
 
-	if (pg->data->client_mask & BIT(PMIC_GLINK_CLIENT_BATT))
+	if (pg->data->client_mask & BIT(PMIC_GLINK_CLIENT_BATT) || pg->data->client_mask & BIT(OPLUS_PMIC_GLINK_CLIENT_BATT))
 		pmic_glink_del_aux_device(pg, &pg->ps_aux);
 	if (pg->data->client_mask & BIT(PMIC_GLINK_CLIENT_ALTMODE))
 		pmic_glink_del_aux_device(pg, &pg->altmode_aux);
@@ -403,10 +410,27 @@ static const struct pmic_glink_data pmic_glink_soccp_data = {
 		       BIT(PMIC_GLINK_CLIENT_UCSI),
 };
 
+static const struct pmic_glink_data oplus_pmic_glink_adsp_data = {
+	.client_mask = BIT(OPLUS_PMIC_GLINK_CLIENT_BATT) |
+		       BIT(PMIC_GLINK_CLIENT_ALTMODE) |
+		       BIT(PMIC_GLINK_CLIENT_UCSI),
+	.charger_pdr_service_name = "tms/servreg",
+	.charger_pdr_service_path = "msm/adsp/charger_pd",
+};
+
+static const struct pmic_glink_data oplus_pmic_glink_soccp_data = {
+	.client_mask = BIT(OPLUS_PMIC_GLINK_CLIENT_BATT) |
+		       BIT(PMIC_GLINK_CLIENT_ALTMODE) |
+		       BIT(PMIC_GLINK_CLIENT_UCSI),
+};
+
 static const struct of_device_id pmic_glink_of_match[] = {
 	{ .compatible = "qcom,glymur-pmic-glink", .data = &pmic_glink_soccp_data },
 	{ .compatible = "qcom,kaanapali-pmic-glink", .data = &pmic_glink_soccp_data },
 	{ .compatible = "qcom,pmic-glink", .data = &pmic_glink_adsp_data },
+	{ .compatible = "oplus,kaanapali-pmic-glink", .data = &oplus_pmic_glink_soccp_data },
+	{ .compatible = "oplus,sm8750-pmic-glink", .data = &oplus_pmic_glink_soccp_data },
+	{ .compatible = "oplus,pmic-glink", .data = &oplus_pmic_glink_adsp_data },
 	{}
 };
 MODULE_DEVICE_TABLE(of, pmic_glink_of_match);
