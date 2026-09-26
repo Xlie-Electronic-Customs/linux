@@ -1038,6 +1038,23 @@
 	};
 };
 
+&pm8550b_haptics {
+	qcom,custom_vmax_mv = <8500>;
+	qcom,f0-vmax-mv = <1400>;
+	qcom,lra-f0-cal-count = <560>;
+	qcom,lra-f0-default = <175>;
+	qcom,lra-f0-max = <185>;
+	qcom,lra-f0-min = <160>;
+	qcom,lra-period-us = <5882>;
+	qcom,lra_calibration_vmax_hdrm_mv = <1000>;
+	qcom,vmax-mv = <1400>;
+
+	nvmem-names = "hap_cfg_sdam";
+	nvmem = <&pmk8550_sdam_46>;
+
+	status = "okay";
+};
+
 &pm8550b_eusb2_repeater {
 	qcom,tune-usb2-preem = /bits/ 8 <0x7>;
 	qcom,tune-usb2-disc-thres = /bits/ 8 <0x7>;
