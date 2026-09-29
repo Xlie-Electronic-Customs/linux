@@ -28,6 +28,16 @@
 #define chg_err(fmt, ...)                                                      \
 	printk(KERN_ERR "[OPLUS_CHG][%s]" fmt, __func__, ##__VA_ARGS__)
 
+#define OPLUS_PD_TYPE_CHECK_INTERVAL round_jiffies_relative(msecs_to_jiffies(1500))
+#define OPLUS_HVDCP_DISABLE_INTERVAL round_jiffies_relative(msecs_to_jiffies(15000))
+#define OPLUS_HVDCP_DETECT_TO_DETACH_TIME 3600
+#define CPU_CLOCK_TIME_MS	1000000
+#define OEM_MISC_CTL_DATA_PAIR(cmd, enable) ((enable ? 0x3 : 0x1) << cmd)
+#define FLASH_SCREEN_CTRL_OTA		0X01
+#define FLASH_SCREEN_CTRL_DTSI	0X02
+#define LCM_CHECK_COUNT  3
+#define CHG_OPS_LEN 64
+
 enum oplus_battmgr_variant {
 	OPLUS_BATTMGR_SM8450,
 	OPLUS_BATTMGR_SM8550,
@@ -275,8 +285,60 @@ struct oplus_ap_read_buffer_resp_msg {
 	u32 data_size;
 };
 
+#define PPS_PDO_MAX 7
+#define PD_PDO_VOL(pdo)           (pdo * 50)
+#define PD_PDO_CURR_MAX(pdo)      (pdo * 10)
+
+typedef union
+{
+	u32 pdo_data;
+	struct {
+		u32 max_current10ma              : 10;    /*bit [ 9: 0]*/
+		u32 voltage50mv                  : 10;    /*bit [19:10]*/
+		u32 peak_current                 : 2;    /*bit [21:20]*/
+		u32                              : 1;    /*bit [22:22]*/
+		u32 epr_mode_capable             : 1;    /*bit [23:23]*/
+		u32 unchunked_ext_msg_supported  : 1;    /*bit [24:24]*/
+		u32 dual_role_data               : 1;    /*bit [25:25]*/
+		u32 usb_comm_capable             : 1;    /*bit [26:26]*/
+		u32 unconstrained_pwer           : 1;    /*bit [27:27]*/
+		u32 usb_suspend_supported        : 1;    /*bit [28:28]*/
+		u32 dual_role_power              : 1;    /*bit [29:29]*/
+		u32 pdo_type                     : 2;    /*bit [31:30]*/
+	};
+} pd_msg_data;
+
+struct oplus_opcode_usb {
+	unsigned int current_limit;
+	bool online;
+	unsigned int usb_type;
+	unsigned int usb_subtype;
+	bool vbus_collapse;
+	unsigned int vooc_status;
+	unsigned int typec_cc_orientation;
+	unsigned int cid_status;
+	unsigned int typec_mode;
+	unsigned int typec_mode_sinkonly;
+	bool otg_vbus;
+	unsigned int chg_param_info
+};
+
+struct oplus_opcode {
+	struct oplus_opcode_usb usb;
+};
+
+struct oplus_battmgr_usb {
+	unsigned int usb_in_status;
+	unsigned int usb_sns_status;
+};
+
 struct battery_chg_dev {
+	struct qcom_battmgr *battmgr;
+
 	enum oplus_battmgr_variant variant;
+
+	struct oplus_opcode oplus;
+	struct oplus_battmgr_usb usb;
 
 	u32 thermal_fcc_ua;
 	u32 restrict_fcc_ua;
@@ -291,18 +353,55 @@ struct battery_chg_dev {
 	int num_thermal_levels;
 	atomic_t state;
 
+
+	int ccdetect_irq;
+	struct work_struct plc_status_update_work;
+	struct delayed_work publish_close_cp_item_work;
+	struct delayed_work suspend_check_work;
+	struct delayed_work adsp_voocphy_status_work;
+	struct delayed_work otg_init_work;
+	struct delayed_work cid_status_change_work;
+	struct delayed_work usbtemp_recover_work;
+	struct delayed_work adsp_crash_recover_work;
+	struct delayed_work crash_track_work;
+	struct delayed_work voocphy_enable_check_work;
+	struct delayed_work otg_vbus_enable_work;
+	struct delayed_work otg_status_check_work;
+	struct delayed_work vbus_adc_enable_work;
+	struct delayed_work plugin_irq_work;
+	struct delayed_work recheck_input_current_work;
+	struct delayed_work unsuspend_usb_work;
+	struct delayed_work oem_lcm_en_check_work;
+	struct delayed_work ctrl_lcm_frequency;
+	struct delayed_work sourcecap_done_work;
+	struct delayed_work pdo_update_work;
+	struct delayed_work sourcecap_suspend_recovery_work;
+	struct delayed_work update_pd_svooc_work;
+	struct delayed_work iterm_timeout_work;
+	struct delayed_work request_qos_work;
+	struct delayed_work release_qos_work;
+	struct work_struct wired_otg_enable_work;
+	struct delayed_work gauge_register_work;
+	struct delayed_work ufcs_reset_work;
+	struct delayed_work update_common_charge_flag_work;
+	struct delayed_work check_abnormal_usbin_status_work;
+	int abnormal_usbin_count;
+	struct delayed_work reverse_chg_svid_check_work;
+	struct delayed_work source_pdo_check_work;
+	bool qos_status;
+	u32 oem_misc_ctl_data;
+	bool oem_usb_online;
+	bool oem_lcm_check;
 	struct delayed_work voocphy_err_work;
 	bool otg_prohibited;
 	bool otg_online;
 	bool is_chargepd_ready;
 	bool pd_svooc;
-
-	bool voocphy_err_check;
-
-
+	bool is_external_chg;
+	// struct oplus_chg_iio iio;
 	unsigned long long hvdcp_detect_time;
 	unsigned long long hvdcp_detach_time;
-	bool hvdcp_detect_ok;
+	bool  hvdcp_detect_ok;
 	bool hvdcp_disable;
 	bool bc12_completed;
 	bool ufcs_test_mode;
@@ -314,6 +413,59 @@ struct battery_chg_dev {
 	bool ufcs_power_info_ready;
 	bool ufcs_vdm_emark_ready;
 	bool ufcs_exiting;
+	bool adapter_verify_auth;
+	bool adspfg_i2c_reset_processing;
+	bool adspfg_i2c_reset_notify_done;
+	struct delayed_work hvdcp_disable_work;
+	struct delayed_work pd_only_check_work;
+	pd_msg_data pdo[PPS_PDO_MAX];
+	bool voocphy_err_check;
+	bool bypass_vooc_support;
+	bool usb_aicl_enhance;
+	bool soccp_support;
+	bool qcom_gauge_cali_track_support;
+	bool fg_register_flag;
+	struct gauge_track_cali_info_s 	*pre_info;
+	struct work_struct gauge_cali_track_by_plug_work;
+	struct work_struct gauge_cali_track_by_full_work;
+	struct mutex pre_info_lock;
+	struct mutex cur_info_lock;
+
+	struct mutex    read_buffer_lock;
+	struct completion    oem_read_ack;
+	struct oem_read_buffer_resp_msg  read_buffer_dump;
+	struct mutex    bcc_read_buffer_lock;
+	struct completion    bcc_read_ack;
+	struct oem_read_buffer_resp_msg  bcc_read_buffer_dump;
+	int otg_scheme;
+	int ffc_full_delta_iterm_ma;
+	int ffc_full_delta_iterm_ma_low;
+	bool common_charge_icl_support;
+	int otg_boost_src;
+	int otg_curr_limit_max;
+	int otg_curr_limit_high;
+	int otg_real_soc_min;
+	int usbtemp_thread_100w_support;
+	struct notifier_block ssr_nb;
+	void *subsys_handle;
+	int usb_in_status;
+	int real_chg_type;
+
+	bool adsp_voocphy_err_check;
+	struct mutex chg_en_lock;
+	bool chg_en;
+	bool cid_status;
+	bool force_svooc;
+
+	struct delayed_work adsp_voocphy_err_work;
+	struct delayed_work pd_type_check_work;
+	bool status_wake_lock_on;
+	bool pd_type_checked;
+
+	bool usbtemp_check;
+
+
+	struct delayed_work update_work;
 
 };
 

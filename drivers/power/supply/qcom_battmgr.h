@@ -142,6 +142,7 @@ struct qcom_battmgr_status {
 	unsigned int percent;
 	int current_now;
 	int power_now;
+	int power_avg;
 	unsigned int voltage_now;
 	unsigned int voltage_ocv;
 	unsigned int temperature;
