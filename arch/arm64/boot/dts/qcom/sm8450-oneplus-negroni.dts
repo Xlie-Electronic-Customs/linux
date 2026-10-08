@@ -742,11 +742,10 @@
 
 &gpu {
 	status = "okay";
+};
 
-	/* fails to load a730_zap.mbn so GPU still works only with a730_zap.mdt */
-	zap-shader {
-		firmware-name = "qcom/sm8450/a730_zap.mdt";
-	};
+&gpu_zap_shader {
+	firmware-name = "qcom/sm8450/OnePlus/Negroni/a730_zap.mdt";
 };
 
 &pcie0 {
@@ -1674,6 +1673,11 @@
 
 &usb_1_qmpphy_out {
 	remote-endpoint = <&pmic_glink_ss_in>;
+};
+
+&iris {
+	status = "okay";
+	firmware-name = "qcom/sm8450/OnePlus/Negroni/vpu20_4v.mbn";
 };
 
 &ipa {
