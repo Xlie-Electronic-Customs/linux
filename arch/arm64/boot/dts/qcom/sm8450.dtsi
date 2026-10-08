@@ -3415,15 +3415,15 @@
 			      <0 0x0acb6000 0 0x1000>,
 			      <0 0x0ace4000 0 0x2000>,
 			      <0 0x0ace6000 0 0x2000>,
-			      <0 0x0ace8000 0 0x1000>,
-			      <0 0x0acea000 0 0x1000>,
-			      <0 0x0acec000 0 0x1000>,
-			      <0 0x0acee000 0 0x1000>,
+			      <0 0x0ace8000 0 0x2000>,
+			      <0 0x0acea000 0 0x2000>,
+			      <0 0x0acec000 0 0x2000>,
+			      <0 0x0acee000 0 0x2000>,
 			      <0 0x0ac62000 0 0xf000>,
 			      <0 0x0ac71000 0 0xf000>,
 			      <0 0x0ac80000 0 0xf000>,
-			      <0 0x0acc6000 0 0x2800>,
-			      <0 0x0acca000 0 0x2800>;
+			      <0 0x0acc7000 0 0x1800>,
+			      <0 0x0accb000 0 0x1800>;
 			reg-names = "csid0",
 				    "csid1",
 				    "csid2",
@@ -3477,7 +3477,13 @@
 
 			power-domains = <&camcc IFE_0_GDSC>,
 					<&camcc IFE_1_GDSC>,
+					<&camcc IFE_2_GDSC>,
 					<&camcc TITAN_TOP_GDSC>;
+
+			power-domain-names = "ife0",
+					     "ife1",
+					     "ife2",
+					     "top";
 
 			clocks = <&camcc CAM_CC_CAMNOC_AXI_CLK>,
 				 <&camcc CAM_CC_CPAS_AHB_CLK>,
@@ -3557,10 +3563,10 @@
 					<&mmss_noc MASTER_CAMNOC_HF QCOM_ICC_TAG_ALWAYS &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>,
 					<&mmss_noc MASTER_CAMNOC_SF QCOM_ICC_TAG_ALWAYS &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>,
 					<&mmss_noc MASTER_CAMNOC_ICP QCOM_ICC_TAG_ALWAYS &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>;
-			interconnect-names = "cam_ahb",
-					     "cam_hf_0_mnoc",
-					     "cam_sf_0_mnoc",
-					     "cam_sf_icp_mnoc";
+			interconnect-names = "ahb",
+					     "hf_mnoc",
+					     "sf_mnoc",
+					     "sf_icp_mnoc";
 
 			ports {
 				#address-cells = <1>;
