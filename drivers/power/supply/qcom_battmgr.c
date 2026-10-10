@@ -158,6 +158,7 @@ int qcom_battmgr_request(struct qcom_battmgr *battmgr, void *data, size_t len)
 
 	return battmgr->error;
 }
+EXPORT_SYMBOL_GPL(qcom_battmgr_request);
 
 int qcom_battmgr_request_property(struct qcom_battmgr *battmgr, int opcode,
 					 int property, u32 value)
@@ -173,6 +174,7 @@ int qcom_battmgr_request_property(struct qcom_battmgr *battmgr, int opcode,
 
 	return qcom_battmgr_request(battmgr, &request, sizeof(request));
 }
+EXPORT_SYMBOL_GPL(qcom_battmgr_request_property);
 
 int qcom_battmgr_update_status(struct qcom_battmgr *battmgr)
 {
@@ -185,6 +187,7 @@ int qcom_battmgr_update_status(struct qcom_battmgr *battmgr)
 
 	return qcom_battmgr_request(battmgr, &request, sizeof(request));
 }
+EXPORT_SYMBOL_GPL(qcom_battmgr_update_status);
 
 int qcom_battmgr_update_info(struct qcom_battmgr *battmgr)
 {
@@ -197,6 +200,7 @@ int qcom_battmgr_update_info(struct qcom_battmgr *battmgr)
 
 	return qcom_battmgr_request(battmgr, &request, sizeof(request));
 }
+EXPORT_SYMBOL_GPL(qcom_battmgr_update_info);
 
 int qcom_battmgr_update_charge_time(struct qcom_battmgr *battmgr)
 {
@@ -210,6 +214,7 @@ int qcom_battmgr_update_charge_time(struct qcom_battmgr *battmgr)
 
 	return qcom_battmgr_request(battmgr, &request, sizeof(request));
 }
+EXPORT_SYMBOL_GPL(qcom_battmgr_update_charge_time);
 
 int qcom_battmgr_update_discharge_time(struct qcom_battmgr *battmgr)
 {
@@ -223,6 +228,7 @@ int qcom_battmgr_update_discharge_time(struct qcom_battmgr *battmgr)
 
 	return qcom_battmgr_request(battmgr, &request, sizeof(request));
 }
+EXPORT_SYMBOL_GPL(qcom_battmgr_update_discharge_time);
 
 static const u8 sm8350_bat_prop_map[] = {
 	[POWER_SUPPLY_PROP_STATUS] = BATT_STATUS,
@@ -471,6 +477,7 @@ int qcom_battmgr_set_charge_control(struct qcom_battmgr *battmgr,
 
 	return qcom_battmgr_request(battmgr, &request, sizeof(request));
 }
+EXPORT_SYMBOL_GPL(qcom_battmgr_set_charge_control);
 
 static int qcom_battmgr_set_charge_start_threshold(struct qcom_battmgr *battmgr, int start_soc)
 {
@@ -1396,6 +1403,7 @@ void qcom_battmgr_enable_worker(struct work_struct *work)
 	if (ret)
 		dev_err(battmgr->dev, "failed to request power notifications\n");
 }
+EXPORT_SYMBOL_GPL(qcom_battmgr_enable_worker);
 
 void qcom_battmgr_pdr_notify(void *priv, int state)
 {
@@ -1408,6 +1416,7 @@ void qcom_battmgr_pdr_notify(void *priv, int state)
 		battmgr->service_up = false;
 	}
 }
+EXPORT_SYMBOL_GPL(qcom_battmgr_pdr_notify);
 
 static const struct of_device_id qcom_battmgr_of_variants[] = {
 	{ .compatible = "qcom,glymur-pmic-glink", .data = (void *)QCOM_BATTMGR_X1E80100 },
