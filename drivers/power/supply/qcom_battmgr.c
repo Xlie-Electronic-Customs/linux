@@ -94,14 +94,6 @@
 #define CHARGE_CTRL_END_THR_MAX		100
 #define CHARGE_CTRL_DELTA_SOC		5
 
-struct qcom_battmgr_enable_request {
-	struct pmic_glink_hdr hdr;
-	__le32 battery_id;
-	__le32 power_state;
-	__le32 low_capacity;
-	__le32 high_capacity;
-};
-
 struct qcom_battmgr_property_request {
 	struct pmic_glink_hdr hdr;
 	__le32 battery;
