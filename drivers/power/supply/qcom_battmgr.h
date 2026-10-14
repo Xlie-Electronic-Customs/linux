@@ -21,6 +21,14 @@ enum qcom_battmgr_unit {
 	QCOM_BATTMGR_UNIT_mAh = 1
 };
 
+struct qcom_battmgr_enable_request {
+	struct pmic_glink_hdr hdr;
+	__le32 battery_id;
+	__le32 power_state;
+	__le32 low_capacity;
+	__le32 high_capacity;
+};
+
 struct qcom_battmgr_message {
 	struct pmic_glink_hdr hdr;
 	union {
