@@ -249,7 +249,7 @@
 	};
 
 	pmic-glink {
-		compatible = "qcom,sm8450-pmic-glink", "qcom,pmic-glink";
+		compatible = "oplus,sm8450-pmic-glink", "oplus,pmic-glink";
 		#address-cells = <1>;
 		#size-cells = <0>;
 		qcom,protection-domain = "tms/servreg", "msm/adsp/charger_pd";
