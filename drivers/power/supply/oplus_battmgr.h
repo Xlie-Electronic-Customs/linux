@@ -28,6 +28,11 @@
 #define chg_err(fmt, ...)                                                      \
 	printk(KERN_ERR "[OPLUS_CHG][%s]" fmt, __func__, ##__VA_ARGS__)
 
+#define charger_xlog_printk(num, fmt, ...)                                                                             \
+	do {                                                                                                           \
+			printk(KERN_NOTICE pr_fmt("[OPLUS_CHG][%s]" fmt), __func__, ##__VA_ARGS__);                    \
+	} while (0)
+
 #define OPLUS_PD_TYPE_CHECK_INTERVAL round_jiffies_relative(msecs_to_jiffies(1500))
 #define OPLUS_HVDCP_DISABLE_INTERVAL round_jiffies_relative(msecs_to_jiffies(15000))
 #define OPLUS_HVDCP_DETECT_TO_DETACH_TIME 3600
@@ -37,6 +42,11 @@
 #define FLASH_SCREEN_CTRL_DTSI	0X02
 #define LCM_CHECK_COUNT  3
 #define CHG_OPS_LEN 64
+
+#define PDO_9V 9000
+#define PDO_5V 5000
+#define PDO_2A 2000
+#define PDO_3A 2000
 
 enum oplus_battmgr_variant {
 	OPLUS_BATTMGR_SM8450,
@@ -320,7 +330,7 @@ struct oplus_opcode_usb {
 	unsigned int typec_mode;
 	unsigned int typec_mode_sinkonly;
 	bool otg_vbus;
-	unsigned int chg_param_info
+	unsigned int chg_param_info;
 };
 
 struct oplus_opcode {
@@ -330,15 +340,450 @@ struct oplus_opcode {
 struct oplus_battmgr_usb {
 	unsigned int usb_in_status;
 	unsigned int usb_sns_status;
+	unsigned int usb_suspend_pmic;
+	unsigned int usb_subtype;
+};
+
+struct oplus_chg_mod {
+	const struct oplus_chg_mod_desc *desc;
+
+	char **supplied_to;
+	size_t num_supplicants;
+
+	struct device_node *of_node;
+	void *drv_data;
+
+	/* private */
+	struct device dev;
+	struct work_struct changed_work;
+	struct delayed_work deferred_register_work;
+	struct atomic_notifier_head *notifier;
+	spinlock_t changed_lock;
+	bool changed;
+	bool initialized;
+	bool removing;
+	atomic_t use_cnt;
+	struct list_head list;
+};
+
+struct oplus_custom_gpio_pinctrl {
+	int vchg_trig_gpio;
+	int ccdetect_gpio;
+	struct gpio_desc *otg_boost_en_gpio;
+	struct gpio_desc *otg_ovp_en_gpio;
+	int tx_boost_en_gpio;
+	int tx_ovp_en_gpio;
+	int wrx_ovp_off_gpio;
+	int mcu_en_gpio;
+	struct mutex pinctrl_mutex;
+	struct mutex switch1_pinctrl_mutex;
+	struct pinctrl *vchg_trig_pinctrl;
+	struct pinctrl_state *vchg_trig_default;
+	struct pinctrl		*ccdetect_pinctrl;
+	struct pinctrl_state	*ccdetect_active;
+	struct pinctrl_state	*ccdetect_sleep;
+	struct pinctrl			*usbtemp_l_gpio_pinctrl;
+	struct pinctrl_state	*usbtemp_l_gpio_default;
+	struct pinctrl			*usbtemp_r_gpio_pinctrl;
+	struct pinctrl_state	*usbtemp_r_gpio_default;
+	struct pinctrl			*subboard_temp_gpio_pinctrl;
+	struct pinctrl_state	*subboard_temp_gpio_default;
+	struct pinctrl		*batt1_con_therm_gpio_pinctrl;
+	struct pinctrl_state	*batt1_con_therm_gpio_default;
+	struct pinctrl		*otg_boost_en_pinctrl;
+	struct pinctrl_state	*otg_boost_en_active;
+	struct pinctrl_state	*otg_boost_en_sleep;
+	struct pinctrl		*otg_ovp_en_pinctrl;
+	struct pinctrl_state	*otg_ovp_en_active;
+	struct pinctrl_state	*otg_ovp_en_sleep;
+	struct pinctrl		*tx_boost_en_pinctrl;
+	struct pinctrl_state	*tx_boost_en_active;
+	struct pinctrl_state	*tx_boost_en_sleep;
+	struct pinctrl		*tx_ovp_en_pinctrl;
+	struct pinctrl_state	*tx_ovp_en_active;
+	struct pinctrl_state	*tx_ovp_en_sleep;
+	struct pinctrl		*wrx_ovp_off_pinctrl;
+	struct pinctrl_state	*wrx_ovp_off_active;
+	struct pinctrl_state	*wrx_ovp_off_sleep;
+	struct pinctrl		*mcu_en_pinctrl;
+	struct pinctrl_state *mcu_en_active;
+	struct pinctrl_state *mcu_en_sleep;
+};
+
+struct oplus_chg_limits {
+	int force_input_current_ma;
+	int input_current_cdp_ma;
+	int input_current_charger_ma;
+	int pd_input_current_charger_ma;
+	int default_pd_input_current_charger_ma;
+	int qc_input_current_charger_ma;
+	int default_qc_input_current_charger_ma;
+	int input_current_usb_ma;
+	int input_current_camera_ma;
+	int input_current_calling_ma;
+	int input_current_led_ma;
+	int input_current_cool_down_ma;
+	int input_current_vooc_led_ma_high;
+	int input_current_vooc_led_ma_warm;
+	int input_current_vooc_led_ma_normal;
+	int vooc_high_bat_decidegc; /*>=45C*/
+	int input_current_vooc_ma_high;
+	int default_input_current_vooc_ma_high;
+	int vooc_warm_bat_decidegc; /*38C*/
+	int vooc_warm_bat_decidegc_antishake; /*38C*/
+	int input_current_vooc_ma_warm;
+	int default_input_current_vooc_ma_warm;
+	int vooc_normal_bat_decidegc; /*34C*/
+	int vooc_normal_bat_decidegc_antishake;
+	int input_current_vooc_ma_normal; /*<34c*/
+	int default_input_current_vooc_ma_normal;
+	int charger_current_vooc_ma_normal;
+	int iterm_ma;
+	int sub_iterm_ma;
+	bool iterm_disabled;
+	int recharge_mv;
+	int batt_full_time;
+	int usb_high_than_bat_decidegc; /*10C*/
+	int removed_bat_decidegc; /*-19C*/
+	int cold_bat_decidegc; /*-20C*/
+	int temp_cold_vfloat_mv;
+	int temp_cold_fastchg_current_ma;
+	int temp_cold_fastchg_current_ma_high;
+	int temp_cold_fastchg_current_ma_low;
+	int pd_temp_cold_fastchg_current_ma_high;
+	int pd_temp_cold_fastchg_current_ma_low;
+	int qc_temp_cold_fastchg_current_ma_high;
+	int qc_temp_cold_fastchg_current_ma_low;
+
+	int freeze_bat_decidegc; /*-10C*/
+	int temp_freeze_fastchg_current_ma;
+	int temp_freeze_fastchg_current_ma_high;
+	int temp_freeze_fastchg_current_ma_low;
+	int pd_temp_freeze_fastchg_current_ma_high;
+	int pd_temp_freeze_fastchg_current_ma_low;
+	int qc_temp_freeze_fastchg_current_ma_high;
+	int qc_temp_freeze_fastchg_current_ma_low;
+
+	int little_cold_bat_decidegc; /*0C*/
+	int temp_little_cold_vfloat_mv;
+	int temp_little_cold_fastchg_current_ma;
+	int temp_little_cold_fastchg_current_ma_high;
+	int temp_little_cold_fastchg_current_ma_low;
+	int pd_temp_little_cold_fastchg_current_ma_high;
+	int pd_temp_little_cold_fastchg_current_ma_low;
+	int qc_temp_little_cold_fastchg_current_ma_high;
+	int qc_temp_little_cold_fastchg_current_ma_low;
+	int cool_bat_decidegc; /*5C*/
+	int temp_cool_vfloat_mv;
+	int temp_cool_fastchg_current_ma_high;
+	int temp_cool_fastchg_current_ma_low;
+	int pd_temp_cool_fastchg_current_ma_high;
+	int pd_temp_cool_fastchg_current_ma_low;
+	int qc_temp_cool_fastchg_current_ma_high;
+	int qc_temp_cool_fastchg_current_ma_low;
+	int little_cool_bat_decidegc; /*12C*/
+	int temp_little_cool_vfloat_mv;
+	int temp_little_cool_fastchg_current_ma;
+	int temp_little_cool_fastchg_current_ma_high;
+	int temp_little_cool_fastchg_current_ma_low;
+	int pd_temp_little_cool_fastchg_current_ma;
+	int pd_temp_little_cool_fastchg_current_ma_high;
+	int pd_temp_little_cool_fastchg_current_ma_low;
+	int qc_temp_little_cool_fastchg_current_ma;
+	int qc_temp_little_cool_fastchg_current_ma_high;
+	int qc_temp_little_cool_fastchg_current_ma_low;
+	int normal_bat_decidegc; /*16C*/
+	int temp_normal_fastchg_current_ma;
+	int temp_normal_fastchg_current_ma_high;
+	int temp_normal_fastchg_current_ma_low;
+	int pd_temp_normal_fastchg_current_ma;
+	int pd_temp_normal_fastchg_current_ma_high;
+	int pd_temp_normal_fastchg_current_ma_low;
+	int qc_temp_normal_fastchg_current_ma;
+
+	int normal_phase1_bat_decidegc; /* 16C ~ 22C */
+	int temp_normal_phase1_vfloat_mv;
+	int temp_normal_phase1_fastchg_current_ma;
+	int normal_phase2_bat_decidegc; /* 22C ~ 34C */
+	int temp_normal_phase2_vfloat_mv;
+	int temp_normal_phase2_fastchg_current_ma_high;
+	int temp_normal_phase2_fastchg_current_ma_low;
+	int normal_phase3_bat_decidegc; /* 34 ~ 37C */
+	int temp_normal_phase3_vfloat_mv;
+	int temp_normal_phase3_fastchg_current_ma_high;
+	int temp_normal_phase3_fastchg_current_ma_low;
+	int normal_phase4_bat_decidegc; /* 37C ~ 40C */
+	int temp_normal_phase4_vfloat_mv;
+	int temp_normal_phase4_fastchg_current_ma_high;
+	int temp_normal_phase4_fastchg_current_ma_low;
+	int normal_phase5_bat_decidegc; /* 40C ~ 42C */
+	int temp_normal_phase5_vfloat_mv;
+	int temp_normal_phase5_fastchg_current_ma;
+	int normal_phase6_bat_decidegc; /*42C_45C*/
+	int temp_normal_phase6_vfloat_mv;
+	int temp_normal_phase6_fastchg_current_ma;
+
+	int temp_normal_vfloat_mv;
+	int warm_bat_decidegc; /*45C*/
+	int temp_warm_vfloat_mv;
+	int temp_warm_fastchg_current_ma;
+	int temp_warm_fastchg_current_ma_led_on;
+	int pd_temp_warm_fastchg_current_ma;
+	int qc_temp_warm_fastchg_current_ma;
+	int hot_bat_decidegc; /*53C*/
+	int non_standard_vfloat_mv;
+	int non_standard_fastchg_current_ma;
+	int max_chg_time_sec;
+	int charger_hv_thr;
+	int charger_recv_thr;
+	int charger_lv_thr;
+	int vbatt_full_thr;
+	int vbatt_hv_thr;
+	int vfloat_step_mv;
+	int vfloat_sw_set;
+	int vfloat_over_counts;
+	int non_standard_vfloat_sw_limit; /*sw full*/
+	int cold_vfloat_sw_limit;
+	int little_cold_vfloat_sw_limit;
+	int cool_vfloat_sw_limit;
+	int little_cool_vfloat_sw_limit;
+	int normal_vfloat_sw_limit;
+	int warm_vfloat_sw_limit;
+	int led_high_bat_decidegc; /*>=37C*/
+	int led_high_bat_decidegc_antishake;
+	int input_current_led_ma_high;
+	int led_warm_bat_decidegc; /*35C*/
+	int led_warm_bat_decidegc_antishake;
+	int input_current_led_ma_warm;
+	int input_current_led_ma_normal; /*<35c*/
+	int short_c_bat_vfloat_mv;
+	int short_c_bat_fastchg_current_ma;
+	int short_c_bat_vfloat_sw_limit;
+	bool sw_vfloat_over_protect_enable; /*vfloat over check*/
+	int non_standard_vfloat_over_sw_limit;
+	int cold_vfloat_over_sw_limit;
+	int little_cold_vfloat_over_sw_limit;
+	int cool_vfloat_over_sw_limit;
+	int little_cool_vfloat_over_sw_limit;
+	int normal_vfloat_over_sw_limit;
+	int warm_vfloat_over_sw_limit;
+	int normal_vterm_hw_inc;
+	int non_normal_vterm_hw_inc;
+	int vbatt_pdqc_to_5v_thr;
+	int vbatt_pdqc_to_9v_thr;
+	int tbatt_pdqc_to_5v_thr;
+	int tbatt_pdqc_to_9v_thr;
+	int ff1_normal_fastchg_ma;
+	int ff1_warm_fastchg_ma;
+	int ff1_exit_step_ma; /*<=35C,700ma*/
+	int ff1_warm_exit_step_ma;
+	int sub_ff1_exit_step_ma; /*<=35C,700ma*/
+	int sub_ff1_warm_exit_step_ma;
+	int ffc2_temp_low_decidegc; /*<16C*/
+	int ffc2_temp_high_decidegc; /*>=40C*/
+	int ffc2_warm_fastchg_ma; /*35~40C,750ma	*/
+	int ffc2_temp_warm_decidegc; /*35C*/
+	int ffc2_normal_fastchg_ma; /*<=35C,700ma*/
+	int ffc2_exit_step_ma; /*<=35C,700ma*/
+	int ffc2_warm_exit_step_ma;
+	int sub_ffc2_exit_step_ma; /*<=35C*/
+	int sub_ffc2_warm_exit_step_ma;
+	int ffc1_normal_vfloat_sw_limit; /* 4.45V */
+	int ffc1_warm_vfloat_sw_limit;
+	int ffc2_normal_vfloat_sw_limit;
+	int ffc2_warm_vfloat_sw_limit;
+	int ffc_temp_normal_vfloat_mv; /* 4.5v */
+	int ffc2_temp_warm_vfloat_mv;
+	int ffc_temp_warm_vfloat_mv;
+	int ffc1_temp_normal_vfloat_mv; /* 4.5v */
+	int ffc2_temp_normal_vfloat_mv; /* 4.5v */
+	int ffc_normal_vfloat_over_sw_limit; /* 4.5v */
+	int ffc_warm_vfloat_over_sw_limit;
+	int ffc1_normal_vfloat_over_sw_limit;		/* 4.5V */
+	int ffc2_normal_vfloat_over_sw_limit;		/* 4.5V */
+	int default_ffc1_normal_vfloat_sw_limit;
+	int default_ffc1_warm_vfloat_sw_limit;
+	int default_ffc2_normal_vfloat_sw_limit;
+	int default_ffc2_warm_vfloat_sw_limit;
+	int default_iterm_ma; /*16~45 default value*/
+	int default_sub_iterm_ma; /*16~45 default value*/
+	int default_temp_normal_fastchg_current_ma;
+	int default_normal_vfloat_sw_limit;
+	int default_temp_normal_vfloat_mv;
+	int default_normal_vfloat_over_sw_limit;
+	int default_temp_little_cool_fastchg_current_ma; /* 12 ~ 16 */
+	int default_little_cool_vfloat_sw_limit;
+	int default_temp_little_cool_vfloat_mv;
+	int default_little_cool_vfloat_over_sw_limit;
+	int default_temp_little_cool_fastchg_current_ma_high;
+	int default_temp_little_cool_fastchg_current_ma_low;
+	int default_temp_little_cold_fastchg_current_ma_high; /* 0 ~ 5 */
+	int default_temp_little_cold_fastchg_current_ma_low;
+	int default_temp_cold_fastchg_current_ma_high;
+	int default_temp_cold_fastchg_current_ma_low;
+	int default_temp_cool_fastchg_current_ma_high; /* 5 ~ 12 */
+	int default_temp_cool_fastchg_current_ma_low;
+	int default_temp_warm_fastchg_current_ma; /* 44 ~ 53 */
+	int default_input_current_charger_ma;
+};
+
+struct oplus_chg_chip {
+	struct delayed_work check_pd_svooc_work;
+
+	bool check_pd_svooc_complete;
+	int pd_curr_max;
+	int pd_svooc;
+	int pd_chging;
+	int pd_volt;
+	int pps_to_pd_chging;
+
+	bool usbtemp_wq_init_finished;
+	bool wireless_support;
+	bool wpc_no_chargerpump;
+	bool charger_exist;
+	bool pre_charger_exist;
+	int charger_type;
+	int charger_subtype;
+	int real_charger_type;
+	int charger_volt;
+	int charger_volt_pre;
+	int charger_current_pre;
+	int sw_full_count;
+	bool sw_full;
+	bool hw_full_by_sw;
+	bool hw_full;
+	bool rechg_soc_en;
+	bool uisoc_down_in_full;
+	bool rechg_now;
+	int rechg_soc;
+	int sw_sub_batt_full_count;
+	bool sw_sub_batt_full;
+	bool hw_sub_batt_full_by_sw;
+	bool hw_sub_batt_full;
+
+	int batt_volt;
+	int vbatt_num;
+	int batt_volt_max;
+	int batt_volt_min;
+
+	bool authenticate;
+	bool hmac;
+
+	bool otg_online;
+	bool otg_switch;
+	bool ui_otg_switch;
+	int mmi_chg;
+
+	bool is_abnormal_adapter;
+
+	int voocphy_support;
+	bool adsp_notify_ap_suspend;
+
+	bool pd_disable;
+	bool support_wd0;
+
+	struct oplus_chg_limits limits;
+};
+
+struct vooc_chip {
+	int pcb_version;
+	bool allow_reading;
+	bool fastchg_started;
+	bool fastchg_ing;
+	bool fastchg_allow;
+	bool fastchg_to_normal;
+	bool fastchg_to_warm;
+	bool fastchg_to_warm_full;
+	bool fastchg_low_temp_full;
+	bool btb_temp_over;
+	bool fastchg_dummy_started;
+	bool need_to_up;
+	bool have_updated;
+	bool mcu_update_ing;
+	bool mcu_update_ing_fix;
+	bool mcu_boot_by_gpio;
+	const unsigned char *firmware_data;
+	unsigned int fw_data_count;
+	int fw_mcu_version;
+	int fw_data_version;
+	int adapter_update_real;
+	int adapter_update_report;
+	int dpdm_switch_mode;
+	bool support_vooc_by_normal_charger_path;
+	bool reset_adapter;
+};
+
+struct voocphy_manager {
+	bool voocphy_dual_cp_support;
+	bool voocphy_bidirect_cp_support;
+	bool external_gauge_support;
+	bool version_judge_support;
+	bool impedance_calculation_newmethod;
+	bool record_fastchg_end_soc;
+
+	int batt_temp_plugin; //batt_temp at plugin
+	int batt_soc_plugin; //batt_soc at plugin
+	bool adapter_rand_start; //adapter checksum need start;
+	bool adapter_check_ok;
+	bool fastchg_allow;
+	bool start_vaild_frame;
+	bool ask_bat_model_finished;
+	bool reply_bat_model_end;
+	bool ask_vol_again;
+	bool ignore_first_frame;
+	bool ask_vooc3_detect;
+	bool force_2a;
+	bool force_2a_flag;
+	bool force_3a;
+	bool force_3a_flag;
+	bool btb_temp_over;
+	bool btb_err_first;
+	bool vbatt_ovp_status;
+	bool usb_bad_connect;
+	bool fastchg_ing;
+	bool fastchg_dummy_start;
+	bool fastchg_start;
+	bool fastchg_to_normal;
+	bool fastchg_to_warm;
+	bool adspvoocphy_fastchg_start;
+	bool fastchg_to_warm_full;
+	int fast_chg_type;
+	int last_fast_chg_type;
+	bool fastchg_err_commu;
+	bool fastchg_reactive;
+	bool fastchg_real_allow;
+	bool fastchg_commu_stop;
+	bool fastchg_check_stop;
+	bool fastchg_monitor_stop;
+	bool fastchg_commu_ing;
+	bool vooc_move_head;
+	bool copycat_vooc_adapter;
+	bool user_exit_fastchg;
+	unsigned char fastchg_stage;
+	bool fastchg_need_reset;
+	bool fastchg_recovering;
+	unsigned int fastchg_recover_cnt;
+
+	int vooc_vbus_status;
+	int vbus_vbatt;
+	int adapter_type;
+	unsigned int fastchg_notify_status;
 };
 
 struct battery_chg_dev {
+	struct device *dev;
+
 	struct qcom_battmgr *battmgr;
 
 	enum oplus_battmgr_variant variant;
 
+	struct oplus_chg_chip *chip;
+	struct voocphy_manager *vooc_chip;
 	struct oplus_opcode oplus;
 	struct oplus_battmgr_usb usb;
+	struct oplus_custom_gpio_pinctrl oplus_custom_gpio;
+
+	struct oplus_chg_mod *usb_ocm;
 
 	u32 thermal_fcc_ua;
 	u32 restrict_fcc_ua;
@@ -365,10 +810,12 @@ struct battery_chg_dev {
 	struct delayed_work adsp_crash_recover_work;
 	struct delayed_work crash_track_work;
 	struct delayed_work voocphy_enable_check_work;
+	struct delayed_work adsp_voocphy_enable_check_work;
 	struct delayed_work otg_vbus_enable_work;
 	struct delayed_work otg_status_check_work;
 	struct delayed_work vbus_adc_enable_work;
 	struct delayed_work plugin_irq_work;
+	struct delayed_work usb_type_work;
 	struct delayed_work recheck_input_current_work;
 	struct delayed_work unsuspend_usb_work;
 	struct delayed_work oem_lcm_en_check_work;
@@ -385,6 +832,8 @@ struct battery_chg_dev {
 	struct delayed_work ufcs_reset_work;
 	struct delayed_work update_common_charge_flag_work;
 	struct delayed_work check_abnormal_usbin_status_work;
+	struct delayed_work adsp_voocphy_err_work;
+	struct delayed_work chg_status_send_work;
 	int abnormal_usbin_count;
 	struct delayed_work reverse_chg_svid_check_work;
 	struct delayed_work source_pdo_check_work;
@@ -457,7 +906,6 @@ struct battery_chg_dev {
 	bool cid_status;
 	bool force_svooc;
 
-	struct delayed_work adsp_voocphy_err_work;
 	struct delayed_work pd_type_check_work;
 	bool status_wake_lock_on;
 	bool pd_type_checked;
@@ -467,105 +915,6 @@ struct battery_chg_dev {
 
 	struct delayed_work update_work;
 
-};
-
-struct oplus_chip {
-	bool check_pd_svooc_complete;
-	int pd_curr_max;
-	int pd_svooc;
-	int pd_chging;
-	int pd_volt;
-	int pps_to_pd_chging;
-
-	int charger_type;
-
-	bool is_abnormal_adapter;
-
-	int voocphy_support;
-};
-
-struct vooc_chip {
-	int pcb_version;
-	bool allow_reading;
-	bool fastchg_started;
-	bool fastchg_ing;
-	bool fastchg_allow;
-	bool fastchg_to_normal;
-	bool fastchg_to_warm;
-	bool fastchg_to_warm_full;
-	bool fastchg_low_temp_full;
-	bool btb_temp_over;
-	bool fastchg_dummy_started;
-	bool need_to_up;
-	bool have_updated;
-	bool mcu_update_ing;
-	bool mcu_update_ing_fix;
-	bool mcu_boot_by_gpio;
-	const unsigned char *firmware_data;
-	unsigned int fw_data_count;
-	int fw_mcu_version;
-	int fw_data_version;
-	int adapter_update_real;
-	int adapter_update_report;
-	int dpdm_switch_mode;
-	bool support_vooc_by_normal_charger_path;
-};
-
-struct voocphy_manager {
-	bool voocphy_dual_cp_support;
-	bool voocphy_bidirect_cp_support;
-	bool external_gauge_support;
-	bool version_judge_support;
-	bool impedance_calculation_newmethod;
-	bool record_fastchg_end_soc;
-
-	int batt_temp_plugin; //batt_temp at plugin
-	int batt_soc_plugin; //batt_soc at plugin
-	bool adapter_rand_start; //adapter checksum need start;
-	bool adapter_check_ok;
-	bool fastchg_allow;
-	bool start_vaild_frame;
-	bool ask_bat_model_finished;
-	bool reply_bat_model_end;
-	bool ask_vol_again;
-	bool ignore_first_frame;
-	bool ask_vooc3_detect;
-	bool force_2a;
-	bool force_2a_flag;
-	bool force_3a;
-	bool force_3a_flag;
-	bool btb_temp_over;
-	bool btb_err_first;
-	bool vbatt_ovp_status;
-	bool usb_bad_connect;
-	bool fastchg_ing;
-	bool fastchg_dummy_start;
-	bool fastchg_start;
-	bool fastchg_to_normal;
-	bool fastchg_to_warm;
-	bool adspvoocphy_fastchg_start;
-	bool fastchg_to_warm_full;
-	int fast_chg_type;
-	int last_fast_chg_type;
-	bool fastchg_err_commu;
-	bool fastchg_reactive;
-	bool fastchg_real_allow;
-	bool fastchg_commu_stop;
-	bool fastchg_check_stop;
-	bool fastchg_monitor_stop;
-	bool fastchg_commu_ing;
-	bool vooc_move_head;
-	bool copycat_vooc_adapter;
-	bool user_exit_fastchg;
-	unsigned char fastchg_stage;
-	bool fastchg_need_reset;
-	bool fastchg_recovering;
-	unsigned int fastchg_recover_cnt;
-
-	int vooc_vbus_status;
-	int vbus_vbatt;
-	int adapter_type;
-	unsigned int fastchg_notify_status;
 };
 
 
@@ -630,9 +979,28 @@ typedef enum {
 	UNKNOWN_GAUGE_TYPE,
 } SCC_GAUGE_TYPE;
 
+enum oplus_power_supply_type {
+	POWER_SUPPLY_TYPE_USB_HVDCP = 13,		/* High Voltage DCP */
+	POWER_SUPPLY_TYPE_USB_HVDCP_3,		/* Efficient High Voltage DCP */
+	POWER_SUPPLY_TYPE_USB_HVDCP_3P5,	/* Efficient High Voltage DCP */
+	POWER_SUPPLY_TYPE_USB_FLOAT,		/* Floating charger */
+	POWER_SUPPLY_TYPE_USB_PD_SDP,		/* USB With PD Port*/
+};
+
 enum oplus_power_supply_usb_type {
 	POWER_SUPPLY_USB_TYPE_PD_SDP = 17,		/* USB With PD Port*/
 };
+
+typedef enum {
+	CHARGER_SUBTYPE_DEFAULT = 0,
+	CHARGER_SUBTYPE_FASTCHG_VOOC,
+	CHARGER_SUBTYPE_FASTCHG_SVOOC,
+	CHARGER_SUBTYPE_PD,
+	CHARGER_SUBTYPE_QC,
+	CHARGER_SUBTYPE_PPS,
+	CHARGER_SUBTYPE_UFCS,
+	CHARGER_SUBTYPE_PE20
+} OPLUS_CHARGER_SUBTYPE;
 
 /* property ids */
 enum battery_property_id {
@@ -847,6 +1215,37 @@ enum {
 	PORTABLE_20W_1 = 0X34,
 	PORTABLE_20W_2 = 0x35,
 	PORTABLE_20W_3 = 0x36,
+};
+
+enum {
+	QTI_POWER_SUPPLY_USB_TYPE_HVDCP = 0x80,
+	QTI_POWER_SUPPLY_USB_TYPE_HVDCP_3,
+	QTI_POWER_SUPPLY_USB_TYPE_HVDCP_3P5,
+};
+
+enum OTG_SCHEME {
+	OTG_SCHEME_CID,
+	OTG_SCHEME_CCDETECT_GPIO,
+	OTG_SCHEME_SWITCH,
+	OTG_SCHEME_UNDEFINE,
+};
+
+enum OTG_BOOST_SOURCE {
+	OTG_BOOST_SOURCE_PMIC,
+	OTG_BOOST_SOURCE_EXTERNAL,
+};
+
+enum OEM_MISC_CTL_CMD {
+	OEM_MISC_CTL_CMD_LCM_EN = 0,
+	OEM_MISC_CTL_CMD_LCM_25K = 2,
+	OEM_MISC_CTL_CMD_NCM_AUTO_MODE = 4,
+	OEM_MISC_CTL_CMD_VPH_TRACK_HIGH = 6,
+};
+
+enum {
+	PD_INACTIVE = 0,
+	PD_ACTIVE,
+	PD_PPS_ACTIVE,
 };
 
 
