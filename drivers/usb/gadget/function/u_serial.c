@@ -695,13 +695,27 @@ static void gs_close(struct tty_struct *tty, struct file *file)
 	struct gs_port *port = tty->driver_data;
 	struct gserial	*gser;
 
+	/*
+	 * The tty core calls ->close() even when ->open() returned an
+	 * error before gs_open() managed to store the port in
+	 * tty->driver_data (for example -ENODEV when the port has been
+	 * removed, or a failed kfifo_alloc()).  There is nothing to
+	 * release in that case, so don't dereference the NULL port.
+	 */
+	if (!port)
+		return;
+
 	spin_lock_irq(&port->port_lock);
 
 	if (port->port.count != 1) {
 raced_with_open:
-		if (port->port.count == 0)
-			WARN_ON(1);
-		else
+		/*
+		 * A failed open is unwound through tty_release() -> gs_close()
+		 * without port.count ever having been incremented, so count
+		 * can legitimately be zero here.  Only drop a count that is
+		 * still held by an outstanding opener; never warn on zero.
+		 */
+		if (port->port.count > 0)
 			--port->port.count;
 		goto exit;
 	}
