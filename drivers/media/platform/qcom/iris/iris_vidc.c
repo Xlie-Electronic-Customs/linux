@@ -3,6 +3,9 @@
  * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#include <linux/dma-buf.h>
+#include <linux/dma-fence.h>
+#include <linux/dma-resv.h>
 #include <linux/pm_runtime.h>
 #include <media/v4l2-event.h>
 #include <media/v4l2-ioctl.h>
@@ -17,6 +20,12 @@
 #include "iris_vb2.h"
 #include "iris_vpu_buffer.h"
 #include "iris_platform_common.h"
+
+/*
+ * This file calls dma_buf_get()/dma_buf_put() directly (surface fences),
+ * which live in the GPL-only DMA_BUF symbol namespace.
+ */
+MODULE_IMPORT_NS("DMA_BUF");
 
 #define IRIS_DRV_NAME "iris_driver"
 #define IRIS_BUS_NAME "platform:iris_icc"
@@ -75,6 +84,165 @@ static void iris_remove_session(struct iris_inst *inst)
 static inline struct iris_inst *iris_get_inst(struct file *filp)
 {
 	return container_of(file_to_v4l2_fh(filp), struct iris_inst, fh);
+}
+
+/*
+ * Surface (DMA-BUF reservation) fences.
+ *
+ * Ported from the iris-vaapi companion kernel (CFM880/nabu-iris,
+ * drivers/media/platform/qcom/iris/iris_vidc.c) so that the VA-API front-end
+ * can publish a "copy in progress" fence on a stable DMA-BUF surface and
+ * release the consumer once the copy has completed.
+ *
+ * This is deliberately self-contained: it only adds per-instance state
+ * (see iris_instance.h) and one private ioctl, and it never touches the
+ * existing vb2 queue paths.
+ */
+struct iris_surface_fence {
+	struct dma_fence base;
+	spinlock_t lock; /* protects dma_fence signaling state */
+	struct list_head list;
+	u64 token;
+};
+
+static const char *iris_surface_fence_get_name(struct dma_fence *fence)
+{
+	return "qcom-iris-cpu-copy";
+}
+
+static void iris_surface_fence_release(struct dma_fence *fence)
+{
+	struct iris_surface_fence *surface_fence =
+		container_of(fence, struct iris_surface_fence, base);
+
+	kfree(surface_fence);
+}
+
+static const struct dma_fence_ops iris_surface_fence_ops = {
+	.get_driver_name = iris_surface_fence_get_name,
+	.get_timeline_name = iris_surface_fence_get_name,
+	.release = iris_surface_fence_release,
+};
+
+static void iris_surface_fence_complete(struct iris_surface_fence *surface_fence)
+{
+	bool cookie;
+
+	cookie = dma_fence_begin_signalling();
+	dma_fence_signal(&surface_fence->base);
+	dma_fence_end_signalling(cookie);
+	dma_fence_put(&surface_fence->base);
+}
+
+static int iris_surface_fence_attach(struct iris_inst *inst,
+				     const struct iris_surface_fence_cmd *cmd)
+{
+	struct iris_surface_fence *surface_fence, *pending;
+	struct dma_buf *dmabuf;
+	int ret;
+
+	if (cmd->dmabuf_fd < 0 || !cmd->token)
+		return -EINVAL;
+
+	list_for_each_entry(pending, &inst->surface_fences, list)
+		if (pending->token == cmd->token)
+			return -EEXIST;
+
+	dmabuf = dma_buf_get(cmd->dmabuf_fd);
+	if (IS_ERR(dmabuf))
+		return PTR_ERR(dmabuf);
+
+	surface_fence = kzalloc(sizeof(*surface_fence), GFP_KERNEL);
+	if (!surface_fence) {
+		ret = -ENOMEM;
+		goto put_dmabuf;
+	}
+
+	spin_lock_init(&surface_fence->lock);
+	surface_fence->token = cmd->token;
+	dma_fence_init(&surface_fence->base, &iris_surface_fence_ops,
+		       &surface_fence->lock, inst->surface_fence_context,
+		       ++inst->surface_fence_seqno);
+
+	ret = dma_resv_lock_interruptible(dmabuf->resv, NULL);
+	if (ret)
+		goto put_fence;
+	ret = dma_resv_reserve_fences(dmabuf->resv, 1);
+	if (!ret)
+		dma_resv_add_fence(dmabuf->resv, &surface_fence->base,
+				   DMA_RESV_USAGE_WRITE);
+	dma_resv_unlock(dmabuf->resv);
+	if (ret)
+		goto put_fence;
+
+	list_add_tail(&surface_fence->list, &inst->surface_fences);
+	dma_buf_put(dmabuf);
+	return 0;
+
+put_fence:
+	dma_fence_put(&surface_fence->base);
+put_dmabuf:
+	dma_buf_put(dmabuf);
+	return ret;
+}
+
+static int iris_surface_fence_signal(struct iris_inst *inst, u64 token)
+{
+	struct iris_surface_fence *surface_fence;
+
+	list_for_each_entry(surface_fence, &inst->surface_fences, list) {
+		if (surface_fence->token != token)
+			continue;
+		list_del(&surface_fence->list);
+		iris_surface_fence_complete(surface_fence);
+		return 0;
+	}
+
+	return -ENOENT;
+}
+
+/*
+ * Best effort cleanup: an instance that is torn down while a surface fence is
+ * still installed must not leave waiters (compositor, DMA_BUF_IOCTL_SYNC)
+ * blocked forever on a fence nobody will ever signal.
+ */
+static void iris_surface_fence_signal_all(struct iris_inst *inst)
+{
+	struct iris_surface_fence *surface_fence, *next;
+
+	list_for_each_entry_safe(surface_fence, next,
+				 &inst->surface_fences, list) {
+		list_del(&surface_fence->list);
+		iris_surface_fence_complete(surface_fence);
+	}
+}
+
+static long iris_vidioc_default(struct file *file, void *fh, bool valid_prio,
+				unsigned int cmd, void *arg)
+{
+	struct iris_surface_fence_cmd *fence_cmd = arg;
+	struct iris_inst *inst = iris_get_inst(file);
+	int ret;
+
+	if (cmd != VIDIOC_IRIS_SURFACE_FENCE || inst->domain != DECODER)
+		return -ENOTTY;
+	if (!valid_prio)
+		return -EBUSY;
+
+	/*
+	 * Serialize against iris_close(): a fence must never be signalled twice
+	 * nor attached after the instance list has been drained.
+	 */
+	mutex_lock(&inst->lock);
+	if (fence_cmd->op == IRIS_SURFACE_FENCE_ATTACH)
+		ret = iris_surface_fence_attach(inst, fence_cmd);
+	else if (fence_cmd->op == IRIS_SURFACE_FENCE_SIGNAL)
+		ret = iris_surface_fence_signal(inst, fence_cmd->token);
+	else
+		ret = -EINVAL;
+	mutex_unlock(&inst->lock);
+
+	return ret;
 }
 
 static void iris_m2m_device_run(void *priv)
@@ -180,6 +348,9 @@ int iris_open(struct file *filp)
 	INIT_LIST_HEAD(&inst->buffers[BUF_SCRATCH_2].list);
 	INIT_LIST_HEAD(&inst->buffers[BUF_VPSS].list);
 	INIT_LIST_HEAD(&inst->buffers[BUF_PARTIAL].list);
+	/* Surface fences: see iris_vidioc_default() above. */
+	INIT_LIST_HEAD(&inst->surface_fences);
+	inst->surface_fence_context = dma_fence_context_alloc(1);
 	init_completion(&inst->completion);
 	init_completion(&inst->flush_completion);
 
@@ -292,6 +463,8 @@ int iris_close(struct file *filp)
 	v4l2_m2m_ctx_release(inst->m2m_ctx);
 	v4l2_m2m_release(inst->m2m_dev);
 	mutex_lock(&inst->lock);
+	/* Never leave a surface fence unsignalled on instance teardown. */
+	iris_surface_fence_signal_all(inst);
 	iris_session_close(inst);
 	iris_inst_change_state(inst, IRIS_INST_DEINIT);
 	iris_v4l2_fh_deinit(inst, filp);
@@ -686,6 +859,7 @@ static const struct v4l2_ioctl_ops iris_v4l2_ioctl_ops_dec = {
 	.vidioc_streamoff               = v4l2_m2m_ioctl_streamoff,
 	.vidioc_try_decoder_cmd         = v4l2_m2m_ioctl_try_decoder_cmd,
 	.vidioc_decoder_cmd             = iris_dec_cmd,
+	.vidioc_default                 = iris_vidioc_default,
 };
 
 static const struct v4l2_ioctl_ops iris_v4l2_ioctl_ops_enc = {

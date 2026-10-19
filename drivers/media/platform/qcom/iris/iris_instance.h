@@ -78,6 +78,9 @@ enum iris_fmt_type_cap {
  * @enc_scale_height: scale height for encoder instance
  * @hfi_layer_type: hierarchical coding layer type
  * @hfi_layer_count: hierarchical coding layer count
+ * @surface_fences: pending CPU-write fences attached to exported surfaces
+ * @surface_fence_context: dma_fence context for this decoder instance
+ * @surface_fence_seqno: last allocated surface-fence sequence number
  */
 
 struct iris_inst {
@@ -125,6 +128,9 @@ struct iris_inst {
 	u32				enc_scale_height;
 	u32				hfi_layer_type;
 	u32				hfi_layer_count;
+	struct list_head		surface_fences;
+	u64				surface_fence_context;
+	u64				surface_fence_seqno;
 };
 
 #endif

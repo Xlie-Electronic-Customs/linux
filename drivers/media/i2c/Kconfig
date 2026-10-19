@@ -70,6 +70,26 @@ config VIDEO_GC0308
 	  To compile this driver as a module, choose M here: the
 	  module will be called gc0308.
 
+config VIDEO_OV16A1Q
+	tristate "OmniVision OV16A1Q sensor support"
+	select V4L2_CCI_I2C
+	help
+	  This is a Video4Linux2 sensor-level driver for the OmniVision
+	  OV16A1Q 16MP sensor.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called ov16a1q.
+
+config VIDEO_GC02M1
+	tristate "GalaxyCore GC02M1 sensor support"
+	select V4L2_CCI_I2C
+	help
+	  This is a Video4Linux2 sensor-level driver for the GalaxyCore
+	  GC02M1 2MP sensor.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called gc02m1.
+
 config VIDEO_GC0310
 	tristate "GalaxyCore GC0310 sensor support"
 	select V4L2_CCI_I2C
