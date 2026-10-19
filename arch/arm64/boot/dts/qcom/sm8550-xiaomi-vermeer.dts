@@ -6,6 +6,9 @@
 /dts-v1/;
 
 #include <dt-bindings/arm/qcom,ids.h>
+#include <dt-bindings/clock/qcom,sm8550-camcc.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/leds/common.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
 #include "sm8550.dtsi"
 #include "pm8010.dtsi"
@@ -31,6 +34,47 @@
 
 	aliases {
 		serial0 = &uart7;
+		serial1 = &uart14;
+	};
+
+	/*
+	 * gpio126 gates the input of the camera LDO PMIC (FAN53870).  The vendor
+	 * devicetree calls it "wl2868c_enable" and expresses it as two pinctrl
+	 * states on the PMIC node, which the mainline pinctrl core would never
+	 * apply.  Model it as a fixed regulator instead: it is always on, and
+	 * because it is a regulator the core can order it before the LDOs that
+	 * depend on it (see vin-supply below).
+	 */
+	wl2868c_enable: regulator-wl2868c-enable {
+		compatible = "regulator-fixed";
+		regulator-name = "wl2868c_enable";
+
+		gpio = <&tlmm 126 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-boot-on;
+		regulator-always-on;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&wl2868c_enable_default>;
+	};
+
+	/*
+	 * Macro camera VIO rail: the vendor gates it with gpio66 through a
+	 * pinctrl state ("macro_iovdd_active/suspend"), which the mainline
+	 * pinctrl core never applies.  Model it as a fixed regulator instead.
+	 */
+	camera_macro_iovdd_ldo: regulator-camera-macro-iovdd {
+		compatible = "regulator-fixed";
+		regulator-name = "camera_macro_iovdd_ldo";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-enable-ramp-delay = <100>;
+
+		gpio = <&tlmm 66 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&cam_macro_iovdd_default>;
 	};
 
 	wcd938x: audio-codec {
@@ -132,9 +176,40 @@
 	sound {
 		compatible = "qcom,sm8550-sndcard", "qcom,sm8450-sndcard";
 		model = "SM8550-MTP";
-		audio-routing = "SpkrLeft IN", "WSA_SPK1 OUT",
-				"SpkrRight IN", "WSA_SPK2 OUT",
-				"IN1_HPHL", "HPHL_OUT",
+
+		/*
+		 * Secondary MI2S / TDM pins (TLMM gpio121-124).  This *must* live
+		 * on a node that actually gets a struct device, because
+		 * pinctrl_bind_pins() is only called from really_probe() for the
+		 * device being probed (drivers/base/dd.c + drivers/base/pinctrl.c).
+		 *
+		 * These pins were previously put on the `dai@18` child of
+		 * &q6apmbedai.  That node has no compatible and is only read by
+		 * q6apm-lpass-dais via of_q6apm_parse_dai_data(), so it is never
+		 * instantiated as a device and its pinctrl-0 is dead DT - the
+		 * pads stayed at the TLMM reset state (GPIO/input).  With no
+		 * SCK/WS/DATA reaching the amplifiers, the AW88261 SYSST check
+		 * (aw88261_dev_check_sysst(), BCK must be present and stable)
+		 * can never pass, the PA is never powered on and the speaker is
+		 * silent even though the DSP graph runs happily.
+		 *
+		 * The card node is the standard mainline home for these pins
+		 * (see arch/arm64/boot/dts/qcom/sm8450-oneplus-negroni.dts, which
+		 * does exactly this for its TERTIARY_TDM_RX_0 speaker link), and
+		 * it mirrors the vendor DT, which hangs qcom,sec-mi2s-gpios off
+		 * its sound node too.
+		 */
+		pinctrl-names = "default";
+		pinctrl-0 = <&sec_mi2s_default>;
+
+		/*
+		 * vermeer has no WSA8845 SoundWire speakers: its two speakers
+		 * are Awinic AW88261 smart amps on i2c8 driven over TDM/I2S
+		 * (see the vendor audio routing).  Listing the WSA widgets here
+		 * made snd_soc_dapm_add_routes() fail with -ENOENT and the card
+		 * never instantiated.
+		 */
+		audio-routing = "IN1_HPHL", "HPHL_OUT",
 				"IN2_HPHR", "HPHR_OUT",
 				"AMIC1", "MIC BIAS1",
 				"AMIC2", "MIC BIAS2",
@@ -184,15 +259,137 @@
 			};
 		};
 
-		wsa-dai-link {
-			link-name = "WSA Playback";
+		/*
+		 * Speaker playback path: the two AW88261 amplifiers hang off the
+		 * LPASS secondary time-division bus.  The vendor drives them in
+		 * *TDM* mode, not plain I2S - see
+		 *
+		 *   - vendor DTS (kalama snd card):
+		 *       qcom,sec-mi2s-gpios = <&cdc_sec_tdm_gpios>;
+		 *       qcom,tdm-audio-intf  = <1>;
+		 *       qcom,tdm-max-slots   = <4>;
+		 *     where cdc_sec_tdm_gpios pinctrl-0 is the tdm1 group
+		 *     (tdm1_clk/ws/din/dout) and tdm1_dout is TLMM gpio124 muxed
+		 *     to function "i2s1_data1" (the pad name; the interface mode is
+		 *     still TDM);
+		 *   - vendor audio HAL routing (downloadable resourcemanager):
+		 *       PAL_DEVICE_OUT_SPEAKER -> back_end_name
+		 *                                "TDM-LPAIF-RX-SECONDARY"
+		 *       bit_width 32, PAL_AUDIO_FMT_PCM_S32_LE, 48 kHz, 2 ch.
+		 *
+		 * So the faithful mainline BE is SECONDARY_TDM_RX_0 (DAI id 40,
+		 * stream name "Secondary TDM0 Playback"), not SECONDARY_MI2S_RX.
+		 * The mainline kernel does support this: q6apm-lpass-dais has
+		 * q6tdm_ops/ q6tdm_set_tdm_slot, audioreach has the Audio-IF sink
+		 * module (MODULE_ID_AUDIO_IF_SINK), and sc8280xp programs the TDM
+		 * slots from the standard dai-tdm-slot-* properties.
+		 *
+		 * The *TDM* flavour is wired here as the primary path (see
+		 * `sec-tdm-dai-link` below), because:
+		 *
+		 *   - the amplifiers' own ACF blob ships the vendor TDM
+		 *     register defaults (I2SCTRL2 SLOT_NUM = TDM4S, I2SCTRL1 =
+		 *     48 kHz / 64FS / 32-bit / Philips - dump with
+		 *     the vendor ACF blob), and the one register block
+		 *     the driver never rewrites (PLLCTRL2/PLLCTRL3) is the
+		 *     ACF's; and
+		 *   - TDM 4 slots x 32-bit is the only mainline BE whose LPAIF
+		 *     IBIT clock is 6.144 MHz (= 4 * 32 * 48000) instead of the
+		 *     1.536 MHz that the plain I2S/S16 path produces, and that
+		 *     is exactly the vendor's clock plan.
+		 *
+		 * The MI2S flavour is kept below as a "disabled" fallback for
+		 * A/B testing; `dai@18` in &q6apmbedai is its (now unused)
+		 * clock description.  To go back to it, swap the two "status"
+		 * values and install the matching MI2S topology
+		 * as qcom/sm8550/SM8550-MTP-tplg.bin.
+		 *
+		 * If either AW88261 fails to probe (bad chip ID, no DVDD, reset
+		 * line asserted) its component never appears and the *whole* card
+		 * fails with -EPROBE_DEFER, which would take the working headset
+		 * path down with it.  Both devices respond on the board:
+		 *
+		 *   i2cdetect -y 8        # 0x34 and 0x35 present
+		 *   dmesg | grep aw88261  # "chip id = 2113" for both
+		 *
+		 * Enable the link only in the same boot as installing the
+		 * matching topology; the generic qcom/sm8550/SM8550-MTP-tplg.bin
+		 * has no secondary sub-graph at all and DPCM then fails with
+		 * "no backend DAIs enabled".
+		 */
+		sec-mi2s-dai-link {
+			link-name = "SECONDARY MI2S Playback";
+			/*
+			 * Fallback only: the vendor drives the speakers over
+			 * secondary *TDM* (see `sec-tdm-dai-link`), which is
+			 * what is enabled by default now.  Kept wired so that
+			 * flipping the two "status" values plus reinstalling
+			 * the MI2S topology is a one-boot A/B test.
+			 */
+			status = "okay";
 
 			cpu {
-				sound-dai = <&q6apmbedai WSA_CODEC_DMA_RX_0>;
+				sound-dai = <&q6apmbedai SECONDARY_MI2S_RX>;
 			};
 
 			codec {
-				sound-dai = <&left_spkr>, <&right_spkr>, <&swr0 0>, <&lpass_wsamacro 0>;
+				sound-dai = <&aw88261_l>, <&aw88261_r>;
+			};
+
+			platform {
+				sound-dai = <&q6apm>;
+			};
+		};
+
+		/*
+		 * Vendor-accurate TDM flavour of the same link
+		 * (TDM-LPAIF-RX-SECONDARY: 4 slots x 32 bit, 48 kHz).
+		 *
+		 * This is the default speaker backend.  The slot layout is the
+		 * only knob the mainline machine driver reads here: with
+		 * dai-tdm-slot-num = <4> and dai-tdm-slot-width = <32>,
+		 * sc8280xp_tdm_hw_params() computes
+		 *
+		 *   bclk = 48000 * 4 * 32 = 6144000 Hz
+		 *
+		 * and votes it as the LPASS_CLK_ID_SEC_TDM_IBIT rate (see the
+		 * dai@40 node in &q6apmbedai), which is the vendor's clock plan
+		 * and the measurable pass/fail criterion for this change.
+		 *
+		 * The PCM sample format stays S16_LE (the BE hw_params fixup
+		 * pins it; the BE hw_params fixup): the TDM bclk does
+		 * not depend on it - it comes from the slot width above - and
+		 * feeding S16 into 32-bit TDM slots is exactly what Qualcomm's
+		 * own shikra TDM topology does.
+		 *
+		 * Requires the matching device sub-graph; install
+		 * the matching TDM topology as
+		 * qcom/sm8550/SM8550-MTP-tplg.bin in the same boot.
+		 */
+		sec-tdm-dai-link {
+			link-name = "Secondary TDM0 Playback";
+			status = "disabled";
+
+			cpu {
+				sound-dai = <&q6apmbedai SECONDARY_TDM_RX_0>;
+				/* 4 slots, 16 bit, L+R in slots 0/1.
+				 * 4 x 16 = 64 bits per frame = the "64FS" the
+				 * amplifier ACF itself declares (dump-acf.py:
+				 * I2SCTRL1 = 48kHz/64FS/32bit), i.e. bclk
+				 * 48000 * 4 * 16 = 3072000 Hz.  The previous
+				 * 4 x 32 (= 6.144 MHz) made the ADSP reject the
+				 * media format with -EINVAL.
+				 */
+				dai-tdm-slot-num = <4>;
+				dai-tdm-slot-width = <16>;
+				dai-tdm-slot-rx-mask = <0x3>;
+			};
+
+			codec {
+				sound-dai = <&aw88261_l>, <&aw88261_r>;
+				dai-tdm-slot-num = <4>;
+				dai-tdm-slot-width = <16>;
+				dai-tdm-slot-rx-mask = <0x3>;
 			};
 
 			platform {
@@ -235,8 +432,13 @@
 
 		wlan-enable-gpios = <&tlmm 80 GPIO_ACTIVE_HIGH>;
 		bt-enable-gpios = <&tlmm 81 GPIO_ACTIVE_HIGH>;
-		swctrl-gpios = <&tlmm 82 GPIO_ACTIVE_HIGH>;
-		xo-clk-gpios = <&tlmm 204 GPIO_ACTIVE_HIGH>;
+
+		/* The RF reference clock.  The pwrseq driver's clock unit is a
+		 * dependency of both the bluetooth and wlan targets, so this is
+		 * enabled on power-on.  Matches the OnePlus 15 (kaanapali) and
+		 * the sm8650/sm8750 boards; qrd omits it only because it relies
+		 * on the bootloader/AOP having left it running. */
+		clocks = <&rpmhcc RPMH_RF_CLK1>;
 
 		vdd-supply = <&vreg_s5g_0p8>;
 		vddio-supply = <&vreg_l15b_1p8>;
@@ -290,11 +492,25 @@
 
 	reserved-memory {
 
-		ramoops@a7000000 {
-			compatible = "ramoops";
-			reg = <0x0 0xa7000000 0x0 0x400000>;
-			console-size = <0x200000>;
-			pmsg-size = <0x200000>;
+		/*
+		 * CMA pool.  The kernel default (CONFIG_CMA_SIZE_MBYTES=32) is far
+		 * too small for a camera: one IMX355 frame is 3280x2464x2 = 16 MiB
+		 * raw (plus a 32 MiB ABGR8888 output), and libcamera's software ISP
+		 * needs several of each.  With 32 MiB the very first dma-heap
+		 * allocation fails ("req-size: 8008 pages, ret: -16").
+		 *
+		 * Naming it linux,cma matters: libcamera's DmaBufAllocator looks for
+		 * /dev/dma_heap/linux,cma first, and only then falls back to
+		 * /dev/dma_heap/reserved (which is the small default pool).
+		 *
+		 * linux,cma-default makes this replace the built-in default region.
+		 * Sized 256 MiB: 4x 16 MiB raw + 4x 32 MiB processed = 192 MiB.
+		 */
+		linux,cma {
+			compatible = "shared-dma-pool";
+			size = <0x0 0x10000000>;
+			reusable;
+			linux,cma-default;
 		};
 
 		xbl_dt_log_mem: xbl_dt_log@81a00000 {
@@ -376,7 +592,7 @@
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
 
-		vreg_l4b_3p1: ldo4 {
+		vreg_l4b_1p8: ldo4 {
 			regulator-name = "vreg_l4b_1p8";
 			regulator-min-microvolt = <1800000>;
 			regulator-max-microvolt = <1800000>;
@@ -826,17 +1042,75 @@
 	};
 };
 
+/*
+ * i2c8 (QUPv3 SE8, i2c@880000) is wired to the *mirb* pads on vermeer:
+ * SDA on TLMM gpio0 (mux "qup2_se0_l0_mirb") and SCL on TLMM gpio1
+ * (mux "qup2_se0_l1_mirb").
+ *
+ * Vendor reference (rev/vendor-dts/qcom/kalama-pinctrl.dtsi,
+ * qupv3_se8_i2c_pins): the vendor puts qupv3_se8_i2c SDA on gpio0 and SCL
+ * on gpio1 with exactly these mux functions.  The mainline sm8550.dtsi
+ * default (qup_i2c8_data_clk) instead uses gpio56/gpio57 with
+ * "qup2_se0_l0_mira"/"qup2_se0_l1_mira", which in the vendor pin table
+ * are the *SPI* pads of SE8, not the I2C pads.
+ *
+ * With the wrong pads muxed the GENI controller cannot drive SCL and
+ * raises ARB_LOST, which i2c-qcom-geni.c maps to "Bus arbitration lost,
+ * clock line undriveable" / -EAGAIN - exactly the -11 returned by the
+ * AW88261 chip-ID read ("aw88261_init read chipid error. ret = -11").
+ *
+ * gpio0/gpio1 have no other consumer on vermeer: cci2, the only other
+ * in-tree user of that mux, is left disabled, so there is no conflict.
+ */
+&tlmm {
+	qup_i2c8_data_clk_mirb: qup-i2c8-data-clk-mirb-state {
+		sda-pins {
+			pins = "gpio0";
+			function = "qup2_se0_l0_mirb";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+
+		scl-pins {
+			pins = "gpio1";
+			function = "qup2_se0_l1_mirb";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+	};
+};
+
 &i2c8 {
 	status = "okay";
 
-	/* Top speaker / ear speaker */
+	pinctrl-names = "default";
+	pinctrl-0 = <&qup_i2c8_data_clk_mirb>;
+
+	/*
+	 * Two Awinic AW88261 smart amplifiers.  Both listen to the same
+	 * secondary MI2S data line (TLMM gpio124, mux function "i2s1_data1")
+	 * and pick their channel with awinic,audio-channel.
+	 *
+	 * The mainline driver (sound/soc/codecs/aw88261.c) reads the chip ID
+	 * over i2c, so it only probes when the amplifiers are powered and out
+	 * of reset.  The vendor DT does not model a DVDD supply for them
+	 * (suggesting it is always-on), so leave dvdd to the dummy
+	 * regulator; the reset/enable lines (TLMM gpio182/183) are driven to
+	 * their operational level by the gpio-hog below.
+	 *
+	 * The ACF file shipped with the board is
+	 * qcom/sm8550/xiaomi/vermeer/aw882xx_acf.bin.  It is a plain Awinic
+	 * ACF container (id 0xa15f908, hdr_version 1, project "N11",
+	 * customer "MI", dev_name "aw88261") and parses cleanly with the
+	 * mainline aw88261 driver - verified against ACF_FILE_ID in
+	 * sound/soc/codecs/aw88395/aw88395_data_type.h.
+	 */
 	aw88261_l: audio-codec@34 {
 		compatible = "awinic,aw88261";
 		reg = <0x34>;
 
-		// dvdd-supply = <&vreg_l18b>;
 		sound-name-prefix = "Amplifier L";
-		firmware-name = "qcom/aw88261_acf.bin";
+		firmware-name = "qcom/sm8550/xiaomi/vermeer/aw882xx_acf.bin";
 
 		awinic,audio-channel = <0>;
 
@@ -848,14 +1122,148 @@
 		compatible = "awinic,aw88261";
 		reg = <0x35>;
 
-		// dvdd-supply = <&vreg_l18b>;
 		sound-name-prefix = "Amplifier R";
-		firmware-name = "qcom/aw88261_acf.bin";
+		firmware-name = "qcom/sm8550/xiaomi/vermeer/aw882xx_acf.bin";
 
 		awinic,audio-channel = <1>;
 
 		#sound-dai-cells = <0>;
 	};
+};
+
+/*
+ * AW88261 hardware reset / enable lines (TLMM gpio182 = left amp,
+ * gpio183 = right amp).
+ *
+ * Vendor reference: LineageOS android_kernel_xiaomi_sm8550, driver
+ * aw882xx (src/aw882xx.c):
+ *
+ *   aw882xx_gpio_request():
+ *           devm_gpio_request_one(..., GPIOF_OUT_INIT_LOW)      // drive low
+ *   aw882xx_hw_reset():                                         // called
+ *           gpio_set_value_cansleep(gpio, 0); mdelay(1);        //  before
+ *           gpio_set_value_cansleep(gpio, 1); mdelay(2);        //  chip-ID read
+ *
+ * so the sequence is: physical LOW (reset asserted) for 1 ms, then
+ * physical HIGH (reset released / enabled) before the chip ID is read.
+ * The vendor DT flags are 0x0 (GPIO_ACTIVE_HIGH), i.e. the value is a raw
+ * physical level: low = held in reset, high = running.  Therefore the
+ * line must be HIGH for the i2c probe to succeed.
+ *
+ * The mainline aw88261 driver (sound/soc/codecs/aw88261.c) has no
+ * reset-gpios support at all, and its binding (awinic,aw88395.yaml)
+ * explicitly forbids reset-gpios for awinic,aw88261, so the codec driver
+ * cannot own the line.  Hold it in the operational (high) state from GPIO
+ * controller probe time with a gpio-hog instead; the amplifiers are then
+ * already out of reset when i2c8 probes them.
+ *
+ * gpio-hog levels are LOGICAL: with GPIO_ACTIVE_HIGH, output-high drives
+ * the pin physically high, which is what the amplifiers need.  (An
+ * earlier revision of this node used output-low, i.e. held the amps in
+ * reset - that was backwards.)
+ *
+ * gpio68 (the vendor "spksw-gpio") is deliberately NOT hogged: neither
+ * the vendor aw882xx driver nor any mainline driver consumes it, its
+ * polarity is unknown, and in sm8550.dtsi gpio68 is the SE3 SDA/MISO pad
+ * used by i2c11/spi11 - driving it blindly could mute the amplifier or
+ * break i2c11.
+ */
+&tlmm {
+	aw88261_reset_hog: aw88261-reset-hog {
+		gpio-hog;
+		gpios = <182 GPIO_ACTIVE_HIGH>, <183 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "aw88261-reset";
+	};
+};
+
+/*
+ * i2c8 is SE8 of the first QUPv3 wrapper (geniqup@8c0000); without
+ * enabling the wrapper the i2c bus never probes and neither AW88261
+ * appears at 0x34/0x35.  Only the i2c bus is touched here - the Bluetooth
+ * agent owns the uart14 node in the same wrapper.
+ */
+&qupv3_id_1 {
+	status = "okay";
+};
+
+/*
+ * The q6apm-lpass-dais driver only picks up the MI2S/TDM clocks from a
+ * per-port child node.  Without it SECONDARY_MI2S_RX has no mclk/bclk.
+ *
+ * bclk = the LPAIF interface bit clock.  For the secondary I2S interface
+ *        that is LPASS_CLK_ID_SEC_MI2S_IBIT; for the secondary *TDM*
+ *        interface it is a different clock, LPASS_CLK_ID_SEC_TDM_IBIT
+ *        (see the dai@40 node below).
+ *
+ *        bclk is the only clock that matters here: the AW88261 has no MCLK
+ *        input at all - aw88261.c never requests or routes one, it locks its
+ *        internal SYSPLL onto the bit clock and its bring-up check
+ *        (aw88261_dev_check_sysst()) fails outright without BCK.
+ *
+ * mclk = a codec master clock.  There is no in-tree board that wires a
+ *        *secondary* MI2S/TDM MCLK, so LPASS_CLK_ID_MCLK_2 is an educated
+ *        guess (it does exist in the SM8550 q6prm clock table).  It is
+ *        harmless either way: q6i2s_set_sysclk() is only reached if the
+ *        clock is present, and a wrong choice can at worst mean "no MCLK"
+ *        on a pin neither amplifier uses.
+ *
+ * dai@18 / SECONDARY_MI2S_RX is the *disabled* fallback clock description.
+ * dai@40 / SECONDARY_TDM_RX_0 is the live one: `sec-tdm-dai-link` in the
+ * sound node is enabled and the matching TDM topology is installed.
+ */
+&q6apmbedai {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	dai@18 {
+		reg = <SECONDARY_MI2S_RX>;
+
+		/*
+		 * NOTE: the secondary-MI2S pins are NOT described here.  A child
+		 * node of &q6apmbedai has no compatible, so of_platform_populate()
+		 * (q6apm.c) never instantiates it as a device, pinctrl_bind_pins()
+		 * is never called for it and any pinctrl-0 is silently ignored.
+		 * The pins live on the `sound` node instead - see the comment
+		 * there.  Keep the per-port node to reg/clocks only, which is all
+		 * q6apm-lpass-dais and the binding
+		 * (qcom,q6apm-lpass-dais.yaml) look at.
+		 */
+		clocks = <&q6prmcc LPASS_CLK_ID_SEC_MI2S_IBIT LPASS_CLK_ATTRIBUTE_COUPLE_NO>,
+			 <&q6prmcc LPASS_CLK_ID_MCLK_2 LPASS_CLK_ATTRIBUTE_COUPLE_NO>;
+		/* The binding (qcom,q6apm-lpass-dais.yaml) requires the second
+		 * name to be "mclk", i.e. "bclk" first.  The driver looks the
+		 * clocks up by name, so the order is only about the schema.
+		 */
+		clock-names = "bclk", "mclk";
+	};
+
+	/*
+	 * Secondary TDM (the vendor's TDM-LPAIF-RX-SECONDARY).  This is the
+	 * live speaker backend: `sec-tdm-dai-link` is "okay" and the matching
+	 * topology is installed.  If `sec-tdm-dai-link` were disabled this
+	 * node would just be inert DT.
+	 *
+	 * Note the *different* bit-clock id: the LPAIF block is the same
+	 * hardware, but the DSP clock tables give the TDM/PCM framing its own
+	 * clock (0x202 in the ADSP namespace, LPASS_CLK_ID_SEC_TDM_IBIT in the
+	 * DT binding).  q6prm.h/q6prm-clocks.c now carry those ids; before,
+	 * a TDM bclk resolved to -ENOENT and was silently dropped.
+	 *
+	 * sc8280xp_tdm_hw_params() sets this clk to 6.144 MHz when the
+	 * dai-link is started (4 slots x 32 bit x 48 kHz).
+	 */
+	dai@40 {
+		reg = <SECONDARY_TDM_RX_0>;
+
+		clocks = <&q6prmcc LPASS_CLK_ID_SEC_TDM_IBIT LPASS_CLK_ATTRIBUTE_COUPLE_NO>,
+			 <&q6prmcc LPASS_CLK_ID_MCLK_2 LPASS_CLK_ATTRIBUTE_COUPLE_NO>;
+		clock-names = "bclk", "mclk";
+	};
+};
+
+&gpi_dma1 {
+	status = "okay";
 };
 
 &spi4 {
@@ -866,22 +1274,63 @@
 		reg = <0>;
 
 		interrupt-parent = <&tlmm>;
-		interrupts = <25 IRQ_TYPE_LEVEL_LOW>;
+		/*
+		 * Match the LineageOS vermeer DTS exactly: falling-edge IRQ
+		 * (the IC pulses INT briefly per event), 15 MHz SPI, reset
+		 * in raw GPIO convention (active-high), and the thp flag
+		 * that makes the driver switch the IC into coordinate mode.
+		 */
+		interrupts = <25 IRQ_TYPE_EDGE_FALLING>;
 
 		reset-gpios = <&tlmm 24 GPIO_ACTIVE_LOW>;
 
 		avdd-supply = <&vreg_l2b_3p0>;
+		vddio-supply = <&vreg_l12b_1p8>;
 
 		spi-max-frequency = <15000000>;
 
-		touchscreen-size-x = <1080>;
-		touchscreen-size-y = <2400>;
+		/*
+		 * The panel is 1440x3200; the touch IC reports the same range
+		 * in IC_INFO (screen_real_max_x/y).
+		 *
+		 * (An earlier version of this comment claimed "upstream
+		 * vermeer DTS says 1080x2400" -- that is not true: torvalds'
+		 * tree carries no vermeer DTS at all.  1080x2400 is the
+		 * vendor's generic default, used by the *disabled* I2C touch
+		 * node and by the QCOM reference boards; vermeer overrides it
+		 * with 143999/319999 = 1440x3200 in its own SPI node.)
+		 */
+		touchscreen-size-x = <1440>;
+		touchscreen-size-y = <3200>;
+
+		firmware-name = "vermeer";
+		goodix,support-thp-fw;
 
 		pinctrl-names = "default";
 		pinctrl-0 = <&ts_irq>, <&ts_reset>;
 	};
 };
 
+/*
+ * VPU (qcom-iris).  The sm8550 platform data asks for
+ * qcom/vpu/vpu30_p4.mbn (iris_platform_vpu3x.c), which linux-firmware does
+ * not ship under that exact name anymore: commit "qcom: vpu: rename firmware
+ * binaries" (2025-10-17) made vpu30_p4.mbn a *symlink* to vpu30_p4_s7.mbn,
+ * i.e.
+ *
+ *   File: qcom/vpu/vpu30_p4_s7.mbn
+ *   Link: qcom/vpu/vpu30_p4.mbn -> vpu30_p4_s7.mbn
+ *   Version: VIDEO.VPU.3.1-0095
+ *
+ * The old name and vpu30_p4_s7.mbn are the same build: both have a .text of
+ * 0x131980 (the vendor vpu30_4v.mbn is a different, older build with
+ * .text 0x12da40 and a "video-firmware.3.1-<sha>" version string, so it is
+ * deliberately *not* used here).  The matching file (sha256
+ * 98d40a86af3b300bb55faa694bf130f4d4de8d4b5c5ba74e03214f5037368ae0) is
+ * carried in the firmware package and the rootfs overlay under
+ * qcom/vpu/, together with the vpu30_p4.mbn symlink, so the driver finds it
+ * and no longer spams "core init failed".
+ */
 &iris {
 	status = "okay";
 };
@@ -920,9 +1369,21 @@
 		pinctrl-0 = <&sde_dsi_active>, <&sde_te>;
 		pinctrl-1 = <&sde_dsi_suspend>, <&sde_te>;
 
-		vddio-supply = <&vreg_l12b_1p8>;
+		/*
+		 * N11 panel module: 1.8V I/O (vddio) is on PM8550B LDO4,
+		 * 3.0V (vci) on LDO13; the 1.14V core rail the vendor calls
+		 * "vddd-l11b" is named "vdd" here.
+		 *
+		 * Three-way evidence from the vendor DTS, LineageOS and the stock dtbo:
+		 *   vendor  vermeer-sde-display-mtp.dtsi:131-134  vddio = L4B
+		 *   LOS     lineage-23.2, same file and lines    vddio = L4B
+		 *   ROM     dtbo fragment e54.dts:10615          vddio = <&L4B>
+		 * L12B (formerly used here) is the touch controller rail.
+		 */
+		vddio-supply = <&vreg_l4b_1p8>;
 		vci-supply = <&vreg_l13b_3p0>;
-		vdd-supply = <&vreg_l11b_1p2>;
+		vddd-l11b-supply = <&vreg_l11b_1p2>;
+		vddd-gpio-supply = <&display_panel_vddd>;
 
 		reset-gpios = <&tlmm 133 GPIO_ACTIVE_HIGH>;
 		te-gpios = <&tlmm 86 GPIO_ACTIVE_HIGH>;
@@ -937,14 +1398,44 @@
 
 &mdss_dsi0_out {
 	remote-endpoint = <&panel0_in>;
-	data-lanes = <0 1 2 3>;
-};
+	data-lanes = <0 1 2 3>;};
 
 &mdss_dsi0_phy {
 	vdds-supply = <&vreg_l1e_0p88>;
 	status = "okay";
 };
 
+/*
+ * IP Accelerator - the AP <-> modem packet path.
+ *
+ * Mobile data does not go through a "qmi_wwan"-style USB netdev but through
+ * the IPA: once the modem is up and the IPA QMI handshake has completed the
+ * driver registers the rmnet_ipa0 netdev by itself (there is no separate
+ * "&rmnet" DT node to fill in).  The IPA microcontroller firmware comes from
+ * the vendor's "modem" partition, same place as the modem firmware itself.
+ */
+/*
+ * DELIBERATELY DISABLED: enabling this oopses the kernel during boot.
+ *
+ *   ipa_probe+0xf2c/0x1380
+ *   ipa_probe+0x77c/0x1380
+ *   Unable to handle kernel NULL pointer dereference at virtual address ...
+ *
+ * Enabling it has been observed to oops during probe.  The
+ * modem's QMI / SMS / voice paths do not need IPA; only the data path does,
+ * and IPA has no mainline precedent on SM8550 yet.  Re-enable only with a
+ * fixed driver.
+ */
+&ipa {
+	/*
+	 * The vendor ships the split form (ipa_fws.mdt plus .b00..b04) and
+	 * mainline's qcom_mdt_load() consumes exactly that; the previous
+	 * "ipa_fws.mbn" never existed.
+	 */
+	firmware-name = "ipa_fws.mdt";
+
+	status = "okay";
+};
 
 &pcie0 {
 	wake-gpios = <&tlmm 96 GPIO_ACTIVE_HIGH>;
@@ -980,6 +1471,23 @@
 	status = "okay";
 };
 
+/*
+ * Second PCIe root complex (pcie1 @0x1c08000) - *not* a modem link.
+ *
+ * The modem on vermeer (SM8550 / kalama) is the in-SoC MPSS Hexagon loaded
+ * through PAS (see &remoteproc_mpss below), reached over IPCC/GLINK, not
+ * PCIe.  The vendor DT proves the pcie1 port is unused: it tunes the pcie1
+ * PHY and then disables the controller outright -
+ *
+ *   qcom/kalama-pcie.dtsi : pcie1: qcom,pcie@1c08000
+ *   dtbo (vermeer)        : &pcie1 { qcom,pcie-phy-ver = <0x68>; ... };
+ *   dtbo (vermeer)        : &pcie1 { status = "disabled"; };
+ *
+ * Leaving it enabled only produced a boot-time link-training timeout and the
+ * harmless-but-misleading "qcom-pcie 1c08000.pcie: Device not found" line.
+ * Keep the controller and its PHY off to match the vendor; the GPIO/supply
+ * details are left in place in case someone ever needs to re-enable it.
+ */
 &pcie1 {
 	wake-gpios = <&tlmm 99 GPIO_ACTIVE_HIGH>;
 	perst-gpios = <&tlmm 97 GPIO_ACTIVE_LOW>;
@@ -987,7 +1495,7 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie1_default_state>;
 
-	status = "okay";
+	status = "disabled";
 };
 
 &pcie1_phy {
@@ -995,7 +1503,7 @@
 	vdda-pll-supply = <&vreg_l3e_1p2>;
 	vdda-qref-supply = <&vreg_l1e_0p88>;
 
-	status = "okay";
+	status = "disabled";
 };
 
 &pon_pwrkey {
@@ -1035,6 +1543,36 @@
 		output-enable;
 		bias-disable;
 		power-source = <0>;
+	};
+};
+
+/*
+ * Rear camera flash: one physical white LED on PM8550 (USID 1), shared by all
+ * three rear cameras.  The vendor DT (e54.dts fragment@66) points
+ * led_flash_rear_wide / _ultra / _macro at the very same
+ * pm8550_flash0 / pm8550_torch0 / pm8550_switch0, so there is exactly one LED
+ * here, not three.
+ *
+ * led-sources is 1-based (drivers/leds/flash/leds-qcom-flash.c).  The vendor's
+ * switch0 carries qcom,led-mask = <0x01>, i.e. flash channel 1 only - *not*
+ * the two-channel pairing (<1>,<4> / <2>,<3>) that the upstream SM8550 boards
+ * use for their higher-current LEDs.
+ *
+ * Values come from the vendor DTBO (e54.dts): flash 0x258 = 600 mA,
+ * torch 0x1c2 = 450 mA, duration 0x12c = 300 ms.  All three sit inside the
+ * ranges Documentation/devicetree/bindings/leds/qcom,spmi-flash-led.yaml
+ * allows.
+ */
+&pm8550_flash {
+	status = "okay";
+
+	led-0 {
+		function = LED_FUNCTION_FLASH;
+		color = <LED_COLOR_ID_WHITE>;
+		led-sources = <1>;
+		led-max-microamp = <450000>;
+		flash-max-microamp = <600000>;
+		flash-max-timeout-us = <300000>;
 	};
 };
 
@@ -1083,10 +1621,39 @@
 	status = "okay";
 };
 
+/* UART14 (QUPv3 SE14, qup2_se6) carries the WCN7850 Bluetooth link.
+ * Confirmed against the vendor kernel DT (kalama-bt.dtsi:
+ * &qupv3_se14_4uart status ok) and the LineageOS kalama-qupv3.dtsi. */
+&qupv3_id_1 {
+	status = "okay";
+};
+
 &remoteproc_adsp {
 	firmware-name = "adsp.mbn",
 			"adsp_dtb.mbn";
 	status = "okay";
+};
+
+/*
+ * All of the phone's motion/environment sensors (LSM6DSV accelerometer +
+ * gyroscope, TCS3720 ambient light/proximity/flicker, SX937X SAR proximity,
+ * TSL2522 ambient light and the QMC630X magnetometer) are *not* wired to the
+ * application processor.  They live behind the Snapdragon Sensor Core
+ * (SSC / QSH) that runs on the ADSP, which owns its own I2C/SPI controllers.
+ *
+ * The only way the AP can reach them is QMI over the IPC Router, carried by
+ * the ADSP "IPCRTR" GLINK channel.  That channel is not described upstream,
+ * so without this node the userspace sensor stack (sns-reg + libssc /
+ * iio-sensor-proxy) has nothing to talk to.  Intent sizes are taken from the
+ * vendor DT (kalama.dtsi "qcom,adsp_qrtr").
+ */
+&glink_edge_adsp {
+	qrtr {
+		qcom,glink-channels = "IPCRTR";
+		qcom,intents = <0x800  5
+				0x2000 3
+				0x4400 2>;
+	};
 };
 
 &remoteproc_cdsp {
@@ -1095,6 +1662,30 @@
 	status = "okay";
 };
 
+/*
+ * Modem (MPSS) - the Snapdragon 8 Gen 2 modem is an in-SoC Hexagon
+ * ("qcom,sm8550-mpss-pas" @0x4080000) authenticated and booted through PAS;
+ * it is *not* a discrete PCIe modem (see the pcie1 comment above).  The node
+ * comes enabled and fully populated (memory-region, smp2p, glink-edge,
+ * RPMh MSS/CX power domains, qmp) from sm8550.dtsi, and it probes at boot:
+ *
+ *   remoteproc remoteproc0: modem is available
+ *
+ * Unlike adsp/cdsp the MPSS resource has auto_boot = false, so the firmware
+ * is only requested when userspace starts it:
+ *
+ *   echo start > /sys/class/remoteproc/remoteproc0/state
+ *
+ * (in postmarketOS that is what the `msm-modem` service from soc-qcom-modem
+ * does).  Because that happens long after the rootfs is mounted, the modem
+ * firmware only has to live in /lib/firmware - it does *not* have to be in
+ * the vendor_boot ramdisk like the auto-booting adsp.mbn is.
+ *
+ * The names are overridden on purpose: the vendor stores the firmware as
+ * modem.mbn / modem_dtb.mbn in its "modem" partition (mounted at
+ * /vendor/firmware_mnt/image on Android), not as the "modem.mdt" split set
+ * the generic driver defaults to.
+ */
 &remoteproc_mpss {
 	firmware-name = "modem.mbn",
 			"modem_dtb.mbn";
@@ -1103,38 +1694,6 @@
 
 &sleep_clk {
 	clock-frequency = <32000>;
-};
-
-&swr0 {
-	status = "okay";
-
-	/* WSA8845 */
-	left_spkr: speaker@0,0 {
-		compatible = "sdw20217020400";
-		reg = <0 0>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&spkr_1_sd_n_active>;
-		powerdown-gpios = <&lpass_tlmm 17 GPIO_ACTIVE_LOW>;
-		#sound-dai-cells = <0>;
-		sound-name-prefix = "SpkrLeft";
-		vdd-1p8-supply = <&vreg_l15b_1p8>;
-		vdd-io-supply = <&vreg_l3g_1p2>;
-		qcom,port-mapping = <1 2 3 7 10 13>;
-	};
-
-	/* WSA8845 */
-	right_spkr: speaker@0,1 {
-		compatible = "sdw20217020400";
-		reg = <0 1>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&spkr_2_sd_n_active>;
-		powerdown-gpios = <&lpass_tlmm 18 GPIO_ACTIVE_LOW>;
-		#sound-dai-cells = <0>;
-		sound-name-prefix = "SpkrRight";
-		vdd-1p8-supply = <&vreg_l15b_1p8>;
-		vdd-io-supply = <&vreg_l3g_1p2>;
-		qcom,port-mapping = <4 5 6 7 11 13>;
-	};
 };
 
 &swr1 {
@@ -1161,6 +1720,43 @@
 
 &tlmm {
 	gpio-reserved-ranges = <32 8>;
+
+	/*
+	 * Secondary MI2S (LPASS MI2S1) routed through the main TLMM.  The
+	 * amplifiers take their audio from data1 (gpio124), which is the line
+	 * the vendor calls "tdm1_dout" / "i2s1_data1".
+	 */
+	sec_mi2s_default: sec-mi2s-default-state {
+		sck-pins {
+			pins = "gpio121";
+			function = "i2s1_sck";
+			drive-strength = <8>;
+			bias-disable;
+			output-high;
+		};
+
+		data0-pins {
+			pins = "gpio122";
+			function = "i2s1_data0";
+			drive-strength = <8>;
+			bias-disable;
+		};
+
+		ws-pins {
+			pins = "gpio123";
+			function = "i2s1_ws";
+			drive-strength = <8>;
+			bias-disable;
+			output-high;
+		};
+
+		data1-pins {
+			pins = "gpio124";
+			function = "i2s1_data1";
+			drive-strength = <8>;
+			bias-disable;
+		};
+	};
 
 	sde_dsi_active: sde-dsi-active-state {
 		pins = "gpio133";
@@ -1198,21 +1794,21 @@
 	};
 
 	nfc_default: nfc-default-state {
-		nfc_int_active: nfc_int_active-state {
+		nfc_int_active: nfc-int-active-pins {
 			pins = "gpio55";
 			function = "gpio";
 			drive-strength = <2>;
 			bias-pull-down;
 		};
 
-		nfc_enable_active: nfc_enable_active-state {
+		nfc_enable_active: nfc-enable-active-pins {
 			pins = "gpio30";
 			function = "gpio";
 			drive-strength = <2>;
 			bias-disable;
 		};
 
-		nfc_clk_req_active: nfc_clk_req_active-state {
+		nfc_clk_req_active: nfc-clk-req-active-pins {
 			pins = "gpio31";
 			function = "gpio";
 			drive-strength = <2>;
@@ -1221,21 +1817,21 @@
 	};
 
 	nfc_sleep: nfc-sleep-state {
-		nfc_int_suspend: nfc_int_suspend-state {
+		nfc_int_suspend: nfc-int-suspend-pins {
 			pins = "gpio55";
 			function = "gpio";
 			drive-strength = <2>;
 			bias-pull-down;
 		};
 
-		nfc_enable_suspend: nfc_enable_suspend-state {
+		nfc_enable_suspend: nfc-enable-suspend-pins {
 			pins = "gpio30";
 			function = "gpio";
 			drive-strength = <2>;
 			bias-disable;
 		};
 
-		nfc_clk_req_suspend: nfc_clk_req_suspend-state {
+		nfc_clk_req_suspend: nfc-clk-req-suspend-pins {
 			pins = "gpio31";
 			function = "gpio";
 			drive-strength = <2>;
@@ -1259,12 +1855,64 @@
 		bias-pull-up;
 	};
 
+	/*
+	 * Match the SM8550 QRD: do not force an output level here.  The
+	 * pwrseq-qcom-wcn driver owns bt-enable-gpios (gpio81) and drives it
+	 * at the right time; hard-coding output-low held the WCN7850 in
+	 * reset whenever this pinctrl was applied after the power sequence,
+	 * which made the QCA version handshake fail intermittently
+	 * ("Reading QCA version information failed (-110)").
+	 */
 	bt_default: bt-default-state {
-		pins = "gpio81";
-		function = "gpio";
-		drive-strength = <2>;
-		output-low;
-		bias-pull-down;
+		bt-en-pins {
+			pins = "gpio81";
+			function = "gpio";
+			drive-strength = <16>;
+			bias-disable;
+		};
+
+		/* WCN7850 SW_CTRL (coex / antenna switch), as on the QRD and
+		 * per the vendor's qcom,bt-sw-ctrl-gpio = <&tlmm 82 0>. */
+		sw-ctrl-pins {
+			pins = "gpio82";
+			function = "gpio";
+			bias-pull-down;
+		};
+	};
+};
+
+/*
+ * QUPv3 SE14 / UART14 (qup2_se6) carries the WCN7850 Bluetooth link.
+ * The node is kept byte-for-byte identical to the upstream sm8550-qrd
+ * bluetooth node, which is known to work with the mainline driver: same
+ * supplies, same max-speed = 3.2 M, no board-specific workarounds.  In
+ * particular do not set qcom,brahma-peri-baudrate - that property is only
+ * for the WCN7860/BRAHMA combo chip on the OnePlus 15, whose ROM ignores the
+ * standard BT-subsystem baud VSC.
+ *
+ * Pinctrl: use the mainline defaults from sm8550.dtsi (qup_uart14_default:
+ * TX/RX bias-pull-up; qup_uart14_cts_rts: CTS/RTS bias-pull-down).  The
+ * upstream sm8550-qrd works with exactly these values.  Previously
+ * overrode them with the vendor's *idle* values (RX bias-pull-down, CTS
+ * bias-disable) and it made no difference to the framing problem - and the
+ * vendor's *active* state is actually TX bias-pull-up / RX bias-disable, so
+ * that override was not even faithful to the vendor.
+ */
+&uart14 {
+	status = "okay";
+
+	bluetooth {
+		compatible = "qcom,wcn7850-bt";
+
+		vddrfacmn-supply = <&vreg_pmu_rfa_cmn>;
+		vddaon-supply = <&vreg_pmu_aon_0p59>;
+		vddwlcx-supply = <&vreg_pmu_wlcx_0p8>;
+		vddwlmx-supply = <&vreg_pmu_wlmx_0p85>;
+		vddrfa0p8-supply = <&vreg_pmu_rfa_0p8>;
+		vddrfa1p2-supply = <&vreg_pmu_rfa_1p2>;
+		vddrfa1p8-supply = <&vreg_pmu_rfa_1p8>;
+
+		max-speed = <3200000>;
 	};
 };
 
@@ -1294,7 +1942,28 @@
 	/* Keep USB 2.0 only for now */
 	qcom,select-utmi-as-pipe-clk;
 
-	dr_mode = "peripheral";
+	/*
+	 * Must be "otg", not "peripheral".  The pmic-glink usb-c-connector
+	 * references usb_1 through the port@0 graph endpoint, and
+	 * ucsi_register_port() resolves the port's USB role switch from that
+	 * same graph connection (fwnode_usb_role_switch_get()): the dwc3
+	 * declares "usb-role-switch" in sm8550.dtsi, so the lookup walks
+	 * port@0 to usb@a600000 and expects a role switch registered against
+	 * it.  dwc3 only registers that role switch from dwc3_drd_init(),
+	 * which dwc3_core_init_mode() calls *only* for USB_DR_MODE_OTG.  In
+	 * peripheral mode the role switch never appears, so
+	 * fwnode_usb_role_switch_get() returns -EPROBE_DEFER for ever and the
+	 * UCSI PPM never initialises:
+	 *
+	 *   ucsi_glink.pmic_glink_ucsi pmic_glink.ucsi.0: PPM init failed, stop trying
+	 *
+	 * The role switch defaults to the peripheral role, so the USB gadget
+	 * (ACM/ECM console) still comes up as a device; UCSI can then flip it
+	 * to host for USB-C OTG.  The upstream sm8550-qrd/mtp boards leave
+	 * dr_mode unset, which also resolves to OTG.
+	 */
+	dr_mode = "otg";
+	role-switch-default-mode = "peripheral";
 	maximum-speed = "high-speed";
 	/* Remove USB3 phy */
 	phys = <&usb_1_hsphy>;
@@ -1323,4 +1992,382 @@
 
 &dispcc {
 	status = "okay";
+};
+
+/* ===========================================================================
+ * Cameras -- phase 1: the ultrawide Sony IMX355.
+ *
+ * Only the ultrawide is wired up for now: it is the one sensor that already
+ * has a mainline driver, so it is the cheapest way to prove the whole
+ * camss -> csiphy -> sensor path on this board.  The other three (ovx8000
+ * wide, gc02m1 macro, ov16a1q front) need drivers of their own and are
+ * deliberately left out.
+ *
+ * Wiring from the vendor devicetree
+ * (vendor-dts/qcom/camera/vermeer-sm8550-camera-sensor.dtsi:408-445 and
+ * DTBO e54.dts fragment@67):
+ *   CCI0 master 1 -> cci0_i2c1, sensor at 7-bit 0x1a (the vendor log's 0x34
+ *                    is the 8-bit form)
+ *   CSIPHY2       -> camss port@2  (camss uses the port number as the CSIPHY
+ *                    id, see camss.c: csiphy_id = vep.base.port)
+ *   MCLK1 tlmm gpio101, reset tlmm gpio117 (active low)
+ *   VANA fan53870_l3 2.7V, VDIG fan53870_l2 1.2V, VIO vreg_l8b_1p8
+ *   4 data lanes, 19.2 MHz xclk -> 360 MHz link frequency
+ *   (imx355.c computes 19200000 * 75 / (2 * 2) for the 4-lane case)
+ *
+ * The sensor endpoint MUST carry data-lanes: without it
+ * imx355_get_hwcfg() returns NULL and probe fails with -ENODEV.
+ * ===========================================================================
+ */
+
+&tlmm {
+	cam_macro_iovdd_default: cam-macro-iovdd-default-state {
+		pins = "gpio66";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+		output-high;
+	};
+
+	wl2868c_enable_default: wl2868c-enable-default-state {
+		pins = "gpio126";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+		output-high;
+	};
+};
+
+&i2c_hub_3 {
+	status = "okay";
+	clock-frequency = <400000>;
+
+	/* ON Semiconductor FAN53870 -- the camera LDO PMIC (vendor onsemi,ldo@35) */
+	fan53870: regulator@2f {
+		compatible = "onnn,fan53870", "onsemi,fan53870";
+		/*
+		 * The vendor devicetree says 0x35, but the silicon answers at
+		 * 0x2f: the vendor driver for the same part
+		 * (drivers/regulator/wl2868c.c) uses WL2868C_SLAVE_ADDR 0x5E,
+		 * which is the 8-bit form of 0x2f.  Confirmed on the board --
+		 * 0x2f ACKs and reports LDO1/2 = 0x58 (1.2V) and LDO3-7 = 0xa2
+		 * (2.8V), exactly the values that map implies.
+		 */
+		reg = <0x2f>;
+
+		regulators {
+			/* LDO1-2: 528..1504 mV, 8 mV steps */
+			fan53870_l1: LDO1 {
+				regulator-name = "fan53870-l1";
+				regulator-min-microvolt = <1200000>;
+				regulator-max-microvolt = <1200000>;
+				vin-supply = <&wl2868c_enable>;
+			};
+
+			fan53870_l2: LDO2 {
+				regulator-name = "fan53870-l2";
+				regulator-min-microvolt = <1200000>;
+				regulator-max-microvolt = <1200000>;
+				vin-supply = <&wl2868c_enable>;
+			};
+
+			/* LDO3-7: 1504..3400 mV, 16 mV steps */
+			fan53870_l3: LDO3 {
+				regulator-name = "fan53870-l3";
+				regulator-min-microvolt = <2700000>;
+				regulator-max-microvolt = <2720000>;
+				vin-supply = <&wl2868c_enable>;
+			};
+
+			fan53870_l4: LDO4 {
+				regulator-name = "fan53870-l4";
+				regulator-min-microvolt = <2800000>;
+				regulator-max-microvolt = <2800000>;
+				vin-supply = <&wl2868c_enable>;
+			};
+
+			fan53870_l5: LDO5 {
+				regulator-name = "fan53870-l5";
+				regulator-min-microvolt = <2700000>;
+				regulator-max-microvolt = <2720000>;
+				vin-supply = <&wl2868c_enable>;
+			};
+
+			fan53870_l6: LDO6 {
+				regulator-name = "fan53870-l6";
+				regulator-min-microvolt = <2800000>;
+				regulator-max-microvolt = <2800000>;
+				vin-supply = <&wl2868c_enable>;
+			};
+
+			fan53870_l7: LDO7 {
+				regulator-name = "fan53870-l7";
+				regulator-min-microvolt = <3104000>;
+				regulator-max-microvolt = <3104000>;
+				vin-supply = <&wl2868c_enable>;
+			};
+		};
+	};
+};
+
+&camss {
+	status = "okay";
+
+	vdda-phy-supply = <&vreg_l1e_0p88>;
+	vdda-pll-supply = <&vreg_l3e_1p2>;
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		/* port@N reg == CSIPHY id; the ultrawide sits on CSIPHY2 */
+		port@2 {
+			reg = <2>;
+
+			csiphy2_ep: endpoint {
+				clock-lanes = <4>;
+				data-lanes = <0 1 2 3>;
+				remote-endpoint = <&imx355_ep>;
+			};
+		};
+
+		/* Macro GC02M1 sits on CSIPHY3, single lane */
+		port@3 {
+			reg = <3>;
+
+			csiphy3_ep: endpoint {
+				clock-lanes = <4>;
+				data-lanes = <0>;
+				remote-endpoint = <&gc02m1_ep>;
+			};
+		};
+
+		/* Front OV16A1Q sits on CSIPHY4, four lanes */
+		port@4 {
+			reg = <4>;
+
+			csiphy4_ep: endpoint {
+				clock-lanes = <4>;
+				data-lanes = <0 1 2 3>;
+				remote-endpoint = <&ov16a1q_ep>;
+			};
+		};
+	};
+};
+
+&cci0 {
+	status = "okay";
+};
+
+&cci2 {
+	status = "okay";
+
+	/*
+	 * Only master 0 is used (front camera on gpio74/75).  The SoC dtsi
+	 * also claims gpio0/1 for master 1, which 880000.i2c already owns and
+	 * makes the whole controller fail to probe.
+	 */
+	pinctrl-0 = <&cci2_0_default>;
+	pinctrl-1 = <&cci2_0_sleep>;
+};
+
+&cci2_i2c0 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	ov16a1q: camera@10 {
+		compatible = "ovti,ov16a1q";
+		reg = <0x10>;
+
+		clocks = <&camcc CAM_CC_MCLK0_CLK>;
+		assigned-clocks = <&camcc CAM_CC_MCLK0_CLK>;
+		assigned-clock-rates = <19200000>;
+
+		reset-gpios = <&tlmm 120 GPIO_ACTIVE_LOW>;
+
+		vana-supply = <&fan53870_l5>;
+		vio-supply = <&vreg_l8b_1p8>;
+		vdig-supply = <&fan53870_l1>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&cam0_default>;
+
+		port {
+			ov16a1q_ep: endpoint {
+				data-lanes = <1 2 3 4>;
+				link-frequencies = /bits/ 64 <696000000>;
+				remote-endpoint = <&csiphy4_ep>;
+			};
+		};
+	};
+};
+
+&cci1 {
+	status = "okay";
+};
+
+&cci1_i2c0 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	gc02m1: camera@37 {
+		compatible = "galaxycore,gc02m1";
+		reg = <0x37>;
+
+		clocks = <&camcc CAM_CC_MCLK3_CLK>;
+		assigned-clocks = <&camcc CAM_CC_MCLK3_CLK>;
+		assigned-clock-rates = <19200000>;
+
+		reset-gpios = <&tlmm 119 GPIO_ACTIVE_LOW>;
+
+		vana-supply = <&fan53870_l4>;
+		vio-supply = <&camera_macro_iovdd_ldo>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&cam3_default>;
+
+		port {
+			gc02m1_ep: endpoint {
+				data-lanes = <1>;
+				link-frequencies = /bits/ 64 <336000000>;
+				remote-endpoint = <&csiphy3_ep>;
+			};
+		};
+	};
+};
+
+&cci0_i2c1 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	imx355: camera@1a {
+		compatible = "sony,imx355";
+		reg = <0x1a>;
+
+		clocks = <&camcc CAM_CC_MCLK1_CLK>;
+		assigned-clocks = <&camcc CAM_CC_MCLK1_CLK>;
+		assigned-clock-rates = <19200000>;
+
+		reset-gpios = <&tlmm 117 GPIO_ACTIVE_LOW>;
+
+		avdd-supply = <&fan53870_l3>;
+		dvdd-supply = <&fan53870_l2>;
+		dovdd-supply = <&vreg_l8b_1p8>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&cam1_default>;
+
+		port {
+			imx355_ep: endpoint {
+				data-lanes = <1 2 3 4>;
+				link-frequencies = /bits/ 64 <360000000>;
+				remote-endpoint = <&csiphy2_ep>;
+			};
+		};
+	};
+};
+
+/*
+ * Camera module EEPROMs.
+ *
+ * These are plain 24Cxx I2C parts, so the generic at24 driver handles them
+ * with zero kernel code (CONFIG_EEPROM_AT24=m).  They hold the per-module
+ * calibration data (AWB / lens shading / PDAF ...) in a Qualcomm-proprietary
+ * layout; nothing in mainline consumes that layout yet, but having the bytes
+ * in /sys/bus/i2c/devices/<bus>-00xx/eeprom is what any future tuning work
+ * needs as input.
+ *
+ * Addresses were verified with `i2cdetect`, with the
+ * camera rails powered (they are off while the sensor is idle, so a scan on
+ * an idle device shows nothing):
+ *
+ *   i2c-4 (= cci0_i2c0) 0x51  -> wide module       GT24P128F / P24C128E  = 24c128 (16 KiB)
+ *   i2c-5 (= cci0_i2c1) 0x50  -> ultra-wide module GT24P64E              = 24c64  ( 8 KiB)
+ *
+ * Note that all four do not sit at 0x50; the wide
+ * module is at 0x51.
+ *
+ * The macro/front module EEPROMs hang off cci1/cci2, which are not enabled
+ * in this DT at all yet (their sensors have no upstream driver).
+ */
+&cci0_i2c0 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	eeprom_wide: eeprom@51 {
+		compatible = "atmel,24c128";
+		reg = <0x51>;
+		vcc-supply = <&vreg_l8b_1p8>;
+		read-only;
+	};
+};
+
+&cci0_i2c1 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	eeprom_ultra: eeprom@50 {
+		compatible = "atmel,24c64";
+		reg = <0x50>;
+		vcc-supply = <&vreg_l8b_1p8>;
+		read-only;
+	};
+};
+
+/*
+ * The IR blaster sits on spi9 (QUPv3 wrap 2, SE9).  spi-geni-qcom fails
+ * its probe without DMA channels ("Failed to get tx DMA ch") and the GPI
+ * DMA controller for that wrapper is disabled by default in sm8550.dtsi,
+ * so turn it on -- exactly as gpi_dma1 is enabled for the touchscreen on
+ * spi4.  Without this the SPI controller sits in deferred-probe forever
+ * and the IR LED never appears.
+ */
+&gpi_dma2 {
+	status = "okay";
+};
+
+/*
+ * IR blaster.  The vendor node hangs off qupv3_se9_spi, i.e. the SPI
+ * controller at 0x884000, which is mainline's spi9 -- the node in the
+ * older linux-mainline branch is attached to &spi1 (0xa84000) and is
+ * therefore wrong (0xa84000 is se1 on kalama).  Pin muxing matches
+ * pinctrl's qup_spi9_data_clk/qup_spi9_cs; the vendor uses gpio60/61/62/63
+ * for MISO/MOSI/CLK/CS.
+ *
+ * Note the bindings vs driver mismatch upstream: ir-spi.c asks for the
+ * "irda_regulator" supply while ir-spi-led.yaml only documents
+ * "power-supply".  The vendor driver uses no regulator at all (it is a
+ * plain char device, /dev/ir_spi), and the real LED rail is not known,
+ * so no supply property is declared here on purpose.  See
+ * the stock device tree.
+ */
+&spi9 {
+	status = "okay";
+
+	ir-spi@0 {
+		compatible = "ir-spi-led";
+		reg = <0>;
+		spi-max-frequency = <19200000>;
+	};
+};
+
+/*
+ * N11 panel's fourth rail.  The factory DTBO defines exactly this node
+ * (fragment@45, e54.dts:10696): a GPIO42-gated fixed regulator at 1.07V,
+ * enable-active-high and regulator-boot-on.  Without it the panel's DDIC
+ * only ever sees three of its four supplies, which is a likely cause
+ * for the persistent "frame done timeout" storm in the DPU.
+ */
+/ {
+	display_panel_vddd: display_panel_vddd {
+		compatible = "regulator-fixed";
+		regulator-name = "display_panel_vddd";
+
+		gpio = <&tlmm 42 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-boot-on;
+
+		regulator-min-microvolt = <1070000>;
+		regulator-max-microvolt = <1070000>;
+	};
 };
