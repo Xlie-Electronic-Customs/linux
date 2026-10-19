@@ -3034,6 +3034,14 @@ int ath12k_qmi_request_target_cap(struct ath12k_base *ab)
 	else
 		ab->qmi.target.board_id = board_id;
 
+	/* vermeer (Xiaomi Redmi K70 / POCO F6 Pro): the WCN7850 firmware
+	 * reports the default board-id 0xff, but the upstream board-2.bin
+	 * only carries an entry for board-id 82 with subsystem-device 0x1107.
+	 * Fall back to it so board data can be loaded.
+	 */
+	if (ab->qmi.target.board_id == ATH12K_BOARD_ID_DEFAULT)
+		ab->qmi.target.board_id = 82;
+
 	if (resp.soc_info_valid)
 		ab->qmi.target.soc_id = resp.soc_info.soc_id;
 
