@@ -5,6 +5,7 @@
  * Copyright (c) 2020, Linaro Ltd.
  */
 
+#include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/qrtr.h>
 #include <linux/workqueue.h>
@@ -149,7 +150,21 @@ static int service_announce_new(struct sockaddr_qrtr *dest,
 	msg.msg_name = (struct sockaddr *)dest;
 	msg.msg_namelen = sizeof(*dest);
 
-	return kernel_sendmsg(qrtr_ns.sock, &msg, &iv, 1, sizeof(pkt));
+	/*
+	 * The transport below this socket (glink/smem) reports -EAGAIN when
+	 * its FIFO is full, which happens whenever the remote processor is
+	 * down or restarting.  Retry briefly instead of giving up: the modem
+	 * crash loop on this platform makes that a routine condition.
+	 */
+	for (int tries = 0; tries < 10; tries++) {
+		int ret = kernel_sendmsg(qrtr_ns.sock, &msg, &iv, 1, sizeof(pkt));
+
+		if (ret != -EAGAIN)
+			return ret;
+		msleep(10);
+	}
+
+	return -EAGAIN;
 }
 
 static void service_announce_del(struct sockaddr_qrtr *dest,
@@ -231,8 +246,9 @@ static int announce_servers(struct sockaddr_qrtr *sq)
 			if (ret == -ENODEV)
 				continue;
 
-			pr_err("failed to announce new service\n");
-			return ret;
+			pr_err_ratelimited("failed to announce new service: %d\n", ret);
+			/* one unreachable service must not silence the rest */
+			continue;
 		}
 	}
 	return 0;
@@ -489,8 +505,8 @@ static int ctrl_cmd_new_server(struct sockaddr_qrtr *from,
 	if (srv->node == qrtr_ns.local_node) {
 		ret = service_announce_new(&qrtr_ns.bcast_sq, srv);
 		if (ret < 0) {
-			pr_err("failed to announce new service\n");
-			return ret;
+			/* not fatal: the lookup notifications below still matter */
+			pr_err_ratelimited("failed to announce new service: %d\n", ret);
 		}
 	}
 
