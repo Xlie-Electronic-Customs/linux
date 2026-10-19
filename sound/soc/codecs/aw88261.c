@@ -125,6 +125,8 @@ static int aw88261_dev_check_pll(struct aw_device *aw_dev)
 	return -EPERM;
 }
 
+static int aw88261_dev_check_syspll(struct aw_device *aw_dev);
+
 static int aw88261_dev_configure_syspll(struct aw88261 *aw88261)
 {
 	struct aw_device *aw_dev = aw88261->aw_pa;
@@ -192,7 +194,72 @@ static int aw88261_dev_configure_syspll(struct aw88261 *aw88261)
 	if (ret)
 		return ret;
 
+	return aw88261_dev_check_syspll(aw_dev);
+}
+
+/*
+ * Fallback used when the PLL does not lock with the CCO mux in its "bypass"
+ * position: also try the divided CCO path once, then go back to bypass.
+ * Both the downstream Awinic aw882xx driver (aw_dev_syspll_check()) and
+ * mainline aw88261 did exactly this until commit 1b92b0673d5e ("ASoC: codecs:
+ * aw88261: support changing sample rate and bit width") replaced it with a
+ * one-shot mode-1-only check.
+ */
+static int aw88261_dev_check_mode2_pll(struct aw_device *aw_dev)
+{
+	unsigned int reg_val;
+	int ret, i;
+
+	ret = regmap_read(aw_dev->regmap, AW88261_PLLCTRL1_REG, &reg_val);
+	if (ret)
+		return ret;
+
+	reg_val &= ~AW88261_CCO_MUX_MASK;
+	if (reg_val == AW88261_CCO_MUX_DIVIDED_VALUE) {
+		dev_dbg(aw_dev->dev, "CCO_MUX is already divided");
+		return -EPERM;
+	}
+
+	/* switch to the divided CCO path and re-check */
+	ret = regmap_update_bits(aw_dev->regmap, AW88261_PLLCTRL1_REG,
+				 ~AW88261_CCO_MUX_MASK,
+				 AW88261_CCO_MUX_DIVIDED_VALUE);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < AW88261_DEV_SYSST_CHECK_MAX; i++) {
+		ret = aw88261_dev_check_pll(aw_dev);
+		if (ret)
+			usleep_range(AW88261_2000_US, AW88261_2000_US + 10);
+		else
+			break;
+	}
+
+	/* switch back to the bypass CCO path */
+	ret = regmap_update_bits(aw_dev->regmap, AW88261_PLLCTRL1_REG,
+				 ~AW88261_CCO_MUX_MASK,
+				 AW88261_CCO_MUX_BYPASS_VALUE);
+	if (ret)
+		return ret;
+
+	usleep_range(AW88261_2000_US, AW88261_2000_US + 10);
+
 	return aw88261_dev_check_pll(aw_dev);
+}
+
+static int aw88261_dev_check_syspll(struct aw_device *aw_dev)
+{
+	int ret;
+
+	ret = aw88261_dev_check_pll(aw_dev);
+	if (ret) {
+		dev_dbg(aw_dev->dev, "mode1 check iis failed try switch to mode2 check");
+		ret = aw88261_dev_check_mode2_pll(aw_dev);
+		if (ret)
+			dev_dbg(aw_dev->dev, "mode2 check iis failed");
+	}
+
+	return ret;
 }
 
 static int aw88261_dev_check_sysst(struct aw_device *aw_dev)
@@ -513,19 +580,33 @@ static int aw88261_dev_start(struct aw88261 *aw88261)
 
 	ret = aw88261_dev_configure_syspll(aw88261);
 	if (ret) {
-		dev_dbg(aw_dev->dev, "pll check failed");
-		goto pll_check_fail;
+		/*
+		 * Not fatal.
+		 *
+		 * The amplifier locks its PLL onto BCK, but the LPAIF bit clock
+		 * only starts toggling once the stream is actually running (the
+		 * backend trigger / snd_pcm_start).  ASoC DPCM powers the codec
+		 * up earlier than that, from the front end's prepare(), so at
+		 * this point there is no BCK at the amplifier at all and SYSST
+		 * reads 0x0000.  On the Xiaomi Redmi K70 (vermeer):
+		 * SYSST is 0x0000 during prepare and 0x0011
+		 * (CLKS_STABLE | PLLS_LOCKED - what this check waits for) once
+		 * the stream runs.  Keep the amplifier powered and let
+		 * aw88261_trigger() verify the lock after the stream started.
+		 */
+		dev_dbg(aw_dev->dev, "PLL not locked yet (BCK idle during prepare)\n");
+		ret = 0;
 	}
 
 	/* amppd on */
 	aw88261_dev_amppd(aw_dev, false);
 	usleep_range(AW88261_1000_US, AW88261_1000_US + 50);
 
-	/* check i2s status */
+	/* check i2s status - advisory, the same BCK timing applies */
 	ret = aw88261_dev_check_sysst(aw_dev);
 	if (ret) {
-		dev_dbg(aw_dev->dev, "sysst check failed");
-		goto sysst_check_fail;
+		dev_dbg(aw_dev->dev, "sysst not ready yet (BCK idle during prepare)\n");
+		ret = 0;
 	}
 
 	/* enable tx feedback */
@@ -548,16 +629,6 @@ static int aw88261_dev_start(struct aw88261 *aw88261)
 	aw_dev->status = AW88261_DEV_PW_ON;
 
 	return 0;
-
-sysst_check_fail:
-	aw88261_dev_i2s_tx_enable(aw_dev, false);
-	aw88261_dev_clear_int_status(aw_dev);
-	aw88261_dev_amppd(aw_dev, true);
-pll_check_fail:
-	aw88261_dev_pwd(aw_dev, true);
-	aw_dev->status = AW88261_DEV_PW_OFF;
-
-	return ret;
 }
 
 static int aw88261_dev_stop(struct aw_device *aw_dev)
@@ -865,10 +936,39 @@ static int aw88261_set_tdm_slot(struct snd_soc_dai *dai,
 	return 0;
 }
 
+static int aw88261_trigger(struct snd_pcm_substream *substream, int cmd,
+			   struct snd_soc_dai *dai)
+{
+	struct snd_soc_component *component = dai->component;
+	struct aw88261 *aw88261 = snd_soc_component_get_drvdata(component);
+	struct aw_device *aw_dev = aw88261->aw_pa;
+
+	if (substream->stream != SNDRV_PCM_STREAM_PLAYBACK)
+		return 0;
+
+	if (cmd != SNDRV_PCM_TRIGGER_START)
+		return 0;
+
+	/*
+	 * The amplifier's PLL locks onto BCK, which only exists once the LPAIF
+	 * interface is really running.  aw88261_dev_start() runs during the
+	 * front end's prepare(), i.e. before that, so its PLL/SYSST checks are
+	 * only advisory there.  Now that the stream has actually been started,
+	 * verify that the PLL locked.
+	 */
+	if (aw88261_dev_check_pll(aw_dev))
+		dev_warn(aw_dev->dev, "PLL not locked after stream start\n");
+	else
+		dev_info(aw_dev->dev, "PLL locked after stream start\n");
+
+	return 0;
+}
+
 static const struct snd_soc_dai_ops aw88261_dai_ops = {
 	.set_fmt = aw88261_set_fmt,
 	.hw_params = aw88261_hw_params,
 	.set_tdm_slot = aw88261_set_tdm_slot,
+	.trigger = aw88261_trigger,
 };
 
 static struct snd_soc_dai_driver aw88261_dai[] = {

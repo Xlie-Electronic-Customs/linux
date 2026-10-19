@@ -55,6 +55,34 @@
 /* Clock ID for QUINARY MI2S OSR CLK  */
 #define Q6PRM_LPASS_CLK_ID_QUI_MI2S_OSR                         0x116
 
+/*
+ * Clock IDs for the PCM/TDM serial interfaces.
+ *
+ * The LPAIF block behind a given physical port can be driven either as an
+ * I2S interface (Q6PRM_LPASS_CLK_ID_*_MI2S_IBIT, 0x100-0x11x) or as a
+ * PCM/TDM interface, which uses a *different* set of clock IDs.  The
+ * numbering below mirrors the vendor ADSP tables
+ * (techpack/audio: Q6AFE_LPASS_CLK_ID_PRI_TDM_IBIT = 0x200,
+ * Q6AFE_LPASS_CLK_ID_SEC_TDM_IBIT = 0x202, ... - the TDM and PCM clocks
+ * share the same IDs on that side, exactly as SPKR/TSDM do here).
+ *
+ * Without these entries the DT binding ids LPASS_CLK_ID_*_TDM_IBIT/EBIT
+ * (include/dt-bindings/sound/qcom,q6dsp-lpass-ports.h) resolve to nothing,
+ * q6dsp_of_clk_hw_get() returns -ENOENT and q6i2s_set_sysclk() silently
+ * does nothing - i.e. a TDM backend can never get its bit clock enabled.
+ */
+#define Q6PRM_LPASS_CLK_ID_PRI_TDM_IBIT				0x200
+#define Q6PRM_LPASS_CLK_ID_PRI_TDM_EBIT				0x201
+#define Q6PRM_LPASS_CLK_ID_SEC_TDM_IBIT				0x202
+#define Q6PRM_LPASS_CLK_ID_SEC_TDM_EBIT				0x203
+#define Q6PRM_LPASS_CLK_ID_TER_TDM_IBIT				0x204
+#define Q6PRM_LPASS_CLK_ID_TER_TDM_EBIT				0x205
+#define Q6PRM_LPASS_CLK_ID_QUAD_TDM_IBIT			0x206
+#define Q6PRM_LPASS_CLK_ID_QUAD_TDM_EBIT			0x207
+#define Q6PRM_LPASS_CLK_ID_QUIN_TDM_IBIT			0x208
+#define Q6PRM_LPASS_CLK_ID_QUIN_TDM_EBIT			0x209
+#define Q6PRM_LPASS_CLK_ID_QUIN_TDM_OSR				0x20A
+
 /* Clock ID for MCLK1 */
 #define Q6PRM_LPASS_CLK_ID_MCLK_1                                 0x300
 /* Clock ID for MCLK2 */
