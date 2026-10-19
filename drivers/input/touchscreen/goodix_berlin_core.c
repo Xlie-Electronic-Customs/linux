@@ -25,10 +25,13 @@
 
 #include <linux/bitfield.h>
 #include <linux/export.h>
+#include <linux/firmware.h>
+#include <linux/workqueue.h>
 #include <linux/gpio/consumer.h>
 #include <linux/input.h>
 #include <linux/input/mt.h>
 #include <linux/input/touchscreen.h>
+#include <linux/of.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
@@ -174,6 +177,12 @@ struct goodix_berlin_core {
 
 	/* Runtime parameters extracted from IC_INFO buffer  */
 	u32 touch_data_addr;
+	u32 cmd_addr;
+	u32 fw_buffer_addr;
+	u16 fw_buffer_max_len;
+
+	struct goodix_berlin_fw_summary fw_summary;
+	struct delayed_work coor_work;
 
 	const struct goodix_berlin_ic_data *ic_data;
 
@@ -349,6 +358,9 @@ static int goodix_berlin_parse_ic_info(struct goodix_berlin_core *cd,
 
 	misc = (struct goodix_berlin_ic_info_misc *)&data[offset];
 	cd->touch_data_addr = le32_to_cpu(misc->touch_data_addr);
+	cd->cmd_addr = le32_to_cpu(misc->cmd_addr);
+	cd->fw_buffer_addr = le32_to_cpu(misc->fw_buffer_addr);
+	cd->fw_buffer_max_len = le16_to_cpu(misc->fw_buffer_max_len);
 
 	return 0;
 
@@ -356,6 +368,747 @@ invalid_offset:
 	dev_err(cd->dev, "ic_info length is invalid (offset %d length %d)\n",
 		offset, length);
 	return -EINVAL;
+}
+
+/*
+ * Config ("TS_CFG_BIN") support.
+ *
+ * The Berlin IC ships with its application firmware already programmed,
+ * but without the per-board "config" blob it never starts scanning: the
+ * interrupt line stays asserted while the touch buffer status stays 0, so
+ * the touchscreen silently produces no events at all.  Android pushes this
+ * blob from userspace on every boot; the upstream driver has no equivalent,
+ * hence the code below, ported from the vendor goodix_brl_hw.c.
+ */
+struct goodix_berlin_cmd {
+	u8 state;
+	u8 ack;
+	u8 len;
+	u8 cmd;
+	u8 data[GOODIX_BERLIN_CMD_MAX_DATA_LEN];
+} __packed;
+
+static void goodix_berlin_append_checksum(u8 *data, int len)
+{
+	unsigned int sum = 0;
+	int i;
+
+	for (i = 0; i < len; i++)
+		sum += data[i];
+
+	data[len] = sum & 0xff;
+	data[len + 1] = (sum >> 8) & 0xff;
+}
+
+static int goodix_berlin_wait_cmd_status(struct goodix_berlin_core *cd,
+					 u8 target, int retry)
+{
+	struct goodix_berlin_cmd ack;
+	int i, error;
+
+	for (i = 0; i < retry; i++) {
+		error = regmap_raw_read(cd->regmap, cd->cmd_addr, &ack,
+					sizeof(ack));
+		if (!error && ack.state == target)
+			return 0;
+		usleep_range(20000, 21000);
+	}
+
+	return -ETIMEDOUT;
+}
+
+static int goodix_berlin_send_cmd(struct goodix_berlin_core *cd, u8 cmd_byte)
+{
+	struct goodix_berlin_cmd cmd = { }, ack;
+	int retry, i, error;
+
+	cmd.len = GOODIX_BERLIN_CONFIG_CMD_LEN;
+	cmd.cmd = cmd_byte;
+	goodix_berlin_append_checksum(&cmd.len, cmd.len - 2);
+
+	for (retry = 0; retry < GOODIX_BERLIN_CMD_RETRY; retry++) {
+		error = regmap_raw_write(cd->regmap, cd->cmd_addr, &cmd,
+					 sizeof(cmd));
+		if (error)
+			return error;
+
+		for (i = 0; i < GOODIX_BERLIN_CMD_RETRY; i++) {
+			error = regmap_raw_read(cd->regmap, cd->cmd_addr, &ack,
+						sizeof(ack));
+			if (error)
+				return error;
+
+			if (ack.ack == GOODIX_BERLIN_CMD_ACK_OK) {
+				usleep_range(20000, 21000);
+				return 0;
+			}
+
+			if (ack.ack == GOODIX_BERLIN_CMD_ACK_BUSY ||
+			    !ack.ack) {
+				usleep_range(1000, 1100);
+				continue;
+			}
+
+			if (ack.ack == GOODIX_BERLIN_CMD_ACK_BUFFER_OVERFLOW)
+				usleep_range(10000, 11000);
+			usleep_range(1000, 1100);
+			break;
+		}
+	}
+
+	return -ETIMEDOUT;
+}
+
+/*
+ * Berlin D firmware command with a data payload (vendor goodix_ts_cmd:
+ * state, ack, len, cmd, data[], u8-checksum over [len..data]).  Used for
+ * the rawdata/coordinate mode switch below.
+ */
+static int goodix_berlin_send_data_cmd(struct goodix_berlin_core *cd,
+				       u8 cmd_byte, const u8 *data, int ndata)
+{
+	struct goodix_berlin_cmd cmd = { }, ack;
+	int retry, i, error;
+
+	cmd.len = 4 + ndata;		/* len + cmd + data[] + checksum */
+	cmd.cmd = cmd_byte;
+	for (i = 0; i < ndata && i < GOODIX_BERLIN_CMD_MAX_DATA_LEN; i++)
+		cmd.data[i] = data[i];
+	goodix_berlin_append_checksum(&cmd.len, cmd.len - 2);
+
+	for (retry = 0; retry < GOODIX_BERLIN_CMD_RETRY; retry++) {
+		error = regmap_raw_write(cd->regmap, cd->cmd_addr, &cmd,
+					 sizeof(cmd));
+		if (error)
+			return error;
+
+		for (i = 0; i < GOODIX_BERLIN_CMD_RETRY; i++) {
+			error = regmap_raw_read(cd->regmap, cd->cmd_addr, &ack,
+						sizeof(ack));
+			if (error)
+				return error;
+
+			if (ack.ack == GOODIX_BERLIN_CMD_ACK_OK) {
+				usleep_range(20000, 21000);
+				return 0;
+			}
+
+			if (ack.ack == GOODIX_BERLIN_CMD_ACK_BUSY ||
+			    !ack.ack) {
+				usleep_range(1000, 1100);
+				continue;
+			}
+			usleep_range(1000, 1100);
+			break;
+		}
+	}
+
+	return -ETIMEDOUT;
+}
+
+/*
+ * Switch the Berlin D firmware from rawdata mode to coordinate reporting.
+ *
+ * The vendor driver (goodix_brl_hw.c brl_set_coor_mode) does the first two
+ * steps whenever the DT carries "goodix,support-thp-fw".  MIUI's own driver
+ * additionally issues 0xA2 "update idle baseline"; without it the IC scans
+ * and sends interrupts but never produces a single touch event.
+ */
+static int goodix_berlin_set_coor_mode(struct goodix_berlin_core *cd)
+{
+	const u8 off = 0x00, on = 0x81;
+	int error;
+
+	error = goodix_berlin_send_data_cmd(cd, 0x90, &off, 1);
+	if (error) {
+		dev_warn(cd->dev, "failed to disable rawdata mode: %d\n",
+			 error);
+		return error;
+	}
+
+	error = goodix_berlin_send_data_cmd(cd, 0x91, &on, 1);
+	if (error) {
+		dev_warn(cd->dev, "failed to enable coordinate mode: %d\n",
+			 error);
+		return error;
+	}
+
+	/* MIUI-only: refresh the idle baseline so touches are detected */
+	error = goodix_berlin_send_data_cmd(cd, 0xa2, NULL, 0);
+	if (error) {
+		dev_warn(cd->dev, "failed to update idle baseline: %d\n",
+			 error);
+		return error;
+	}
+
+	dev_info(cd->dev, "coordinate reporting enabled\n");
+	return 0;
+}
+
+static void goodix_berlin_coor_work(struct work_struct *work)
+{
+	struct goodix_berlin_core *cd =
+		container_of(work, struct goodix_berlin_core, coor_work.work);
+
+	/*
+	 * The IC only latches coordinate mode once its own boot sequence and
+	 * the display are up; issuing it right after the ISP flash is too
+	 * early.  Re-issue it a moment later like the vendor/MIUI stack does.
+	 */
+	msleep(1500);
+	goodix_berlin_set_coor_mode(cd);
+}
+
+static int goodix_berlin_send_cfg_cmd(struct goodix_berlin_core *cd,
+				      u8 cmd_byte)
+{
+	int error;
+
+	error = goodix_berlin_send_cmd(cd, cmd_byte);
+	if (error)
+		return error;
+
+	return goodix_berlin_wait_cmd_status(cd,
+				GOODIX_BERLIN_CONFIG_CMD_STATUS_PASS,
+				GOODIX_BERLIN_CONFIG_CMD_WAIT_RETRY);
+}
+
+static int goodix_berlin_send_config(struct goodix_berlin_core *cd,
+				     const u8 *cfg, size_t len)
+{
+	u8 *back __free(kfree) = NULL;
+	int error;
+
+	if (len > cd->fw_buffer_max_len)
+		return -EINVAL;
+
+	back = kmalloc(len, GFP_KERNEL);
+	if (!back)
+		return -ENOMEM;
+
+	error = goodix_berlin_send_cfg_cmd(cd, GOODIX_BERLIN_CONFIG_CMD_START);
+	if (error)
+		goto out;
+
+	error = regmap_raw_write(cd->regmap, cd->fw_buffer_addr, cfg, len);
+	if (error)
+		goto out;
+
+	error = regmap_raw_read(cd->regmap, cd->fw_buffer_addr, back, len);
+	if (error)
+		goto out;
+
+	if (memcmp(cfg, back, len)) {
+		error = -EIO;
+		goto out;
+	}
+
+	error = goodix_berlin_send_cfg_cmd(cd, GOODIX_BERLIN_CONFIG_CMD_WRITE);
+	if (error)
+		goto out;
+
+	error = goodix_berlin_send_cfg_cmd(cd, GOODIX_BERLIN_CONFIG_CMD_EXIT);
+
+out:
+	if (error)
+		goodix_berlin_send_cmd(cd, GOODIX_BERLIN_CONFIG_CMD_EXIT);
+	else
+		msleep(100);
+
+	return error;
+}
+
+/*
+ * Extract the actual IC config out of the "TS_CFG_BIN" container:
+ *
+ *   struct goodix_cfg_bin_head { u32 bin_len; u8 checksum;
+ *                               u8 bin_version[4]; u8 pkg_num; }
+ *   + TS_CFG_BIN_HEAD_RESERVED_LEN (6) reserved bytes
+ *   + per package u16 offset table
+ *   + struct goodix_cfg_pkg_const_info (56 bytes)
+ *   + struct goodix_cfg_pkg_reg_info   (65 bytes)
+ *   + <-- payload sent to the IC -->
+ */
+static int goodix_berlin_parse_cfg_bin(const u8 *bin, size_t bin_len,
+				       const u8 **cfg, size_t *cfg_len)
+{
+	u8 checksum = 0;
+	u32 offset, pkg_len;
+	size_t i;
+
+	if (bin_len < GOODIX_BERLIN_CFG_BIN_HEAD_LEN)
+		return -EINVAL;
+
+	if (get_unaligned_le32(bin) != bin_len)
+		return -EINVAL;
+
+	/* checksum starts right after the bin_version field */
+	for (i = 5; i < bin_len; i++)
+		checksum = (u8)(checksum + bin[i]);
+	if (checksum != bin[4])
+		return -EINVAL;
+
+	if (bin[9] != 1)
+		return -EINVAL;		/* single package only */
+
+	offset = get_unaligned_le16(&bin[GOODIX_BERLIN_CFG_BIN_HEAD_LEN]);
+	if (offset + GOODIX_BERLIN_CFG_PKG_HEAD_LEN >= bin_len)
+		return -EINVAL;
+
+	pkg_len = bin_len - offset;
+	if (pkg_len <= GOODIX_BERLIN_CFG_PKG_HEAD_LEN)
+		return -EINVAL;
+
+	*cfg = &bin[offset + GOODIX_BERLIN_CFG_PKG_HEAD_LEN];
+	*cfg_len = pkg_len - GOODIX_BERLIN_CFG_PKG_HEAD_LEN;
+
+	return 0;
+}
+
+/*
+ * ISP firmware/config flashing, ported from the vendor goodix_brl_fwupdate.c
+ * (as shipped in LineageOS' goodix_berlin_driver).  The shipping flow runs a
+ * full flash on every boot: reset -> hold CPU -> enable misc clock -> load
+ * ISP -> flash config + firmware subsystems into the IC's flash -> reset.
+ *
+ * Firmware package layout (Berlin D):
+ *   [0..3]   payload size (LE32), file size == size + 8
+ *   [4..7]   file checksum (LE32): sum of 16-bit LE words from [8..end)
+ *   [8..41]  summary: hw_pid[6] hw_vid[3] fw_pid[8] fw_vid[4] subsys_num
+ *            chip_type protocol_ver bus_type flash_protect
+ *   [42...]  subsystem table, 10 bytes each: type u8, size LE32, flash LE32
+ *   [512...] subsystem data, sequential in table order
+ * Subsystem 0 (type 0x01) is the ISP program, loaded into RAM, not flashed.
+ */
+static int goodix_berlin_fw_reset(struct goodix_berlin_core *cd,
+				  unsigned int delay_ms)
+{
+	gpiod_set_value_cansleep(cd->reset_gpio, 1);
+	usleep_range(2000, 2100);
+	gpiod_set_value_cansleep(cd->reset_gpio, 0);
+	msleep(delay_ms);
+
+	return 0;
+}
+
+static void goodix_berlin_flash_checksum(u8 *data, int len, bool u16_mode)
+{
+	unsigned int sum = 0;
+	int i;
+
+	if (u16_mode) {
+		for (i = 0; i < len; i += 2)
+			sum += data[i] + (data[i + 1] << 8);
+		data[len] = sum & 0xff;
+		data[len + 1] = (sum >> 8) & 0xff;
+		data[len + 2] = (sum >> 16) & 0xff;
+		data[len + 3] = (sum >> 24) & 0xff;
+	} else {
+		for (i = 0; i < len; i++)
+			sum += data[i];
+		data[len] = sum & 0xff;
+		data[len + 1] = (sum >> 8) & 0xff;
+	}
+}
+
+static int goodix_berlin_parse_firmware(struct goodix_berlin_core *cd,
+					const u8 *data, size_t size)
+{
+	struct goodix_berlin_fw_summary *summary = &cd->fw_summary;
+	unsigned int i, fw_offset;
+	u32 checksum = 0, file_size;
+
+	if (size < GOODIX_BERLIN_FLASH_SUBSYS_INFO_OFFSET)
+		return -EINVAL;
+
+	file_size = get_unaligned_le32(data);
+	if (size != file_size + GOODIX_BERLIN_FLASH_FILE_CKSUM_OFFSET)
+		return -EINVAL;
+
+	for (i = GOODIX_BERLIN_FLASH_FILE_CKSUM_OFFSET; i < size; i += 2)
+		checksum += data[i] + (data[i + 1] << 8);
+
+	if (checksum != get_unaligned_le32(&data[4])) {
+		dev_err(cd->dev, "firmware checksum error\n");
+		return -EINVAL;
+	}
+
+	summary->num_subsys = data[29];
+	if (summary->num_subsys > GOODIX_BERLIN_FLASH_SUBSYS_MAX_NUM)
+		return -EINVAL;
+
+	fw_offset = GOODIX_BERLIN_FLASH_HEADER_SIZE;
+	for (i = 0; i < summary->num_subsys; i++) {
+		unsigned int off = GOODIX_BERLIN_FLASH_SUBSYS_INFO_OFFSET +
+				   i * GOODIX_BERLIN_FLASH_SUBSYS_INFO_SIZE;
+		struct goodix_berlin_fw_subsys *s = &summary->subsys[i];
+
+		s->type = data[off];
+		s->size = get_unaligned_le32(&data[off + 1]);
+		s->flash_addr = get_unaligned_le32(&data[off + 5]);
+		if (fw_offset + s->size > size)
+			return -EINVAL;
+
+		s->data = &data[fw_offset];
+		fw_offset += s->size;
+	}
+
+	dev_info(cd->dev, "firmware: %u subsystems, pid %.6s vid %*ph\n",
+		 summary->num_subsys, &data[17], 4, &data[25]);
+
+	return 0;
+}
+
+static int goodix_berlin_reg_write_confirm(struct goodix_berlin_core *cd,
+					   unsigned int addr,
+					   const u8 *data, unsigned int len)
+{
+	u8 *cfm __free(kfree) = NULL;
+	int i, error;
+
+	cfm = kmalloc(len, GFP_KERNEL);
+	if (!cfm)
+		return -ENOMEM;
+
+	for (i = 0; i < 3; i++) {
+		error = regmap_raw_write(cd->regmap, addr, data, len);
+		if (error)
+			return error;
+
+		error = regmap_raw_read(cd->regmap, addr, cfm, len);
+		if (error)
+			return error;
+
+		if (!memcmp(data, cfm, len))
+			return 0;
+	}
+
+	return -EIO;
+}
+
+static int goodix_berlin_send_flash_cmd(struct goodix_berlin_core *cd,
+					struct goodix_berlin_flash_cmd *cmd)
+{
+	struct goodix_berlin_flash_cmd tmp = { };
+	int i, error;
+
+	cmd->status = 0;
+	cmd->ack = 0;
+	cmd->len = GOODIX_BERLIN_FLASH_CMD_LEN;
+	cmd->cmd = GOODIX_BERLIN_FLASH_CMD_WRITE;
+	goodix_berlin_flash_checksum(&cmd->len, 9, false);
+
+	error = regmap_raw_write(cd->regmap, GOODIX_BERLIN_FLASH_CMD_REG_D,
+				 cmd, sizeof(*cmd));
+	if (error)
+		return error;
+
+	for (i = 0; i < 5; i++) {
+		error = regmap_raw_read(cd->regmap,
+					GOODIX_BERLIN_FLASH_CMD_REG_D,
+					&tmp, sizeof(tmp));
+		if (!error && tmp.ack == GOODIX_BERLIN_FLASH_ACK_CHK_PASS)
+			break;
+		usleep_range(5000, 5100);
+	}
+	if (tmp.ack != GOODIX_BERLIN_FLASH_ACK_CHK_PASS) {
+		dev_warn(cd->dev, "flash cmd ack error: ack=0x%02x status=0x%02x\n",
+			 tmp.ack, tmp.status);
+		return -EIO;
+	}
+
+	msleep(50);
+	for (i = 0; i < 20; i++) {
+		error = regmap_raw_read(cd->regmap,
+					GOODIX_BERLIN_FLASH_CMD_REG_D,
+					&tmp, sizeof(tmp));
+		if (!error &&
+		    tmp.ack == GOODIX_BERLIN_FLASH_ACK_CHK_PASS &&
+		    tmp.status == GOODIX_BERLIN_FLASH_WSTAT_WRITE_OK)
+			return 0;
+		usleep_range(10000, 11000);
+	}
+
+	dev_warn(cd->dev, "flash write failed: ack=0x%02x status=0x%02x\n",
+		 tmp.ack, tmp.status);
+
+	if (tmp.status == GOODIX_BERLIN_FLASH_WSTAT_CHK_FAIL ||
+	    tmp.status == GOODIX_BERLIN_FLASH_WSTAT_WRITE_ERR)
+		return -EAGAIN;
+
+	return -EIO;
+}
+
+static int goodix_berlin_flash_package(struct goodix_berlin_core *cd,
+				       u8 subsys_type, const u8 *pkg,
+				       u32 flash_addr, u16 pkg_len)
+{
+	struct goodix_berlin_flash_cmd cmd = { };
+	int retry = 2, error;
+
+	do {
+		error = regmap_raw_write(cd->regmap,
+					 GOODIX_BERLIN_FLASH_BUF_REG_D,
+					 pkg, pkg_len);
+		if (error)
+			return error;
+
+		cmd.fw_type = subsys_type;
+		cmd.fw_len = cpu_to_le16(pkg_len);
+		cmd.fw_addr = cpu_to_le32(flash_addr);
+
+		error = goodix_berlin_send_flash_cmd(cd, &cmd);
+	} while (error == -EAGAIN && --retry);
+
+	return error;
+}
+
+static int goodix_berlin_flash_subsys(struct goodix_berlin_core *cd,
+				      const struct goodix_berlin_fw_subsys *s)
+{
+	u8 *pkg __free(kfree) = NULL;
+	u32 offset = 0, total = s->size;
+	int error = 0;
+
+	pkg = kmalloc(GOODIX_BERLIN_FLASH_MAX_SUBSYS + 4, GFP_KERNEL);
+	if (!pkg)
+		return -ENOMEM;
+
+	while (total > 0) {
+		u32 chunk = min(total, (u32)GOODIX_BERLIN_FLASH_MAX_SUBSYS);
+
+		memcpy(pkg, &s->data[offset], chunk);
+		goodix_berlin_flash_checksum(pkg, chunk, true);
+
+		error = goodix_berlin_flash_package(cd, s->type, pkg,
+						    s->flash_addr + offset,
+						    chunk + 4);
+		if (error)
+			break;
+
+		offset += chunk;
+		total -= chunk;
+	}
+
+	return error;
+}
+
+static int goodix_berlin_load_isp(struct goodix_berlin_core *cd)
+{
+	const struct goodix_berlin_fw_subsys *isp = &cd->fw_summary.subsys[0];
+	const u8 run_from[8] = { 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
+				 0x55, 0x55 };
+	u8 ver[24];
+	int error;
+
+	error = goodix_berlin_reg_write_confirm(cd, GOODIX_BERLIN_ISP_RAM_ADDR_D,
+						isp->data, isp->size);
+	if (error)
+		return error;
+
+	error = goodix_berlin_reg_write_confirm(cd, GOODIX_BERLIN_CPU_RUN_FROM,
+						run_from, sizeof(run_from));
+	if (error)
+		return error;
+
+	goodix_berlin_fw_reset(cd, 100);
+
+	error = regmap_raw_read(cd->regmap,
+				cd->ic_data->fw_version_info_addr,
+				ver, sizeof(ver));
+	if (error)
+		return error;
+
+	/* patch_pid[] starts at 10 (rom_pid[6]+rom_vid[3]+reserved); the
+	 * vendor driver checks patch_pid[3] == "ISP" */
+	if (memcmp(&ver[13], "ISP", 3)) {
+		dev_err(cd->dev, "ISP not running, pid=%.8s\n", &ver[10]);
+		return -EIO;
+	}
+
+	return 0;
+}
+
+static int goodix_berlin_update_prepare(struct goodix_berlin_core *cd)
+{
+	const __le32 misctl_en = cpu_to_le32(GOODIX_BERLIN_MISCTL_EN_D);
+	const u8 hold_cpu[2] = { 0x01, 0x00 };
+	u8 tmp[4];
+	int retry, error;
+
+	goodix_berlin_fw_reset(cd, 5);
+
+	/* hold the CPU while programming the flash controller */
+	for (retry = 100; retry > 0; retry--) {
+		error = regmap_raw_write(cd->regmap,
+					 GOODIX_BERLIN_HOLD_CPU_REG_W,
+					 hold_cpu, sizeof(hold_cpu));
+		if (error)
+			continue;
+
+		error = regmap_raw_read(cd->regmap,
+					GOODIX_BERLIN_HOLD_CPU_REG_R,
+					tmp, sizeof(tmp));
+		if (error)
+			continue;
+
+		/*
+		 * The vendor driver reads HOLD_CPU_REG_R three times and
+		 * requires the readings to be identical; the first read
+		 * already passing means the CPU is held.
+		 */
+		break;
+	}
+	if (!retry)
+		return -ETIMEDOUT;
+
+	regmap_raw_write(cd->regmap, GOODIX_BERLIN_MISCTL_REG_D,
+			 &misctl_en, sizeof(misctl_en));
+
+	regmap_write(cd->regmap, GOODIX_BERLIN_WATCHDOG_REG_D, 0);
+
+	return goodix_berlin_load_isp(cd);
+}
+
+static int goodix_berlin_flash_firmware(struct goodix_berlin_core *cd,
+					const u8 *cfg, size_t cfg_len)
+{
+	int i, error;
+
+	/* flash the config first, if present */
+	if (cfg && cfg_len) {
+		error = goodix_berlin_flash_subsys(cd, &(struct goodix_berlin_fw_subsys){
+				.type = GOODIX_BERLIN_CONFIG_DATA_TYPE,
+				.size = cfg_len,
+				.flash_addr = GOODIX_BERLIN_CONFIG_DATA_ADDR_D,
+				.data = cfg,
+			});
+		if (error) {
+			dev_err(cd->dev, "failed to flash config: %d\n", error);
+			return error;
+		}
+	}
+
+	/* subsystem 0 is the ISP itself, already loaded into RAM */
+	for (i = 1; i < cd->fw_summary.num_subsys; i++) {
+		error = goodix_berlin_flash_subsys(cd,
+						   &cd->fw_summary.subsys[i]);
+		if (error) {
+			dev_err(cd->dev, "failed to flash subsystem %d: %d\n",
+				i, error);
+			return error;
+		}
+	}
+
+	return 0;
+}
+
+static int goodix_berlin_flash_all(struct goodix_berlin_core *cd,
+				   const u8 *cfg, size_t cfg_len)
+{
+	int error, retry;
+
+	for (retry = 0; retry < 2; retry++) {
+		error = goodix_berlin_update_prepare(cd);
+		if (error) {
+			dev_warn(cd->dev, "ISP prepare failed: %d\n", error);
+			continue;
+		}
+
+		error = goodix_berlin_flash_firmware(cd, cfg, cfg_len);
+		if (error)
+			continue;
+
+		goodix_berlin_fw_reset(cd, 100);
+		return 0;
+	}
+
+	return error;
+}
+
+static int goodix_berlin_load_config(struct goodix_berlin_core *cd)
+{
+	struct device *dev = cd->dev;
+	const struct firmware *fw __free(firmware) = NULL;
+	const struct firmware *cfg_fw __free(firmware) = NULL;
+	const char *fw_name;
+	const u8 *cfg = NULL;
+	size_t cfg_len = 0;
+	char name[64];
+	int error;
+
+	if (!cd->cmd_addr || !cd->fw_buffer_addr) {
+		dev_err(dev, "no command/buffer address, skip config\n");
+		return -EINVAL;
+	}
+
+	/* optional interactive config (TS_CFG_BIN container) */
+	fw_name = NULL;
+	of_property_read_string(dev->of_node, "firmware-name", &fw_name);
+	if (fw_name)
+		snprintf(name, sizeof(name), "goodix/config_%s.bin", fw_name);
+	else
+		snprintf(name, sizeof(name), "goodix/config.bin");
+
+	error = request_firmware(&cfg_fw, name, dev);
+	if (!error) {
+		error = goodix_berlin_parse_cfg_bin(cfg_fw->data, cfg_fw->size,
+						    &cfg, &cfg_len);
+		if (error) {
+			dev_warn(dev, "malformed config blob %s: %d\n",
+				 name, error);
+			cfg = NULL;
+			cfg_len = 0;
+		}
+	} else {
+		dev_info(dev, "no config blob %s (%d)\n", name, error);
+	}
+
+	/*
+	 * The firmware package contains the ISP + all subsystems; flashing
+	 * it (config included) is what the shipping Android stack does on
+	 * every boot and is required for the IC to report touch events.
+	 */
+	if (fw_name)
+		snprintf(name, sizeof(name), "goodix/firmware_%s.bin",
+			 fw_name);
+	else
+		snprintf(name, sizeof(name), "goodix/firmware.bin");
+
+	error = request_firmware(&fw, name, dev);
+	if (error) {
+		dev_warn(dev, "no firmware package %s (%d)\n", name, error);
+		error = 0;
+		goto interactive_only;
+	}
+
+	error = goodix_berlin_parse_firmware(cd, fw->data, fw->size);
+	if (error) {
+		dev_err(dev, "malformed firmware package %s: %d\n",
+			name, error);
+		return error;
+	}
+
+	error = goodix_berlin_flash_all(cd, cfg, cfg_len);
+	if (error) {
+		dev_err(dev, "firmware flash failed: %d\n", error);
+		return error;
+	}
+
+	dev_info(dev, "firmware flashed, re-reading ic info\n");
+
+	return 0;
+
+interactive_only:
+	if (cfg && cd->fw_buffer_max_len >= cfg_len) {
+		error = goodix_berlin_send_config(cd, cfg, cfg_len);
+		if (error)
+			dev_err(dev, "failed to send config: %d\n", error);
+		else
+			dev_info(dev, "config loaded\n");
+	}
+
+	return error;
 }
 
 static int goodix_berlin_get_ic_info(struct goodix_berlin_core *cd)
@@ -781,6 +1534,18 @@ int goodix_berlin_probe(struct device *dev, int irq, const struct input_id *id,
 	if (error) {
 		dev_err(dev, "invalid ic info, abort");
 		return error;
+	}
+
+	/* Without this the IC never scans and no touch event is ever made */
+	error = goodix_berlin_load_config(cd);
+	if (error)
+		dev_warn(dev, "touch config not loaded: %d\n", error);
+
+	/* Berlin D boots into rawdata mode; switch to coordinate reporting */
+	if (of_property_read_bool(dev->of_node, "goodix,support-thp-fw")) {
+		INIT_DELAYED_WORK(&cd->coor_work, goodix_berlin_coor_work);
+		goodix_berlin_set_coor_mode(cd);
+		schedule_delayed_work(&cd->coor_work, msecs_to_jiffies(2000));
 	}
 
 	error = goodix_berlin_input_dev_config(cd, id);
