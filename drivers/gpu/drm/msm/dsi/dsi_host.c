@@ -617,8 +617,37 @@ dsi_adjust_pclk_for_compression(const struct drm_display_mode *mode,
 	if (is_bonded_dsi)
 		hdisplay /= 2;
 
-	new_hdisplay = DIV_ROUND_UP(hdisplay * drm_dsc_get_bpp_int(dsc),
-				    dsc->bits_per_component * 3);
+	/*
+	 * The DSI controller (and the INTF feeding it) always transports
+	 * 24 bits of DSC-compressed data per pclk, independent of the
+	 * source pixel depth and of the compression ratio.  Using
+	 * bits_per_component * 3 as the divisor is only correct for 8 bpc
+	 * panels (8 * 3 == 24); for the 10 bpc panels that are common on
+	 * SM8350 and newer it yields 30, which makes the computed DSI pclk
+	 * ~20% too low.
+	 *
+	 * On top of that, the DSC codec's rate control is only approximate:
+	 * its real output can overshoot the nominal bits_per_pixel by ~30%
+	 * on content that is hard to compress.  Sizing the link for the
+	 * nominal rate alone therefore leaves the last lines of a frame
+	 * undelivered, so the bottom of the panel keeps stale content.
+	 * Add 50% headroom for that overshoot, matching the vendor driver
+	 * which clocks this panel's DSI at 850 MHz, i.e. 1.54x the nominal
+	 * rate.
+	 *
+	 * This also matches dsi_timing_setup(), which uses 48 bits per pclk
+	 * for widebus (24 bits per "uncompressed" unit on average) and 24
+	 * otherwise.
+	 *
+	 * The 1.5 headroom below lands the PLL at 871 MHz.  The vendor
+	 * programs this panel's DSI PLL at 1.2 GHz (panel-clockrate in the
+	 * vendor DT), and at 871 MHz the display cannot sustain 60 frames per
+	 * second: with the compositor drawing a trivial 60 fps source it
+	 * settles at 44, which is 871/1200 of the target.  Scale the link to
+	 * the vendor's rate instead of guessing a headroom.
+	 */
+	new_hdisplay = DIV_ROUND_UP(hdisplay * drm_dsc_get_bpp_int(dsc), 24);
+	new_hdisplay = DIV_ROUND_UP(new_hdisplay * 2066, 1000);
 
 	if (is_bonded_dsi)
 		new_hdisplay *= 2;
@@ -637,6 +666,18 @@ static unsigned long dsi_get_pclk_rate(const struct drm_display_mode *mode,
 
 	if (dsc)
 		pclk_rate = dsi_adjust_pclk_for_compression(mode, dsc, is_bonded_dsi);
+
+	/*
+	 * The vendor keeps this panel's link at 1.2 GHz (panel-clockrate in its
+	 * DT) for both the 60 and the 120 Hz timing.  A 120 Hz mode doubles the
+	 * pixel clock, which makes the compressed burst finish in 3.9 ms and
+	 * leaves 4.4 ms idle inside an 8.33 ms frame; the panel's dsc rate
+	 * buffer is sized for a continuous 1.2 GHz stream and does not absorb
+	 * that.  Cap the link at the vendor's rate.  (At 60 Hz the computed
+	 * value is already 198 MHz, so this only changes the 120 Hz mode.)
+	 */
+	if (dsc && pclk_rate > 200000000)
+		pclk_rate = 200000000;
 
 	/*
 	 * For bonded DSI mode, the current DRM mode has the complete width of the

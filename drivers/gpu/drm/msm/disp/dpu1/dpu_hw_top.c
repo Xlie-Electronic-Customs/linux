@@ -267,6 +267,15 @@ static void _setup_mdp_ops(struct dpu_hw_mdp_ops *ops,
 		ops->setup_vsync_source = dpu_hw_setup_vsync_sel;
 	else if (mdss_rev->core_major_ver < 8)
 		ops->setup_vsync_source = dpu_hw_setup_wd_timer;
+	else
+		/*
+		 * The vendor's mdptop registers this on parts whose catalog
+		 * sets the vsync-source feature bit, and it is the only code
+		 * that ever writes MDP_VSYNC_SEL (0x414).  Upstream assumes
+		 * the INTF half is enough from DPU 8 on, but on this board the
+		 * tear block never sees TE, so try programming both halves.
+		 */
+		ops->setup_vsync_source = dpu_hw_setup_vsync_sel;
 
 	ops->get_safe_status = dpu_hw_get_safe_status;
 

@@ -686,7 +686,15 @@ void dpu_encoder_update_topology(struct drm_encoder *drm_enc,
 		 */
 		WARN(topology->num_intf > 2,
 		     "DSC topology cannot support more than 2 interfaces\n");
-		if (topology->num_intf >= 2 || dpu_kms->catalog->dsc_count >= 2)
+		/*
+		 * A single interface only needs a single DSC encoder: the two
+		 * slices live inside that one encoder's stream (the panel is
+		 * programmed for slice-per-pkt = 2).  Using two encoders here
+		 * sets DSC_MODE_SPLIT_PANEL | DSC_MODE_MULTIPLEX and makes each
+		 * encoder compress a single slice, which the vermeer n11 panel
+		 * cannot decode - the picture comes out torn at a fixed line.
+		 */
+		if (topology->num_intf >= 2)
 			topology->num_dsc = 2;
 		else
 			topology->num_dsc = 1;

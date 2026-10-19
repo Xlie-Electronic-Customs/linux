@@ -378,6 +378,7 @@ struct dpu_mdss_color {
  *                           needs to be above the read pointer
  * @start_pos:          The position from which the start_threshold value is added
  * @rd_ptr_irq:         The read pointer line at which interrupt has to be generated
+ * @wr_ptr_irq:         The write pointer line at which interrupt has to be generated
  * @hw_vsync_mode:      Sync with external frame sync input
  */
 struct dpu_hw_tear_check {
@@ -392,6 +393,7 @@ struct dpu_hw_tear_check {
 	u32 sync_threshold_continue;
 	u32 start_pos;
 	u32 rd_ptr_irq;
+	u32 wr_ptr_irq;
 	u8 hw_vsync_mode;
 };
 

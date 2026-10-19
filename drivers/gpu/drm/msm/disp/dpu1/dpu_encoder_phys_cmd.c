@@ -330,9 +330,19 @@ static void dpu_encoder_phys_cmd_irq_disable(struct dpu_encoder_phys *phys_enc)
 					   phys_enc->hw_pp->idx - PINGPONG_0,
 					   phys_enc->vblank_refcount);
 
-	if (dpu_encoder_phys_cmd_is_master(phys_enc) && phys_enc->irq[INTR_IDX_CTL_START])
+	if (dpu_encoder_phys_cmd_is_master(phys_enc) && phys_enc->irq[INTR_IDX_CTL_START]) {
 		dpu_core_irq_unregister_callback(phys_enc->dpu_kms,
 						 phys_enc->irq[INTR_IDX_CTL_START]);
+		/*
+		 * The CTL_START IRQ is the only thing that decrements
+		 * pending_ctlstart_cnt.  Once the callback is gone no further
+		 * decrement can arrive, so drop any count still outstanding.
+		 * Otherwise the next (enabled) wait_for_ctl_start() spins for
+		 * the whole KICKOFF_TIMEOUT_MS and delays flip_done, which
+		 * makes the following non-blocking commit fail with -EBUSY.
+		 */
+		atomic_set(&phys_enc->pending_ctlstart_cnt, 0);
+	}
 
 	dpu_core_irq_unregister_callback(phys_enc->dpu_kms, phys_enc->irq[INTR_IDX_UNDERRUN]);
 	dpu_encoder_phys_cmd_control_vblank_irq(phys_enc, false);
@@ -388,16 +398,87 @@ static void dpu_encoder_phys_cmd_tearcheck_config(
 				(mode->vtotal * drm_mode_vrefresh(mode));
 
 	/*
-	 * Set the sync_cfg_height to twice vtotal so that if we lose a
-	 * TE event coming from the display TE pin we won't stall immediately
+	 * The panel provides its own TE signal (external TE).  The TEAR block
+	 * can also generate a synthetic "hardware TE" by counting the MDP
+	 * vsync clock: it fires every sync_cfg_height lines, with each line
+	 * taking vsync_count vsync-clock cycles.
+	 *
+	 * vsync_count is computed with integer division, so on panels where
+	 * vsync_hz is not an exact multiple of (vtotal * vrefresh) the
+	 * synthetic TE arrives slightly *earlier* than the panel's real TE on
+	 * every frame.  The two then drift apart, and the display controller
+	 * ends up re-sending a partially written frame (premature autorefresh),
+	 * which shows up as a slowly drifting tear line with stale content
+	 * below it.
+	 *
+	 * On SM8550 vsync_hz is 19.2 MHz and vtotal*vrefresh is 194160, so
+	 * vsync_count is truncated from 98.88 to 98 (~0.9% fast) - exactly the
+	 * case that breaks.  Disable the synthetic TE as a *sync source* with
+	 * hw_vsync_mode = 0 and let the panel's real TE drive the tear check.
+	 *
+	 * sync_cfg_height is a different knob: it is the stall fallback the
+	 * hardware uses when the panel's TE does not arrive.  On this board
+	 * the TE never arrives at all (bit 20 and the MDP vsync input make no
+	 * difference; measured), so the counter is not a fallback - it is the
+	 * frame clock, and DRM's vblank follows it.  Sizing it at two frames
+	 * therefore halves the refresh rate to 30 Hz, which is what happened
+	 * when this was changed to vtotal * 2.  Size it at exactly one frame
+	 * instead, computed from the truncated vsync_count that is actually
+	 * programmed: 19.2 MHz / (98 * 60) = 3265 lines, measured at 59.9 Hz.
+	 *
+	 * One frame is also the right fallback if TE ever starts working: a
+	 * lost TE stalls a single frame (16.7 ms), well under the 83 ms
+	 * frame-done watchdog.
+	 *
+	 * The rate is matched to the panel, not to the mode: the panel's own
+	 * frame rate is 59.665 Hz (measured on its TE pin over 60 s, stable to
+	 * better than 0.001 %), while the counter would run at 60.0055 Hz if
+	 * sized from the mode's 60 Hz.  The 0.57 % difference beats against
+	 * the panel every ~1.75 s, which is exactly the kind of repeated frame
+	 * that shows up as a periodic tear once anything syncs to the panel.
+	 * 19.2 MHz / (98 * 59.665) = 3284 lines.
+	 *
+	 * The external TE is deliberately left disabled here and re-enabled by
+	 * dpu_encoder_phys_cmd_handle_post_kickoff() after the first kickoff,
+	 * so that the initial frame is fully written before the TE is armed
+	 * (avoids a premature autorefresh on enable).
 	 */
-	tc_cfg.hw_vsync_mode = 1;
-	tc_cfg.sync_cfg_height = mode->vtotal * 2;
+	tc_cfg.hw_vsync_mode = 0;
+	/*
+	 * 59665 is the panel's measured 60 Hz rate in milli-Hz, which the
+	 * counter is matched to at that rate.  For any other mode (the 120 Hz
+	 * timing) use the mode's own refresh, otherwise the counter keeps
+	 * running at half the rate the compositor expects and every frame
+	 * after the first times out.
+	 */
+	if (drm_mode_vrefresh(mode) == 60)
+		tc_cfg.sync_cfg_height = DIV_ROUND_CLOSEST(vsync_hz * 1000,
+					       tc_cfg.vsync_count * 59665);
+	else
+		tc_cfg.sync_cfg_height = DIV_ROUND_CLOSEST(vsync_hz * 1000,
+					       tc_cfg.vsync_count *
+					       drm_mode_vrefresh(mode) * 1000);
 	tc_cfg.vsync_init_val = mode->vdisplay;
 	tc_cfg.sync_threshold_start = DEFAULT_TEARCHECK_SYNC_THRESH_START;
 	tc_cfg.sync_threshold_continue = DEFAULT_TEARCHECK_SYNC_THRESH_CONTINUE;
 	tc_cfg.start_pos = mode->vdisplay;
-	tc_cfg.rd_ptr_irq = mode->vdisplay + 1;
+	/*
+	 * rd_ptr_irq is expressed in the counter's units, so it has to stay
+	 * below sync_cfg_height or the interrupt never fires.  At 60 Hz the
+	 * height is larger than vdisplay and this is vdisplay + 1; at 120 Hz
+	 * the height is one 120 Hz frame (about 1633) and the old value of
+	 * 3201 would sit past the wrap.
+	 */
+	tc_cfg.rd_ptr_irq = min_t(u32, mode->vdisplay + 1,
+				  tc_cfg.sync_cfg_height - 33);
+	/*
+	 * The vendor tear-check struct carries a write-pointer IRQ line and
+	 * programs it to 1; mainline kept the register definition but never
+	 * writes it, so the hardware stays at its reset value.  Match the
+	 * vendor: the tear check tracks both pointers and the write side
+	 * needs the same explicit position.
+	 */
+	tc_cfg.wr_ptr_irq = 1;
 
 	DPU_DEBUG_CMDENC(cmd_enc,
 		"tc vsync_clk_speed_hz %lu vtotal %u vrefresh %u\n",
@@ -656,7 +737,15 @@ static int _dpu_encoder_phys_cmd_wait_for_ctl_start(
 			phys_enc->irq[INTR_IDX_CTL_START],
 			dpu_encoder_phys_cmd_ctl_start_irq,
 			&wait_info);
-	if (ret == -ETIMEDOUT) {
+	if (ret == -EWOULDBLOCK) {
+		/*
+		 * The encoder is disabled, so the CTL_START callback is not
+		 * registered and no decrement can arrive - drop the stale
+		 * count instead of burning the whole timeout.
+		 */
+		atomic_set(&phys_enc->pending_ctlstart_cnt, 0);
+		ret = 0;
+	} else if (ret == -ETIMEDOUT) {
 		DPU_ERROR_CMDENC(cmd_enc, "ctl start interrupt wait failed\n");
 		ret = -EINVAL;
 	} else if (!ret)

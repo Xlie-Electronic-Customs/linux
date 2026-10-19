@@ -547,9 +547,19 @@ struct msm_mmu *msm_iommu_pagetable_create(struct msm_mmu *parent, bool kernel_m
 	ttbr0_cfg.quirks &= ~IO_PGTABLE_QUIRK_ARM_TTBR1;
 	ttbr0_cfg.tlb = &tlb_ops;
 
-	if (!kernel_managed) {
-		ttbr0_cfg.quirks |= IO_PGTABLE_QUIRK_NO_WARN;
+	/*
+	 * Both VM flavours are driven by userspace BO lifetimes.  On
+	 * handle close, msm_gem_close() -> put_iova_spaces() unmaps every VMA,
+	 * and a range that is already (or only partially) unmapped makes
+	 * io-pgtable-arm WARN at arm_lpae_unmap_pages() once per 4K page --
+	 * 600+ lines per GL client exit on SM8550, which floods dmesg and
+	 * hides real problems.  That is a userspace-triggerable condition, not
+	 * a kernel bug in itself, and the quirk's own documentation says as
+	 * much: "Which deserves an error return, but not to spam dmesg."
+	 */
+	ttbr0_cfg.quirks |= IO_PGTABLE_QUIRK_NO_WARN;
 
+	if (!kernel_managed) {
 		/*
 		 * With userspace managed VM (aka VM_BIND), we need to pre-
 		 * allocate pages ahead of time for map/unmap operations,

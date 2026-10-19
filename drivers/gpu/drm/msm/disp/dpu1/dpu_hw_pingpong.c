@@ -95,6 +95,8 @@ static int dpu_hw_pp_enable_te(struct dpu_hw_pingpong *pp,
 	DPU_REG_WRITE(c, PP_SYNC_CONFIG_HEIGHT, te->sync_cfg_height);
 	DPU_REG_WRITE(c, PP_VSYNC_INIT_VAL, te->vsync_init_val);
 	DPU_REG_WRITE(c, PP_RD_PTR_IRQ, te->rd_ptr_irq);
+	if (te->wr_ptr_irq)
+		DPU_REG_WRITE(c, PP_WR_PTR_IRQ, te->wr_ptr_irq);
 	DPU_REG_WRITE(c, PP_START_POS, te->start_pos);
 	DPU_REG_WRITE(c, PP_SYNC_THRESH,
 			((te->sync_threshold_continue << 16) |

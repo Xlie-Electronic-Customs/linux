@@ -6,6 +6,9 @@
 
 #include "dpu_hwio.h"
 #include "dpu_hw_catalog.h"
+#include <linux/debugfs.h>
+#include <drm/drm_debugfs.h>
+
 #include "dpu_hw_intf.h"
 #include "dpu_kms.h"
 #include "dpu_trace.h"
@@ -366,6 +369,105 @@ static int dpu_hw_intf_collect_misr(struct dpu_hw_intf *intf, u32 *misr_value)
 	return dpu_hw_collect_misr(&intf->hw, INTF_MISR_CTRL, INTF_MISR_SIGNATURE, misr_value);
 }
 
+/*
+ * Debug aid for the command-mode tear check: dump the block after each
+ * programming step so dmesg shows whether the external TE source is actually
+ * selected and what the counter is configured to do.  Called a handful of
+ * times per boot, so the noise is acceptable.
+ */
+static void dpu_hw_intf_dump_tear(struct dpu_hw_intf *intf, const char *why)
+{
+	struct dpu_hw_blk_reg_map *c = &intf->hw;
+
+	pr_debug("dpu-intf%d %s: sync_cfg=0x%08x height=%u init=%u rd=%u wr=%u start=%u thresh=0x%08x wrcount=%u sel=%u en=%u\n",
+		intf->idx - INTF_0, why,
+		DPU_REG_READ(c, INTF_TEAR_SYNC_CONFIG_VSYNC),
+		DPU_REG_READ(c, INTF_TEAR_SYNC_CONFIG_HEIGHT),
+		DPU_REG_READ(c, INTF_TEAR_VSYNC_INIT_VAL),
+		DPU_REG_READ(c, INTF_TEAR_RD_PTR_IRQ),
+		DPU_REG_READ(c, INTF_TEAR_WR_PTR_IRQ),
+		DPU_REG_READ(c, INTF_TEAR_START_POS),
+		DPU_REG_READ(c, INTF_TEAR_SYNC_THRESH),
+		DPU_REG_READ(c, INTF_TEAR_SYNC_WRCOUNT),
+		DPU_REG_READ(c, INTF_TEAR_MDP_VSYNC_SEL),
+		DPU_REG_READ(c, INTF_TEAR_TEAR_CHECK_EN));
+}
+
+/*
+ * Runtime knob for the tear-check block, used while working out why the
+ * panel's TE never resets the sync counter.  Writing "height N", "vsync_src
+ * N", "bit20 0|1" or "en 0|1" pokes the corresponding register so several
+ * hypotheses can be tested without reflashing.  Debug only.
+ */
+static ssize_t dpu_intf_tear_read(struct file *f, char __user *buf,
+				  size_t len, loff_t *ppos)
+{
+	struct dpu_hw_intf *intf = file_inode(f)->i_private;
+	struct dpu_hw_blk_reg_map *c = &intf->hw;
+	char tmp[256];
+	int n;
+
+	n = scnprintf(tmp, sizeof(tmp),
+		      "sync_cfg=0x%08x height=%u sel=%u en=%u rd=%u wr=%u int_cnt=0x%08x line=%u\n",
+		      DPU_REG_READ(c, INTF_TEAR_SYNC_CONFIG_VSYNC),
+		      DPU_REG_READ(c, INTF_TEAR_SYNC_CONFIG_HEIGHT),
+		      DPU_REG_READ(c, INTF_TEAR_MDP_VSYNC_SEL),
+		      DPU_REG_READ(c, INTF_TEAR_TEAR_CHECK_EN),
+		      DPU_REG_READ(c, INTF_TEAR_RD_PTR_IRQ),
+		      DPU_REG_READ(c, INTF_TEAR_WR_PTR_IRQ),
+		      DPU_REG_READ(c, INTF_TEAR_INT_COUNT_VAL),
+		      DPU_REG_READ(c, INTF_TEAR_LINE_COUNT));
+
+	return simple_read_from_buffer(buf, len, ppos, tmp, n);
+}
+
+static ssize_t dpu_intf_tear_write(struct file *f, const char __user *buf,
+				   size_t len, loff_t *ppos)
+{
+	struct dpu_hw_intf *intf = file_inode(f)->i_private;
+	struct dpu_hw_blk_reg_map *c = &intf->hw;
+	char cmd[32];
+	unsigned int val;
+	u32 cfg;
+
+	if (len >= sizeof(cmd))
+		return -EINVAL;
+	if (copy_from_user(cmd, buf, len))
+		return -EFAULT;
+	cmd[len] = '\0';
+
+	if (sscanf(cmd, "height %u", &val) == 1) {
+		DPU_REG_WRITE(c, INTF_TEAR_SYNC_CONFIG_HEIGHT, val);
+	} else if (sscanf(cmd, "rd %u", &val) == 1) {
+		DPU_REG_WRITE(c, INTF_TEAR_RD_PTR_IRQ, val);
+	} else if (sscanf(cmd, "vsync_src %u", &val) == 1) {
+		DPU_REG_WRITE(c, INTF_TEAR_MDP_VSYNC_SEL, val & 0xf);
+	} else if (sscanf(cmd, "bit20 %u", &val) == 1) {
+		cfg = DPU_REG_READ(c, INTF_TEAR_SYNC_CONFIG_VSYNC);
+		if (val)
+			cfg |= BIT(20);
+		else
+			cfg &= ~BIT(20);
+		DPU_REG_WRITE(c, INTF_TEAR_SYNC_CONFIG_VSYNC, cfg);
+	} else if (sscanf(cmd, "en %u", &val) == 1) {
+		DPU_REG_WRITE(c, INTF_TEAR_TEAR_CHECK_EN, val ? 1 : 0);
+	} else {
+		return -EINVAL;
+	}
+
+	pr_info("dpu-intf%d tear knob: %s", intf->idx - INTF_0, cmd);
+
+	return len;
+}
+
+static const struct file_operations dpu_intf_tear_fops = {
+	.owner = THIS_MODULE,
+	.read = dpu_intf_tear_read,
+	.write = dpu_intf_tear_write,
+	.open = simple_open,
+	.llseek = default_llseek,
+};
+
 static int dpu_hw_intf_enable_te(struct dpu_hw_intf *intf,
 		struct dpu_hw_tear_check *te)
 {
@@ -387,6 +489,8 @@ static int dpu_hw_intf_enable_te(struct dpu_hw_intf *intf,
 	DPU_REG_WRITE(c, INTF_TEAR_SYNC_CONFIG_HEIGHT, te->sync_cfg_height);
 	DPU_REG_WRITE(c, INTF_TEAR_VSYNC_INIT_VAL, te->vsync_init_val);
 	DPU_REG_WRITE(c, INTF_TEAR_RD_PTR_IRQ, te->rd_ptr_irq);
+	if (te->wr_ptr_irq)
+		DPU_REG_WRITE(c, INTF_TEAR_WR_PTR_IRQ, te->wr_ptr_irq);
 	DPU_REG_WRITE(c, INTF_TEAR_START_POS, te->start_pos);
 	DPU_REG_WRITE(c, INTF_TEAR_SYNC_THRESH,
 			((te->sync_threshold_continue << 16) |
@@ -395,6 +499,8 @@ static int dpu_hw_intf_enable_te(struct dpu_hw_intf *intf,
 			(te->start_pos + te->sync_threshold_start + 1));
 
 	DPU_REG_WRITE(c, INTF_TEAR_TEAR_CHECK_EN, 1);
+
+	dpu_hw_intf_dump_tear(intf, "enable_te");
 
 	return 0;
 }
@@ -463,6 +569,7 @@ static int dpu_hw_intf_connect_external_te(struct dpu_hw_intf *intf,
 		cfg &= ~BIT(20);
 	DPU_REG_WRITE(c, INTF_TEAR_SYNC_CONFIG_VSYNC, cfg);
 	trace_dpu_intf_connect_ext_te(intf->idx - INTF_0, cfg);
+	dpu_hw_intf_dump_tear(intf, enable_external_te ? "ext_te_on" : "ext_te_off");
 
 	return orig;
 }
@@ -505,6 +612,7 @@ static void dpu_hw_intf_vsync_sel(struct dpu_hw_intf *intf,
 	c = &intf->hw;
 
 	DPU_REG_WRITE(c, INTF_TEAR_MDP_VSYNC_SEL, (cfg->vsync_source & 0xf));
+	dpu_hw_intf_dump_tear(intf, "vsync_sel");
 }
 
 static void dpu_hw_intf_vsync_sel_v8(struct dpu_hw_intf *intf,
@@ -667,6 +775,17 @@ struct dpu_hw_intf *dpu_hw_intf_init(struct drm_device *dev,
 	 */
 	if (mdss_rev->core_major_ver >= 7)
 		c->ops.program_intf_cmd_cfg = dpu_hw_intf_program_intf_cmd_cfg;
+
+	if (c->ops.enable_tearcheck) {
+		char name[32];
+		static struct dentry *tear_dir;
+
+		if (!tear_dir)
+			tear_dir = debugfs_create_dir("dpu_tear", NULL);
+		snprintf(name, sizeof(name), "intf%d_tear", c->idx - INTF_0);
+		debugfs_create_file(name, 0600, tear_dir, c,
+				    &dpu_intf_tear_fops);
+	}
 
 	return c;
 }
