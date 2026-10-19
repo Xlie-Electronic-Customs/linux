@@ -921,6 +921,8 @@ static int ipa_probe(struct platform_device *pdev)
 		ret = ipa_firmware_load(dev);
 		if (ret)
 			goto err_deconfig;
+		msleep(50);
+		ipa_uc_dump(ipa, "after-fw-load");
 	} /* Otherwise loader == IPA_LOADER_SKIP */
 
 	/* GSI firmware is loaded; proceed to setup */

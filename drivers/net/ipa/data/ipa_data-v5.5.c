@@ -291,144 +291,154 @@ static const struct ipa_resource_data ipa_resource_data = {
 	.resource_dst		= ipa_resource_dst,
 };
 
-/* IPA-resident memory region data for an SoC having IPA v5.5 */
+/*
+ * SM8550 IPA v5.5 memory layout.
+ *
+ * The v5.5 table that upstream ships puts the uC shared area at 0x300 and
+ * squeezes the filters in behind it.  The actual SM8550 firmware (and the
+ * vendor ipam.ko on this device) uses the v5.1 layout: 4 KiB of uC
+ * descriptor RAM, then the uC shared mailbox at 0x1000, uC info at 0x1080
+ * and the filter/route tables from 0x1288 on.  With the upstream offsets
+ * the AP reads the descriptor RAM instead of the mailbox, never sees
+ * INIT_COMPLETED and the modem then times out waiting for a uC reply.
+ */
 static const struct ipa_mem ipa_mem_local_data[] = {
 	{
 		.id		= IPA_MEM_UC_EVENT_RING,
 		.offset		= 0x0000,
-		.size		= 0x0300,
+		.size		= 0x1000,
 		.canary_count	= 0,
 	},
 	{
 		.id		= IPA_MEM_UC_SHARED,
-		.offset		= 0x0300,
+		.offset		= 0x1000,
 		.size		= 0x0080,
 		.canary_count	= 0,
 	},
 	{
 		.id		= IPA_MEM_UC_INFO,
-		.offset		= 0x0380,
-		.size		= 0x0080,
+		.offset		= 0x1080,
+		.size		= 0x0200,
 		.canary_count	= 0,
 	},
 	{
 		.id		= IPA_MEM_V4_FILTER_HASHED,
-		.offset		= 0x0408,
+		.offset		= 0x1288,
 		.size		= 0x0078,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_V4_FILTER,
-		.offset		= 0x0488,
+		.offset		= 0x1308,
 		.size		= 0x0078,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_V6_FILTER_HASHED,
-		.offset		= 0x0508,
+		.offset		= 0x1388,
 		.size		= 0x0078,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_V6_FILTER,
-		.offset		= 0x0588,
+		.offset		= 0x1408,
 		.size		= 0x0078,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_V4_ROUTE_HASHED,
-		.offset		= 0x0608,
+		.offset		= 0x1488,
 		.size		= 0x0098,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_V4_ROUTE,
-		.offset		= 0x06a8,
+		.offset		= 0x1528,
 		.size		= 0x0098,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_V6_ROUTE_HASHED,
-		.offset		= 0x0748,
+		.offset		= 0x15c8,
 		.size		= 0x0098,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_V6_ROUTE,
-		.offset		= 0x07e8,
+		.offset		= 0x1668,
 		.size		= 0x0098,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_MODEM_HEADER,
-		.offset		= 0x0888,
+		.offset		= 0x1708,
 		.size		= 0x0240,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_AP_HEADER,
-		.offset		= 0x0ac8,
+		.offset		= 0x1948,
 		.size		= 0x01e0,
 		.canary_count	= 0,
 	},
 	{
 		.id		= IPA_MEM_MODEM_PROC_CTX,
-		.offset		= 0x0cc0,
+		.offset		= 0x1b40,
 		.size		= 0x0b20,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_AP_PROC_CTX,
-		.offset		= 0x17e0,
+		.offset		= 0x2660,
 		.size		= 0x0200,
 		.canary_count	= 0,
 	},
 	{
 		.id		= IPA_MEM_STATS_QUOTA_MODEM,
-		.offset		= 0x19e8,
+		.offset		= 0x2868,
 		.size		= 0x0060,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_STATS_QUOTA_AP,
-		.offset		= 0x1a48,
+		.offset		= 0x28c8,
 		.size		= 0x0048,
 		.canary_count	= 0,
 	},
 	{
 		.id		= IPA_MEM_STATS_TETHERING,
-		.offset		= 0x1a90,
+		.offset		= 0x2910,
 		.size		= 0x03c0,
 		.canary_count	= 0,
 	},
 	{
 		.id		= IPA_MEM_STATS_FILTER_ROUTE,
-		.offset		= 0x1e50,
-		.size		= 0x1000,
+		.offset		= 0x2cd0,
+		.size		= 0x0ba0,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_STATS_DROP,
-		.offset		= 0x2e50,
+		.offset		= 0x3870,
 		.size		= 0x0020,
 		.canary_count	= 0,
 	},
 	{
 		.id		= IPA_MEM_MODEM,
-		.offset		= 0x2e78,
+		.offset		= 0x3898,
 		.size		= 0x0d48,
 		.canary_count	= 2,
 	},
 	{
 		.id		= IPA_MEM_NAT_TABLE,
-		.offset		= 0x3bc0,
+		.offset		= 0x45e0,
 		.size		= 0x0900,
 		.canary_count	= 0,
 	},
 	{
 		.id		= IPA_MEM_PDN_CONFIG,
-		.offset		= 0x44c8,
-		.size		= 0x0050,
+		.offset		= 0x4ee8,
+		.size		= 0x0100,
 		.canary_count	= 2,
 	},
 };
@@ -439,6 +449,13 @@ static const struct ipa_mem_data ipa_mem_data = {
 	.local		= ipa_mem_local_data,
 	.imem_addr	= 0x14688000,
 	.imem_size	= 0x00002000,
+	/*
+	 * The modem's ipa_ipfltri_sys_mem_init asserts unless the AP hands it
+	 * at least IPA_IPFLTR_SMEM_TOTAL_ALLOC_SIZE bytes; 0x2000 was rejected
+	 * with "APPS allocated [size : 8192], less than expected", so keep the
+	 * upstream 0xb000 now that the QMI request actually carries the pool
+	 * address.
+	 */
 	.smem_size	= 0x0000b000,
 };
 

@@ -593,6 +593,7 @@ static int ipa_smem_init(struct ipa *ipa, size_t size)
 
 	ipa->smem_iova = iova;
 	ipa->smem_size = size;
+	ipa->smem_item_size = actual;	/* the modem expects the unaligned size */
 
 	return 0;
 }

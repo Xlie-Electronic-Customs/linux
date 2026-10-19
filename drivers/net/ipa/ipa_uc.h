@@ -42,6 +42,13 @@ void ipa_uc_deconfig(struct ipa *ipa);
 void ipa_uc_power(struct ipa *ipa);
 
 /**
+ * ipa_uc_dump() - Dump the AP/microcontroller shared area
+ * @ipa:	IPA pointer
+ * @tag:	Short tag for the log line
+ */
+void ipa_uc_dump(struct ipa *ipa, const char *tag);
+
+/**
  * ipa_uc_panic_notifier()
  * @ipa:	IPA pointer
  *

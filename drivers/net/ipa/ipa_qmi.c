@@ -327,6 +327,26 @@ init_modem_driver_req(struct ipa_qmi *ipa_qmi)
 		req.modem_mem_info.size = mem->size;
 	}
 
+	/*
+	 * The modem builds its IP filter table pool out of the SMEM item the
+	 * AP allocated in ipa_smem_init().  The vendor driver tells it where
+	 * that pool is with two optional TLVs; mainline never did, so the
+	 * firmware's allocation failed with a valid size but no base.
+	 */
+	if (ipa->smem_item_size) {
+		req.smem_info_valid = 1;
+		req.smem_info.start = ipa->mem_offset;
+		req.smem_info.size = ipa->smem_item_size;
+
+		req.smem_base_valid = 1;
+		req.smem_base.start = (u32)ipa->smem_iova;
+		req.smem_base.size = 0x800;
+
+		dev_info(ipa->dev,
+			 "smem: item %zu bytes, iova %#lx, mem_offset %#x\n",
+			 ipa->smem_item_size, ipa->smem_iova, ipa->mem_offset);
+	}
+
 	req.ctrl_comm_dest_end_pt_valid = 1;
 	req.ctrl_comm_dest_end_pt =
 		ipa->name_map[IPA_ENDPOINT_AP_MODEM_RX]->endpoint_id;

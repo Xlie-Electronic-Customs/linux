@@ -27,7 +27,8 @@
  */
 #define IPA_QMI_INDICATION_REGISTER_REQ_SZ	20	/* -> server handle */
 #define IPA_QMI_INDICATION_REGISTER_RSP_SZ	7	/* <- server handle */
-#define IPA_QMI_INIT_DRIVER_REQ_SZ		162	/* client handle -> */
+/* client handle -> ... ; grew by the vendor TLVs 0x24/0x25 (3+8 each) */
+#define IPA_QMI_INIT_DRIVER_REQ_SZ		200
 #define IPA_QMI_INIT_DRIVER_RSP_SZ		25	/* client handle <- */
 #define IPA_QMI_INIT_COMPLETE_IND_SZ		7	/* <- server handle */
 #define IPA_QMI_DRIVER_INIT_COMPLETE_REQ_SZ	4	/* -> server handle */
@@ -216,6 +217,15 @@ struct ipa_init_modem_driver_req {
 	u32			hw_stats_drop_base_addr;
 	u8			hw_stats_drop_size_valid;
 	u32			hw_stats_drop_size;
+
+	/* Vendor extension: where the SMEM item used for the modem's IP
+	 * filter table lives.  The firmware builds its pool from these two
+	 * TLVs; without them ipa_ipfltri_sys_mem_init asserts.
+	 */
+	u8			smem_info_valid;
+	struct ipa_mem_range	smem_info;
+	u8			smem_base_valid;
+	struct ipa_mem_range	smem_base;
 };
 
 /* The response to a IPA_QMI_INIT_DRIVER request begins with a standard

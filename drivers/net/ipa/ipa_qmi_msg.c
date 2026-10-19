@@ -640,6 +640,53 @@ const struct qmi_elem_info ipa_init_modem_driver_req_ei[] = {
 		.offset		= offsetof(struct ipa_init_modem_driver_req,
 					   hw_stats_drop_size),
 	},
+	/* Vendor extension: the SMEM item backing the modem's IP filter
+	 * table.  The firmware takes the pool size from 0x24 and the pool
+	 * address from 0x25; without them it asserts in
+	 * ipa_ipfltri_sys_mem_init.
+	 */
+	{
+		.data_type	= QMI_OPT_FLAG,
+		.elem_len	= 1,
+		.elem_size	=
+			sizeof_field(struct ipa_init_modem_driver_req,
+				     smem_info_valid),
+		.tlv_type	= 0x24,
+		.offset		= offsetof(struct ipa_init_modem_driver_req,
+					   smem_info_valid),
+	},
+	{
+		.data_type	= QMI_STRUCT,
+		.elem_len	= 1,
+		.elem_size	=
+			sizeof_field(struct ipa_init_modem_driver_req,
+				     smem_info),
+		.tlv_type	= 0x24,
+		.offset		= offsetof(struct ipa_init_modem_driver_req,
+					   smem_info),
+		.ei_array	= ipa_mem_range_ei,
+	},
+	{
+		.data_type	= QMI_OPT_FLAG,
+		.elem_len	= 1,
+		.elem_size	=
+			sizeof_field(struct ipa_init_modem_driver_req,
+				     smem_base_valid),
+		.tlv_type	= 0x25,
+		.offset		= offsetof(struct ipa_init_modem_driver_req,
+					   smem_base_valid),
+	},
+	{
+		.data_type	= QMI_STRUCT,
+		.elem_len	= 1,
+		.elem_size	=
+			sizeof_field(struct ipa_init_modem_driver_req,
+				     smem_base),
+		.tlv_type	= 0x25,
+		.offset		= offsetof(struct ipa_init_modem_driver_req,
+					   smem_base),
+		.ei_array	= ipa_mem_range_ei,
+	},
 	{
 		.data_type	= QMI_EOTI,
 	},

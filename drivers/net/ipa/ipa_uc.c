@@ -125,11 +125,27 @@ static struct ipa_uc_mem_area *ipa_uc_shared(struct ipa *ipa)
 	return ipa->mem_virt + offset;
 }
 
+/* Dump the whole shared area; tells whether the microcontroller is alive */
+void ipa_uc_dump(struct ipa *ipa, const char *tag)
+{
+	struct ipa_uc_mem_area *shared = ipa_uc_shared(ipa);
+
+	dev_info(ipa->dev,
+		 "uc[%s]: cmd=%u cparam=%#x resp=%u rparam=%#x evt=%u eparam=%#x ifver=%#x powered=%d loaded=%d\n",
+		 tag, shared->command, le32_to_cpu(shared->command_param),
+		 shared->response, le32_to_cpu(shared->response_param),
+		 shared->event, le32_to_cpu(shared->event_param),
+		 le16_to_cpu(shared->interface_version),
+		 ipa->uc_powered, ipa->uc_loaded);
+}
+
 /* Microcontroller event IPA interrupt handler */
 static void ipa_uc_event_handler(struct ipa *ipa)
 {
 	struct ipa_uc_mem_area *shared = ipa_uc_shared(ipa);
 	struct device *dev = ipa->dev;
+
+	ipa_uc_dump(ipa, "event");
 
 	if (shared->event == IPA_UC_EVENT_ERROR)
 		dev_err(dev, "microcontroller error event\n");
@@ -144,6 +160,8 @@ static void ipa_uc_response_hdlr(struct ipa *ipa)
 {
 	struct ipa_uc_mem_area *shared = ipa_uc_shared(ipa);
 	struct device *dev = ipa->dev;
+
+	ipa_uc_dump(ipa, "response");
 
 	/* An INIT_COMPLETED response message is sent to the AP by the
 	 * microcontroller when it is operational.  Other than this, the AP
