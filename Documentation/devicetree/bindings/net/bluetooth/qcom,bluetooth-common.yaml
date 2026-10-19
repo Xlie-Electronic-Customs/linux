@@ -22,4 +22,14 @@ properties:
     description:
       boot firmware is incorrectly passing the address in big-endian order
 
+  qcom,brahma-peri-baudrate:
+    type: boolean
+    description:
+      Indicates that the UART baud rate must be raised through the peripheral
+      subsystem (the vendor peri-subsystem baud command) instead of the
+      BT-subsystem vendor baud command. Needed by the WCN7860/BRAHMA combo
+      chip, whose ROM silently ignores the BT-subsystem baud VSC. Must not be
+      set on plain WCN7850 boards, which expect the standard BT-subsystem
+      baud VSC.
+
 additionalProperties: true

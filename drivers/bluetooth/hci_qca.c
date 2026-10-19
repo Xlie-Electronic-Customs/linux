@@ -229,6 +229,7 @@ struct qca_serdev {
 	u32 oper_speed;
 	bool bdaddr_property_broken;
 	bool support_hfp_hw_offload;
+	bool brahma_peri_baudrate;
 	const char *firmware_name[2];
 };
 
@@ -1404,7 +1405,7 @@ static inline void host_set_baudrate(struct hci_uart *hu, unsigned int speed)
 /* WCN7860/BRAHMA bring-up (OnePlus 15 kaanapali; the chip rides the
  * QCA_WCN7850 soc type on this branch): on the BRAHMA/GANGES combo-chip
  * family the shared UART's baud belongs to the PERIPHERAL subsystem, not
- * the BT subsystem — the wcn7850 EDL baud VSC (0xfc48) is silently
+ * the BT subsystem - the wcn7850 EDL baud VSC (0xfc48) is silently
  * ignored by this ROM (measured gens 44/46: after the host-side switch
  * every command times out while the controller stays at init speed).
  * The vendor stack (QTI BT HAL PeriPatchDLManager::SetPeriBaudRateReq)
@@ -1415,12 +1416,16 @@ static inline void host_set_baudrate(struct hci_uart *hu, unsigned int speed)
  *   0xf1 0xff  vendor "general" opcode 0xfff1 (le16)
  *   0x02  parameter length
  *   0x02  HCI_PERI_SET_BAUDRATE
- *   <n>   baud enum — same table as the BT VSC (vendor uart_utils.h
+ *   <n>   baud enum - same table as the BT VSC (vendor uart_utils.h
  *         matches enum qca_baudrate through 0x12; 8 Mbps is 0x15)
  *
  * Fire-and-forget like the BT VSC. Kernel prior art: Teguh Sobirin's
  * SM8750 WCN7860 (GANGES sibling) port, shipped at 3.2M by ROCKNIX/
  * batocera on retail handhelds.
+ *
+ * This is only reached when the bluetooth node carries
+ * "qcom,brahma-peri-baudrate"; the standard WCN7850 ROM (upstream
+ * sm8550-qrd and the Xiaomi vermeer) needs the normal BT VSC.
  */
 static int qca_peri_set_baudrate(struct hci_uart *hu, u8 baudrate)
 {
@@ -1449,7 +1454,7 @@ static int qca_peri_set_baudrate(struct hci_uart *hu, u8 baudrate)
 	skb_queue_tail(&qca->txq, skb);
 	hci_uart_tx_wakeup(hu);
 
-	/* No completion event to wait on — give the queue and the peri
+	/* No completion event to wait on - give the queue and the peri
 	 * subsystem time to apply the switch before the host follows.
 	 */
 	msleep(100);
@@ -2056,12 +2061,19 @@ retry:
 		qca_set_speed(hu, QCA_INIT_SPEED);
 	}
 
-	/* WCN7860/BRAHMA (rides QCA_WCN7850 on this branch): tell the peri
-	 * subsystem the operating rate BEFORE the standard user-speed switch
-	 * — the BT-subsystem baud VSC that switch sends is ignored by this
-	 * ROM, the peri command is the one that actually moves the UART.
+	/* WCN7860/BRAHMA bring-up (OnePlus 15 kaanapali; the chip rides the
+	 * QCA_WCN7850 soc type on this branch): tell the peri subsystem the
+	 * operating rate BEFORE the standard user-speed switch - the
+	 * BT-subsystem baud VSC that switch sends is ignored by this ROM, the
+	 * peri command is the one that actually moves the UART.
+	 *
+	 * This is gated on the "qcom,brahma-peri-baudrate" DT property and not
+	 * on the soc type: the property is only set by the OnePlus 15 node.
+	 * Real WCN7850 boards (e.g. the Xiaomi vermeer, which follows the
+	 * upstream sm8550-qrd flow) must not send the peri command - their
+	 * ROM expects the standard BT-subsystem baud VSC.
 	 */
-	if (soc_type == QCA_WCN7850) {
+	if (qcadev && qcadev->brahma_peri_baudrate) {
 		speed = qca_get_speed(hu, QCA_OPER_SPEED);
 		if (speed) {
 			ret = qca_peri_set_baudrate(hu,
@@ -2103,8 +2115,8 @@ retry:
 	ret = qca_uart_setup(hdev, qca_baudrate, soc_type, ver,
 			firmware_name, rampatch_name);
 	if (!ret) {
-		/* WCN7860/BRAHMA bring-up (OnePlus 15 kaanapali, rides the
-		 * QCA_WCN7850 soc type on this branch): host-side IBS stays
+		/* WCN7860/BRAHMA bring-up (OnePlus 15 kaanapali, gated on the
+		 * "qcom,brahma-peri-baudrate" DT property): host-side IBS stays
 		 * disabled ONLY while the UART runs at init speed. Measured
 		 * on this device: after a host IBS sleep->wake cycle at 115200
 		 * the controller ACKs the wake handshake (0xfd -> 0xfc) but
@@ -2116,8 +2128,11 @@ retry:
 		 * qca_suspend needs it armed to power-gate BT across
 		 * sleep). So: peri handshake ran (operating baud) => arm
 		 * IBS as usual; still at init speed => keep the crutch.
+		 *
+		 * Every other board (including the upstream sm8550-qrd flow)
+		 * clears the flag unconditionally, as upstream does.
 		 */
-		if (soc_type != QCA_WCN7850 ||
+		if (!qcadev || !qcadev->brahma_peri_baudrate ||
 		    qca_baudrate != QCA_BAUDRATE_115200)
 			clear_bit(QCA_IBS_DISABLED, &qca->flags);
 		qca_debugfs_init(hdev);
@@ -2506,6 +2521,14 @@ static int qca_serdev_probe(struct serdev_device *serdev)
 
 	qcadev->bdaddr_property_broken = device_property_read_bool(&serdev->dev,
 			"qcom,local-bd-address-broken");
+
+	/* WCN7860/BRAHMA (OnePlus 15) bring-up: this chip needs the baud
+	 * raised through the peri subsystem instead of the BT-subsystem VSC
+	 * (see qca_peri_set_baudrate()). Only the OnePlus 15 bluetooth node
+	 * sets this property; plain WCN7850 boards keep the upstream flow.
+	 */
+	qcadev->brahma_peri_baudrate = device_property_read_bool(&serdev->dev,
+			"qcom,brahma-peri-baudrate");
 
 	if (data)
 		qcadev->btsoc_type = data->soc_type;

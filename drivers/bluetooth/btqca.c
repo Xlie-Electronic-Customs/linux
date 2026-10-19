@@ -7,11 +7,27 @@
 #include <linux/module.h>
 #include <linux/firmware.h>
 #include <linux/vmalloc.h>
+#include <linux/property.h>
 
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
 
 #include "btqca.h"
+
+/*
+ * WCN7860/BRAHMA (OnePlus 15 kaanapali) needs the BRAHMA-specific bring-up
+ * workarounds (patch-config prelude, ELF patch, init-speed download guard);
+ * plain WCN7850 ROMs do not. btqca is a separate module from hci_uart (which
+ * owns struct qca_serdev), so instead of reaching into that private struct
+ * read the same DT property hci_qca keys the BRAHMA workarounds on. It lives
+ * on the bluetooth node, which is the parent of the HCI device.
+ */
+static bool qca_brahma_peri_baudrate(struct hci_dev *hdev)
+{
+	struct device *dev = GET_HCIDEV_DEV(hdev);
+
+	return dev && device_property_read_bool(dev, "qcom,brahma-peri-baudrate");
+}
 
 int qca_read_soc_version(struct hci_dev *hdev, struct qca_btsoc_version *ver,
 			 enum qca_btsoc_type soc_type)
@@ -616,14 +632,16 @@ static int qca_download_firmware(struct hci_dev *hdev,
 			 * would sit behind ~26 s of buffered bytes while the
 			 * HCI core's 2 s command watchdog kills it (measured
 			 * on this device). Wait out the drain before the final
-			 * segment. ELF-only, so real WCN7850s (TLV, 3.2 M)
-			 * never hit this. With the peri baud handshake the
-			 * download runs at the operating rate instead and
-			 * the buffered bytes drain ~28x faster — a short
-			 * guard sleep keeps the same margin.
+			 * segment. ELF-only and BRAHMA-only, so real WCN7850s
+			 * (TLV, 3.2 M, no property) never hit this. With the
+			 * peri baud handshake the download runs at the
+			 * operating rate instead and the buffered bytes drain
+			 * ~28x faster - a short guard sleep keeps the same
+			 * margin.
 			 */
 			if (config->type == ELF_TYPE_PATCH &&
-			    soc_type == QCA_WCN7850)
+			    soc_type == QCA_WCN7850 &&
+			    qca_brahma_peri_baudrate(hdev))
 				msleep(config->user_baud_rate ==
 				       QCA_BAUDRATE_115200 ? 28000 : 1200);
 
@@ -800,10 +818,11 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 	 * 3.2M and init speed). WCN6750 needed this patch-config prelude before
 	 * TLV download; test whether the WCN7860 ROM does too. The command's
 	 * failure is non-fatal and its response (or its absence) is itself a
-	 * discriminating read. Runs for QCA_WCN7850 because the WCN7860 rides
-	 * that soc type on this branch.
+	 * discriminating read. Gated on "qcom,brahma-peri-baudrate" so plain
+	 * WCN7850 boards (e.g. the Xiaomi vermeer) keep the upstream flow.
 	 */
-	if (soc_type == QCA_WCN6750 || soc_type == QCA_WCN7850)
+	if (soc_type == QCA_WCN6750 ||
+	    (soc_type == QCA_WCN7850 && qca_brahma_peri_baudrate(hdev)))
 		qca_send_patch_config_cmd(hdev);
 
 	/* Download rampatch file */
