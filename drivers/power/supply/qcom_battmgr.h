@@ -221,6 +221,14 @@ struct qcom_battmgr {
 	 * firmware, as it then stops responding.
 	 */
 	struct mutex lock;
+
+	/* Xiaomi MiPPS extension */
+	bool xiaomi_prop_pending;
+	unsigned int xiaomi_prop;
+	u32 xiaomi_prop_value;
+	u8 xiaomi_prop_data[32];
+	size_t xiaomi_prop_data_len;
+	u8 xiaomi_verify_slave;
 };
 
 
