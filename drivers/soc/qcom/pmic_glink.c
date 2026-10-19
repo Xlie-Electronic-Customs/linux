@@ -28,6 +28,8 @@ struct pmic_glink_data {
 	unsigned long	client_mask;
 	const char	*charger_pdr_service_name;
 	const char	*charger_pdr_service_path;
+	const char	*sensor_pdr_service_name;
+	const char	*sensor_pdr_service_path;
 };
 
 struct pmic_glink {
@@ -358,6 +360,19 @@ static int pmic_glink_probe(struct platform_device *pdev)
 		}
 	}
 
+	/*
+	 * The ADSP firmware publishes the SSC sensor protection domain as
+	 * msm/adsp/sensor_pd.  adsprpcd/libssc need a PDR lookup for it so the
+	 * sensor PD is brought up before the sensorspd FastRPC channel opens.
+	 */
+	if (pg->data->sensor_pdr_service_name && pg->data->sensor_pdr_service_path) {
+		service = pdr_add_lookup(pg->pdr, pg->data->sensor_pdr_service_name,
+					 pg->data->sensor_pdr_service_path);
+		if (IS_ERR(service))
+			dev_warn(&pdev->dev, "failed adding pdr lookup for sensor_pd: %pe\n",
+				 service);
+	}
+
 	mutex_lock(&__pmic_glink_lock);
 	__pmic_glink = pg;
 	mutex_unlock(&__pmic_glink_lock);
@@ -402,6 +417,8 @@ static const struct pmic_glink_data pmic_glink_adsp_data = {
 		       BIT(PMIC_GLINK_CLIENT_UCSI),
 	.charger_pdr_service_name = "tms/servreg",
 	.charger_pdr_service_path = "msm/adsp/charger_pd",
+	.sensor_pdr_service_name = "tms/servreg",
+	.sensor_pdr_service_path = "msm/adsp/sensor_pd",
 };
 
 static const struct pmic_glink_data pmic_glink_soccp_data = {
