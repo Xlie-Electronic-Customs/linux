@@ -342,44 +342,143 @@ static void ufs_qcom_config_ice_allocator(struct ufs_qcom_host *host)
 
 #endif
 
+static int ufs_qcom_host_clk_get(struct device *dev,
+				 const char *name, struct clk **clk_out, bool optional)
+{
+	struct clk *clk;
+	int err = 0;
+
+	clk = devm_clk_get(dev, name);
+	if (!IS_ERR(clk)) {
+		*clk_out = clk;
+		return 0;
+	}
+
+	err = PTR_ERR(clk);
+
+	if (optional && err == -ENOENT) {
+		*clk_out = NULL;
+		return 0;
+	}
+
+	if (err != -EPROBE_DEFER)
+		dev_err(dev, "failed to get %s err %d\n", name, err);
+
+	return err;
+}
+
+static int ufs_qcom_host_clk_enable(struct device *dev,
+				    const char *name, struct clk *clk)
+{
+	int err = 0;
+
+	err = clk_prepare_enable(clk);
+	if (err)
+		dev_err(dev, "%s: %s enable failed %d\n", __func__, name, err);
+
+	return err;
+}
+
 static void ufs_qcom_disable_lane_clks(struct ufs_qcom_host *host)
 {
 	if (!host->is_lane_clks_enabled)
 		return;
 
-	clk_bulk_disable_unprepare(host->num_clks, host->clks);
+	if (host->tx_l1_sync_clk)
+		clk_disable_unprepare(host->tx_l1_sync_clk);
+	clk_disable_unprepare(host->tx_l0_sync_clk);
+	if (host->rx_l1_sync_clk)
+		clk_disable_unprepare(host->rx_l1_sync_clk);
+	clk_disable_unprepare(host->rx_l0_sync_clk);
 
 	host->is_lane_clks_enabled = false;
 }
 
 static int ufs_qcom_enable_lane_clks(struct ufs_qcom_host *host)
 {
-	int err;
+	int err = 0;
+	struct device *dev = host->hba->dev;
 
-	err = clk_bulk_prepare_enable(host->num_clks, host->clks);
+	if (host->is_lane_clks_enabled)
+		return 0;
+
+	err = ufs_qcom_host_clk_enable(dev, "rx_lane0_sync_clk",
+		host->rx_l0_sync_clk);
 	if (err)
-		return err;
+		goto out;
+
+	err = ufs_qcom_host_clk_enable(dev, "tx_lane0_sync_clk",
+		host->tx_l0_sync_clk);
+	if (err)
+		goto disable_rx_l0;
+
+	if (host->hba->lanes_per_direction > 1) {
+		err = ufs_qcom_host_clk_enable(dev, "rx_lane1_sync_clk",
+			host->rx_l1_sync_clk);
+		if (err)
+			goto disable_tx_l0;
+
+		/* The tx lane1 clk could be muxed, hence keep this optional */
+		if (host->tx_l1_sync_clk) {
+			err = ufs_qcom_host_clk_enable(dev, "tx_lane1_sync_clk",
+					host->tx_l1_sync_clk);
+			if (err)
+				goto disable_rx_l1;
+		}
+	}
 
 	host->is_lane_clks_enabled = true;
+	goto out;
 
-	return 0;
+disable_rx_l1:
+	clk_disable_unprepare(host->rx_l1_sync_clk);
+disable_tx_l0:
+	clk_disable_unprepare(host->tx_l0_sync_clk);
+disable_rx_l0:
+	clk_disable_unprepare(host->rx_l0_sync_clk);
+out:
+	return err;
 }
 
 static int ufs_qcom_init_lane_clks(struct ufs_qcom_host *host)
 {
-	int err;
+	int err = 0;
 	struct device *dev = host->hba->dev;
 
 	if (has_acpi_companion(dev))
 		return 0;
 
-	err = devm_clk_bulk_get_all(dev, &host->clks);
-	if (err <= 0)
-		return err;
+	err = ufs_qcom_host_clk_get(dev, "rx_lane0_sync_clk",
+					&host->rx_l0_sync_clk, false);
+	if (err) {
+		dev_err(dev, "%s: failed to get rx_lane0_sync_clk, err %d\n",
+				__func__, err);
+		goto out;
+	}
 
-	host->num_clks = err;
+	err = ufs_qcom_host_clk_get(dev, "tx_lane0_sync_clk",
+					&host->tx_l0_sync_clk, false);
+	if (err) {
+		dev_err(dev, "%s: failed to get tx_lane0_sync_clk, err %d\n",
+				__func__, err);
+		goto out;
+	}
 
-	return 0;
+	/* In case of single lane per direction, don't read lane1 clocks */
+	if (host->hba->lanes_per_direction > 1) {
+		err = ufs_qcom_host_clk_get(dev, "rx_lane1_sync_clk",
+			&host->rx_l1_sync_clk, false);
+		if (err) {
+			dev_err(dev, "%s: failed to get rx_lane1_sync_clk, err %d\n",
+					__func__, err);
+			goto out;
+		}
+
+		err = ufs_qcom_host_clk_get(dev, "tx_lane1_sync_clk",
+			&host->tx_l1_sync_clk, true);
+	}
+out:
+	return err;
 }
 
 static int ufs_qcom_check_hibern8(struct ufs_hba *hba)
