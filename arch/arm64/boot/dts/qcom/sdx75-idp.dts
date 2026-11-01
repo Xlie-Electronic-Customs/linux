@@ -15,6 +15,9 @@
 	model = "Qualcomm Technologies, Inc. SDX75 IDP";
 	compatible = "qcom,sdx75-idp", "qcom,sdx75";
 
+	qcom,msm-id = <0x244 0x10000 0x262 0x10000 0x22c 0x10000 0x261 0x10000>;
+	qcom,board-id = <0x4040022 0x204>;
+
 	aliases {
 		serial0 = &uart1;
 	};
@@ -293,6 +296,212 @@
 		nand-bus-width = <8>;
 		/* efs2 partition is secured */
 		secure-regions = /bits/ 64 <0x680000 0xb00000>;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <2>;
+			#size-cells = <2>;
+
+			partition@0 {
+				label = "sbl";
+				reg = <0x0 0x0 0x0 0x400000>;
+			};
+
+			partition@400000 {
+				label = "mibib";
+				reg = <0x0 0x400000 0x0 0x280000>;
+			};
+
+			partition@680000 {
+				label = "efs2";
+				reg = <0x0 0x680000 0x0 0xb00000>;
+			};
+
+			partition@1180000 {
+				label = "tz";
+				reg = <0x0 0x1180000 0x0 0x480000>;
+			};
+
+			partition@1600000 {
+				label = "tz_devcfg";
+				reg = <0x0 0x1600000 0x0 0x100000>;
+			};
+
+			partition@1700000 {
+				label = "cmnlib64";
+				reg = <0x0 0x1700000 0x0 0x180000>;
+			};
+
+			partition@1880000 {
+				label = "keymaster";
+				reg = <0x0 0x1880000 0x0 0x100000>;
+			};
+
+			partition@1980000 {
+				label = "ddr";
+				reg = <0x0 0x1980000 0x0 0x80000>;
+			};
+
+			partition@1a00000 {
+				label = "ddr_debug";
+				reg = <0x0 0x1a00000 0x0 0x180000>;
+			};
+
+			partition@1b80000 {
+				label = "apdp";
+				reg = <0x0 0x1b80000 0x0 0x100000>;
+			};
+
+			partition@1c80000 {
+				label = "xbl_config";
+				reg = <0x0 0x1c80000 0x0 0x180000>;
+			};
+
+			partition@1e00000 {
+				label = "xbl_ramdump";
+				reg = <0x0 0x1e00000 0x0 0x200000>;
+			};
+
+			partition@2000000 {
+				label = "multi_oem";
+				reg = <0x0 0x2000000 0x0 0x100000>;
+			};
+
+			partition@2100000 {
+				label = "multi_qti";
+				reg = <0x0 0x2100000 0x0 0x100000>;
+			};
+
+			partition@2200000 {
+				label = "aop";
+				reg = <0x0 0x2200000 0x0 0x100000>;
+			};
+
+			partition@2300000 {
+				label = "aop_devcfg";
+				reg = <0x0 0x2300000 0x0 0x100000>;
+			};
+
+			partition@2400000 {
+				label = "qhee";
+				reg = <0x0 0x2400000 0x0 0x200000>;
+			};
+
+			partition@2600000 {
+				label = "abl_a";
+				reg = <0x0 0x2600000 0x0 0x100000>;
+			};
+
+			partition@2700000 {
+				label = "abl_b";
+				reg = <0x0 0x2700000 0x0 0x100000>;
+			};
+
+			partition@2800000 {
+				label = "uefi";
+				reg = <0x0 0x2800000 0x0 0x4c0000>;
+			};
+
+			partition@2cc0000 {
+				label = "boot_a";
+				reg = <0x0 0x2cc0000 0x0 0x1500000>;
+			};
+
+			partition@41c0000 {
+				label = "boot_b";
+				reg = <0x0 0x41c0000 0x0 0x1500000>;
+			};
+
+			partition@56c0000 {
+				label = "scrub";
+				reg = <0x0 0x56c0000 0x0 0x180000>;
+			};
+
+			partition@5840000 {
+				label = "modem_a";
+				reg = <0x0 0x5840000 0x0 0x7040000>;
+			};
+
+			partition@c880000 {
+				label = "modem_b";
+				reg = <0x0 0xc880000 0x0 0x7040000>;
+			};
+
+			partition@138c0000 {
+				label = "misc";
+				reg = <0x0 0x138c0000 0x0 0x1c0000>;
+			};
+
+			partition@13a80000 {
+				label = "foxnv";
+				reg = <0x0 0x13a80000 0x0 0x1200000>;
+			};
+
+			partition@14c80000 {
+				label = "vendor";
+				reg = <0x0 0x14c80000 0x0 0x400000>;
+			};
+
+			partition@15080000 {
+				label = "fwinfo";
+				reg = <0x0 0x15080000 0x0 0x180000>;
+			};
+
+			partition@15200000 {
+				label = "devinfo";
+				reg = <0x0 0x15200000 0x0 0x180000>;
+			};
+
+			partition@15380000 {
+				label = "recoveryinfo";
+				reg = <0x0 0x15380000 0x0 0x1c0000>;
+			};
+
+			partition@15540000 {
+				label = "system_a";
+				reg = <0x0 0x15540000 0x0 0x4000000>;
+			};
+
+			partition@19540000 {
+				label = "system_b";
+				reg = <0x0 0x19540000 0x0 0x4000000>;
+			};
+
+			partition@1d540000 {
+				label = "sec";
+				reg = <0x0 0x1d540000 0x0 0x100000>;
+			};
+
+			partition@1d640000 {
+				label = "ipa_fw";
+				reg = <0x0 0x1d640000 0x0 0x100000>;
+			};
+
+			partition@1d740000 {
+				label = "qupfw";
+				reg = <0x0 0x1d740000 0x0 0x100000>;
+			};
+
+			partition@1d840000 {
+				label = "shrm";
+				reg = <0x0 0x1d840000 0x0 0x100000>;
+			};
+
+			partition@1d940000 {
+				label = "cpucpfw";
+				reg = <0x0 0x1d940000 0x0 0x100000>;
+			};
+
+			partition@1da40000 {
+				label = "usb_qti";
+				reg = <0x0 0x1da40000 0x0 0x100000>;
+			};
+
+			partition@1db40000 {
+				label = "foxusr";
+				reg = <0x0 0x1db40000 0x0 0x24c0000>;
+			};
+		};
 	};
 };
 
