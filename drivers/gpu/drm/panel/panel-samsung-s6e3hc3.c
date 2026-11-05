@@ -318,9 +318,9 @@ static int panel_samsung_amb670yf07_1440_3216_dsc_prepare(struct drm_panel *pane
 		goto err_on;
 	}
 
-	ret = panel_samsung_amb670yf07_1440_3216_dsc_hbm_on(ctx);
-	if (ret < 0)
-		dev_err(dev, "Failed to initialize panel hbm: %d\n", ret);
+	// ret = panel_samsung_amb670yf07_1440_3216_dsc_hbm_on(ctx);
+	// if (ret < 0)
+	// 	dev_err(dev, "Failed to initialize panel hbm: %d\n", ret);
 
 	drm_dsc_pps_payload_pack(&pps, &ctx->dsc);
 
