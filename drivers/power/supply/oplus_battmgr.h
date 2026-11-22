@@ -4,7 +4,7 @@
 #define OEM_OPCODE_READ_BUFFER    0x10000
 #define BCC_OPCODE_READ_BUFFER    0x10003
 #define PPS_OPCODE_READ_BUFFER    0x10004
-#define AP_OPCODE_UFCS_BUFFER     0x10005
+#define TRACK_OPCODE_READ_BUFFER     0x10005
 #define AP_OPCODE_READ_BUFFER     0x10006
 #define AP_OPCODE_WRITE_BUFFER    0x10008
 #define OPLUS_OPCODE_GET_SINK_MSG 0x10009
@@ -46,7 +46,14 @@
 #define PDO_9V 9000
 #define PDO_5V 5000
 #define PDO_2A 2000
-#define PDO_3A 2000
+#define PDO_3A 3000
+
+#define OPLUS_CHG_UPDATE_INTERVAL_SEC			5
+#define OPLUS_CHG_UPDATE_NO_CHARGE_INTERVAL_SEC		10
+/* first run after init 10s */
+#define OPLUS_CHG_UPDATE_INIT_DELAY	round_jiffies_relative(msecs_to_jiffies(500))
+/* update cycle 5s */
+#define OPLUS_CHG_UPDATE_INTERVAL(time)	round_jiffies_relative(msecs_to_jiffies(time * 1000))
 
 enum oplus_battmgr_variant {
 	OPLUS_BATTMGR_SM8450,
@@ -251,12 +258,94 @@ enum {
 	OPLUS_PROPERTY_MAX,
 } oplus_property_type_e;
 
+
+
 #define MAX_STR_LEN			128
 #define BC_WAIT_TIME_MS			2500/* sjc 1K->2K */
 #define WLS_FW_PREPARE_TIME_MS		300
 #define WLS_FW_WAIT_TIME_MS		500
 #define WLS_FW_BUF_SIZE			128
 #define DEFAULT_RESTRICT_FCC_UA		1000000
+
+struct battery_charger_req_msg {
+	struct pmic_glink_hdr	hdr;
+	u32			battery_id;
+	u32			property_id;
+	u32			value;
+};
+
+struct battery_charger_resp_msg {
+	struct pmic_glink_hdr	hdr;
+	u32			property_id;
+	u32			value;
+	u32			ret_code;
+};
+
+struct battery_model_resp_msg {
+	struct pmic_glink_hdr	hdr;
+	u32			property_id;
+	char			model[MAX_STR_LEN];
+};
+
+struct wireless_fw_check_req {
+	struct pmic_glink_hdr	hdr;
+	u32			fw_version;
+	u32			fw_size;
+	u32			fw_crc;
+};
+
+struct wireless_fw_check_resp {
+	struct pmic_glink_hdr	hdr;
+	u32			ret_code;
+};
+
+struct wireless_fw_push_buf_req {
+	struct pmic_glink_hdr	hdr;
+	u8			buf[WLS_FW_BUF_SIZE];
+	u32			fw_chunk_id;
+};
+
+struct wireless_fw_push_buf_resp {
+	struct pmic_glink_hdr	hdr;
+	u32			fw_update_status;
+};
+
+struct wireless_fw_update_status {
+	struct pmic_glink_hdr	hdr;
+	u32			fw_update_done;
+};
+
+struct wireless_fw_get_version_req {
+	struct pmic_glink_hdr	hdr;
+};
+
+struct wireless_fw_get_version_resp {
+	struct pmic_glink_hdr	hdr;
+	u32			fw_version;
+};
+
+struct battery_charger_ship_mode_req_msg {
+	struct pmic_glink_hdr	hdr;
+	u32			ship_mode_type;
+};
+
+enum psy_type {
+	PSY_TYPE_BATTERY,
+	PSY_TYPE_USB,
+	PSY_TYPE_WLS,
+	PSY_TYPE_OPLUS,
+	PSY_TYPE_MAX,
+};
+
+struct psy_state {
+	struct power_supply	*psy;
+	char			*model;
+	const int		*map;
+	u32			*prop;
+	u32			prop_count;
+	u32			opcode_get;
+	u32			opcode_set;
+};
 
 struct oem_read_buffer_req_msg {
 	struct pmic_glink_hdr hdr;
@@ -627,6 +716,35 @@ struct oplus_chg_limits {
 	int default_input_current_charger_ma;
 };
 
+struct tbatt_normal_anti_shake {
+	int phase1_bound;
+	int phase2_bound;
+	int phase3_bound;
+	int phase4_bound;
+	int phase5_bound;
+	int phase6_bound;
+};
+
+struct tbatt_anti_shake {
+	int cold_bound;
+	int freeze_bound;
+	int little_cold_bound;
+	int cool_bound;
+	int little_cool_bound;
+	int normal_bound;
+	int warm_bound;
+	int hot_bound;
+	int overtemp_bound;
+};
+
+struct oplus_chg_full_data {
+	bool hw_full;
+	bool sub_hw_full;
+	int vbat_counts_hw;
+	int sub_vbat_counts_hw;
+	int clear_full_check_count;
+};
+
 struct oplus_chg_chip {
 	struct delayed_work check_pd_svooc_work;
 
@@ -636,7 +754,30 @@ struct oplus_chg_chip {
 	int pd_chging;
 	int pd_volt;
 	int pps_to_pd_chging;
+	int ibat_save[10];
 
+	int icharging;
+	int soc;
+	int tbatt_temp;
+	int stop_chg;
+	int mmi_fastchg;
+
+	int unwakelock_chg;
+	bool allow_swtich_to_fastchg;
+
+	bool slave_charger_enable;
+	bool support_shipmode_in_chgic;
+	bool not_support_usb_btb;
+	int read_by_reg;
+
+	bool chging_on;
+	bool in_rechging;
+	bool adsp_notify_ap_suspend;
+	bool voocphy_notify_ap_suspend;
+	bool first_enabled_adspvoocphy;
+	int charging_state;
+
+	bool usbtemp_check;
 	bool usbtemp_wq_init_finished;
 	bool wireless_support;
 	bool wpc_no_chargerpump;
@@ -677,43 +818,56 @@ struct oplus_chg_chip {
 	bool is_abnormal_adapter;
 
 	int voocphy_support;
-	bool adsp_notify_ap_suspend;
 
 	bool pd_disable;
 	bool support_wd0;
+	int notify_flag;
+	int qc_abnormal_check_count;
+
+	bool fg_soft_reset_done;
+	int fg_soft_reset_fail_cnt;
+	int fg_check_ibat_cnt;
 
 	struct oplus_chg_limits limits;
+	struct tbatt_anti_shake anti_shake_bound;
+	struct tbatt_normal_anti_shake tbatt_normal_anti_shake_bound;
+	struct oplus_chg_full_data full_data;
+
+	bool support_usbtemp_protect_v2;
+	bool usbtemp_change_across_unplug;
+	int usbtemp_curr_status;
+	int usbtemp_batt_current;
+	int usbtemp_pre_batt_current;
+	int usbtemp_batt_temp_low;
+	int usbtemp_batt_temp_high;
+	int usbtemp_ntc_temp_low;
+	int usbtemp_ntc_temp_high;
+	int usbtemp_temp_gap_low_with_batt_temp;
+	int usbtemp_temp_gap_high_with_batt_temp;
+	int usbtemp_temp_gap_low_without_batt_temp;
+	int usbtemp_temp_gap_high_without_batt_temp;
+	int usbtemp_rise_fast_temp_low;
+	int usbtemp_rise_fast_temp_high;
+	int usbtemp_rise_fast_temp_count_low;
+	int usbtemp_rise_fast_temp_count_high;
+
+	int usbtemp_cool_down_ntc_low;
+	int usbtemp_cool_down_ntc_high;
+	int usbtemp_cool_down_ntc_high1;
+	int usbtemp_cool_down_ntc_high2;
+	int usbtemp_cool_down_ntc_high3;
+
+	int usbtemp_cool_down_gap_low;
+	int usbtemp_cool_down_gap_high;
+	int usbtemp_cool_down_recover_ntc_low;
+	int usbtemp_cool_down_recover_ntc_high;
+	int usbtemp_cool_down_recover_gap_low;
+	int usbtemp_cool_down_recover_gap_high;
+	int usbtemp_cool_down_recoup_high;
+	int usbtemp_cool_down_recoup_low;
 };
 
-struct vooc_chip {
-	int pcb_version;
-	bool allow_reading;
-	bool fastchg_started;
-	bool fastchg_ing;
-	bool fastchg_allow;
-	bool fastchg_to_normal;
-	bool fastchg_to_warm;
-	bool fastchg_to_warm_full;
-	bool fastchg_low_temp_full;
-	bool btb_temp_over;
-	bool fastchg_dummy_started;
-	bool need_to_up;
-	bool have_updated;
-	bool mcu_update_ing;
-	bool mcu_update_ing_fix;
-	bool mcu_boot_by_gpio;
-	const unsigned char *firmware_data;
-	unsigned int fw_data_count;
-	int fw_mcu_version;
-	int fw_data_version;
-	int adapter_update_real;
-	int adapter_update_report;
-	int dpdm_switch_mode;
-	bool support_vooc_by_normal_charger_path;
-	bool reset_adapter;
-};
-
-struct voocphy_manager {
+struct oplus_voocphy_manager {
 	bool voocphy_dual_cp_support;
 	bool voocphy_bidirect_cp_support;
 	bool external_gauge_support;
@@ -777,8 +931,10 @@ struct battery_chg_dev {
 
 	enum oplus_battmgr_variant variant;
 
+	struct psy_state psy_list[PSY_TYPE_MAX];
+
 	struct oplus_chg_chip *chip;
-	struct voocphy_manager *vooc_chip;
+	struct oplus_voocphy_manager *voocphy_chip;
 	struct oplus_opcode oplus;
 	struct oplus_battmgr_usb usb;
 	struct oplus_custom_gpio_pinctrl oplus_custom_gpio;
@@ -791,12 +947,20 @@ struct battery_chg_dev {
 	u32 usb_icl_ua;
 
 	bool restrict_chg_en;
+	bool plugin_already_run;
 
 	u32 *thermal_levels;
 	const char *wls_fw_name;
 	int curr_thermal_level;
 	int num_thermal_levels;
 	atomic_t state;
+	int fake_soc;
+
+	bool wls_fw_update_reqd;
+	struct completion fw_buf_ack;
+	struct completion fw_update_ack;
+	u32 wls_fw_version;
+	bool error_prop;
 
 
 	int ccdetect_irq;
@@ -953,13 +1117,6 @@ enum lcm_en_status {
 	LCM_EN_DEAFULT = 1,
 	LCM_EN_ENABLE,
 	LCM_EN_DISABLE,
-};
-
-enum psy_type {
-	PSY_TYPE_BATTERY,
-	PSY_TYPE_USB,
-	PSY_TYPE_WLS,
-	PSY_TYPE_MAX,
 };
 
 enum ship_mode_type {
