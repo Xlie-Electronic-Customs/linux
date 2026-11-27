@@ -25,9 +25,9 @@
  * information for each field.  The qmi_send_*() interfaces require
  * the message size to be provided.
  */
-#define IPA_QMI_INDICATION_REGISTER_REQ_SZ	20	/* -> server handle */
+#define IPA_QMI_INDICATION_REGISTER_REQ_SZ	16	/* -> server handle */
 #define IPA_QMI_INDICATION_REGISTER_RSP_SZ	7	/* <- server handle */
-#define IPA_QMI_INIT_DRIVER_REQ_SZ		162	/* client handle -> */
+#define IPA_QMI_INIT_DRIVER_REQ_SZ		197	/* client handle -> */
 #define IPA_QMI_INIT_DRIVER_RSP_SZ		25	/* client handle <- */
 #define IPA_QMI_INIT_COMPLETE_IND_SZ		7	/* <- server handle */
 #define IPA_QMI_DRIVER_INIT_COMPLETE_REQ_SZ	4	/* -> server handle */
@@ -106,6 +106,13 @@ struct ipa_mem_bounds {
 struct ipa_mem_array {
 	u32 start;
 	u32 count;
+};
+
+struct ipa_filter_stats {
+	u32 hw_filter_stats_start_addr;
+	u32 hw_filter_stats_size;
+	u8 hw_filter_stats_start_index;
+	u8 hw_filter_stats_end_index;
 };
 
 /* This defines the location and size of a range of memory.  The
@@ -216,6 +223,13 @@ struct ipa_init_modem_driver_req {
 	u32			hw_stats_drop_base_addr;
 	u8			hw_stats_drop_size_valid;
 	u32			hw_stats_drop_size;
+
+	u8 hw_fiter_stats_info_valid;
+	struct ipa_filter_stats hw_filter_stats_info;
+	u8 smem_info_valid;
+	struct ipa_mem_range smem_info;
+	u8 per_stats_smem_info_valid;
+	struct ipa_mem_range per_stats_smem_info;
 };
 
 /* The response to a IPA_QMI_INIT_DRIVER request begins with a standard

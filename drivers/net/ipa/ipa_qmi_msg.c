@@ -250,6 +250,48 @@ const struct qmi_elem_info ipa_mem_range_ei[] = {
 	},
 };
 
+static struct qmi_elem_info ipa_filter_info_ei[] = {
+	{
+		.data_type	= QMI_UNSIGNED_4_BYTE,
+		.elem_len	= 1,
+		.elem_size	= sizeof_field(struct ipa_filter_stats,
+					       hw_filter_stats_start_addr),
+		.tlv_type	= QMI_COMMON_TLV_TYPE,
+		.offset		= offsetof(struct ipa_filter_stats,
+					hw_filter_stats_start_addr),
+	},
+	{
+		.data_type	= QMI_UNSIGNED_4_BYTE,
+		.elem_len	= 1,
+		.elem_size	= sizeof_field(struct ipa_filter_stats,
+					       hw_filter_stats_size),
+		.tlv_type	= QMI_COMMON_TLV_TYPE,
+		.offset		= offsetof(struct ipa_filter_stats,
+					hw_filter_stats_size),
+	},
+	{
+		.data_type	= QMI_UNSIGNED_1_BYTE,
+		.elem_len	= 1,
+		.elem_size	= sizeof_field(struct ipa_filter_stats,
+					hw_filter_stats_start_index),
+		.tlv_type	= QMI_COMMON_TLV_TYPE,
+		.offset		= offsetof(struct ipa_filter_stats,
+					hw_filter_stats_start_index),
+	},
+	{
+		.data_type	= QMI_UNSIGNED_1_BYTE,
+		.elem_len	= 1,
+		.elem_size	= sizeof_field(struct ipa_filter_stats,
+					 hw_filter_stats_end_index),
+		.tlv_type	= QMI_COMMON_TLV_TYPE,
+		.offset		= offsetof(struct ipa_filter_stats,
+					hw_filter_stats_end_index),
+	},
+	{
+		.data_type	= QMI_EOTI,
+	},
+};
+
 /* QMI message structure definition for struct ipa_init_modem_driver_req */
 const struct qmi_elem_info ipa_init_modem_driver_req_ei[] = {
 	{
@@ -639,6 +681,63 @@ const struct qmi_elem_info ipa_init_modem_driver_req_ei[] = {
 		.tlv_type	= 0x22,
 		.offset		= offsetof(struct ipa_init_modem_driver_req,
 					   hw_stats_drop_size),
+	},
+	{
+		.data_type	= QMI_OPT_FLAG,
+		.elem_len	= 1,
+		.elem_size	= sizeof_field(struct ipa_init_modem_driver_req,
+					hw_fiter_stats_info_valid),
+		.tlv_type	= 0x23,
+		.offset		= offsetof(struct ipa_init_modem_driver_req,
+						hw_fiter_stats_info_valid),
+	},
+	{
+		.data_type	= QMI_STRUCT,
+		.elem_len	= 1,
+		.elem_size	= sizeof_field(struct ipa_init_modem_driver_req,
+					hw_filter_stats_info),
+		.tlv_type	= 0x23,
+		.offset		= offsetof(struct ipa_init_modem_driver_req,
+						hw_filter_stats_info),
+		.ei_array	= ipa_filter_info_ei,
+	},
+	{
+		.data_type	= QMI_OPT_FLAG,
+		.elem_len	= 1,
+		.elem_size	= sizeof_field(struct ipa_init_modem_driver_req,
+					smem_info_valid),
+		.tlv_type	= 0x24,
+		.offset		= offsetof(struct ipa_init_modem_driver_req,
+						smem_info_valid),
+	},
+	{
+		.data_type	= QMI_STRUCT,
+		.elem_len	= 1,
+		.elem_size	= sizeof_field(struct ipa_init_modem_driver_req,
+					 smem_info),
+		.tlv_type	= 0x24,
+		.offset		= offsetof(struct ipa_init_modem_driver_req,
+						smem_info),
+		.ei_array	= ipa_mem_range_ei,
+	},
+	{
+		.data_type	= QMI_OPT_FLAG,
+		.elem_len	= 1,
+		.elem_size	= sizeof_field(struct ipa_init_modem_driver_req,
+					per_stats_smem_info_valid),
+		.tlv_type	= 0x25,
+		.offset		= offsetof(struct ipa_init_modem_driver_req,
+						per_stats_smem_info_valid),
+	},
+	{
+		.data_type	= QMI_STRUCT,
+		.elem_len	= 1,
+		.elem_size	= sizeof_field(struct ipa_init_modem_driver_req,
+					per_stats_smem_info),
+		.tlv_type	= 0x25,
+		.offset		= offsetof(struct ipa_init_modem_driver_req,
+						per_stats_smem_info),
+		.ei_array	= ipa_mem_range_ei,
 	},
 	{
 		.data_type	= QMI_EOTI,

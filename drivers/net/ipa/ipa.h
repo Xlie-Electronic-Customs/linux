@@ -105,6 +105,7 @@ struct ipa {
 
 	unsigned long smem_iova;
 	size_t smem_size;
+	size_t smem_size_raw;
 
 	dma_addr_t zero_addr;
 	void *zero_virt;

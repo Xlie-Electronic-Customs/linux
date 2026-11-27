@@ -394,6 +394,31 @@ init_modem_driver_req(struct ipa_qmi *ipa_qmi)
 		}
 	}
 
+	/* The stats filter route fields are only valid for IPA v5.1+ */
+	if (ipa->version >= IPA_VERSION_4_5) {
+		mem = ipa_mem_find(ipa, IPA_MEM_STATS_FILTER_ROUTE);
+		if (mem->size) {
+			req.hw_fiter_stats_info_valid = 1;
+			req.hw_filter_stats_info.hw_filter_stats_start_addr = ipa->mem_offset + mem->offset;
+			req.hw_filter_stats_info.hw_filter_stats_size = 0xBF0;
+			req.hw_filter_stats_info.hw_filter_stats_start_index = 64;
+			req.hw_filter_stats_info.hw_filter_stats_end_index = 254;
+		}
+	}
+
+	/* The per stats smem info fields are only valid for IPA v5.1+ */
+	if (ipa->version >= IPA_VERSION_5_1) {
+		req.per_stats_smem_info_valid = 1;
+		req.per_stats_smem_info.size = 0x800;
+		req.per_stats_smem_info.start = (u32)ipa->smem_iova;
+	}
+
+	/* The smem info fields are only valid for IPA v5.5+ */
+	if (ipa->version >= IPA_VERSION_5_5) {
+		req.smem_info_valid = 1;
+		req.smem_info.size = ipa->smem_size_raw;
+	}
+
 	return &req;
 }
 

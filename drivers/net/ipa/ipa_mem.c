@@ -544,6 +544,8 @@ static int ipa_smem_init(struct ipa *ipa, size_t size)
 	if (!size)
 		return 0;	/* SMEM memory not used */
 
+	ipa->smem_size_raw = size;
+
 	/* SMEM is memory shared between the AP and another system entity
 	 * (in this case, the modem).  An allocation from SMEM is persistent
 	 * until the AP reboots; there is no way to free an allocated SMEM
